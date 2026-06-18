@@ -18,7 +18,7 @@ use tauri::{
 
 const BACKEND_PORT: u16 = 42817;
 const BACKEND_URL: &str = "http://127.0.0.1:42817";
-const SIDECAR_PREFIX: &str = "pillar-brief-backend";
+const SIDECAR_PREFIX: &str = "pillar-time-backend";
 
 struct BackendProcess(Mutex<Option<Child>>);
 
@@ -150,7 +150,7 @@ fn spawn_backend(app: &tauri::App) -> Result<Child, String> {
         .map_err(|error| format!("Could not open backend log {}: {error}", log_path.display()))?;
     let _ = writeln!(
         log_file,
-        "\n--- Pillar Brief backend launch {} ---",
+        "\n--- Pillar Time backend launch {} ---",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_secs().to_string())
@@ -166,10 +166,10 @@ fn spawn_backend(app: &tauri::App) -> Result<Child, String> {
         .current_dir(cwd)
         .env("NODE_ENV", "production")
         .env("NODE_OPTIONS", "--no-warnings")
-        .env("PILLAR_APP_MODE", "desktop")
+        .env("PILLAR_TIME_APP_MODE", "desktop")
         .env("PILLAR_DESKTOP", "1")
         .env("PILLAR_BACKEND_DIR", backend_dir)
-        .env("PILLAR_DATA_DIR", data_dir)
+        .env("PILLAR_TIME_DATA_DIR", data_dir)
         .env("HOST", "127.0.0.1")
         .env("PORT", BACKEND_PORT.to_string())
         .stdin(Stdio::null())
@@ -221,7 +221,7 @@ fn startup_error_url(error: &str) -> WebviewUrl {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pillar Brief Startup Error</title>
+  <title>Pillar Time Startup Error</title>
   <style>
     body {{ margin: 0; font: 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8f5ef; color: #272521; }}
     main {{ max-width: 720px; margin: 72px auto; padding: 0 28px; }}
@@ -232,8 +232,8 @@ fn startup_error_url(error: &str) -> WebviewUrl {
 </head>
 <body>
   <main>
-    <h1>Pillar Brief could not start its local backend.</h1>
-    <p>The desktop shell opened, but the local server did not become ready. Restart the app once. If it keeps happening, send the backend log from <strong>~/Library/Application Support/com.pillarbrief.desktop/backend.log</strong>.</p>
+    <h1>Pillar Time could not start its local backend.</h1>
+    <p>The desktop shell opened, but the local server did not become ready. Restart the app once. If it keeps happening, send the backend log from <strong>~/Library/Application Support/com.pillartime.desktop/backend.log</strong>.</p>
     <pre>{safe_error}</pre>
   </main>
 </body>
@@ -388,7 +388,7 @@ fn start_brief_notifier(app: tauri::AppHandle) {
             }
             let title = json["run"]["title"]
                 .as_str()
-                .unwrap_or("Open Pillar Brief to read it.");
+                .unwrap_or("Open Pillar Time to read it.");
             notify_brief_ready(&app, title);
         }
     });
@@ -443,7 +443,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&view_brief, &settings, &quit])?;
     let mut tray = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
-        .tooltip("Pillar Brief")
+        .tooltip("Pillar Time")
         .on_menu_event(|app, event| match event.id.as_ref() {
             "view_brief" => open_route(app, "briefs"),
             "settings" => open_route(app, "settings"),
@@ -510,7 +510,7 @@ pub fn run() {
             };
 
             WebviewWindowBuilder::new(app, "main", webview_url)
-                .title("Pillar Brief")
+                .title("Pillar Time")
                 .inner_size(1280.0, 840.0)
                 .min_inner_size(960.0, 680.0)
                 .build()
@@ -540,7 +540,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("error while building Pillar Brief desktop app");
+        .expect("error while building Pillar Time desktop app");
 
     app.run(|app, event| match event {
         #[cfg(target_os = "macos")]

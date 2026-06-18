@@ -45,8 +45,9 @@ import {
 import "./styles.css";
 
 const nav = [
-  ["Brief", [["overview", "Home"], ["briefs", "Briefs"]]],
-  ["Configure", [["briefSetup", "Brief Setup"], ["sources", "Sources"], ["lenses", "Perspective Lenses"]]],
+  ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
+  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"]]],
+  ["Configure", [["briefSetup", "Brief Setup"], ["lenses", "Perspective Lenses"]]],
   ["System", [["settings", "Settings"]]],
 ];
 
@@ -121,7 +122,7 @@ const sourceDefinitions = {
     },
   },
   Calendar: {
-    credential: "Requires Google Calendar OAuth. Pillar Brief uses read-only access to include today's agenda in your brief.",
+    credential: "Requires Google Calendar OAuth. Pillar Time uses read-only access to include today's agenda in your brief.",
     modes: {
       google: { label: "Selected Google calendars", fields: [] },
     },
@@ -300,6 +301,11 @@ function sourceDisplayLocator(source) {
 function Icon({ name }) {
   const icons = {
     overview: Home,
+    today: Home,
+    planner: Calendar,
+    reminders: Clock,
+    reviews: Check,
+    meetings: Users,
     briefs: FileText,
     sources: Database,
     briefSetup: Sparkles,
@@ -370,12 +376,12 @@ function BrandLogo({ name }) {
   return <span className="source-icon-box"><Icon name={name} /></span>;
 }
 
-function PillarBriefLockup({ alt = "Pillar Brief" }) {
+function PillarBriefLockup({ alt = "Pillar Time" }) {
   return <span className="brand-lockup" aria-label={alt}>
     <img className="brand-lockup-icon" src="/assets/pillar-brief-app-icon.png" alt="" aria-hidden="true" />
     <span className="brand-wordmark" aria-hidden="true">
       <span className="brand-wordmark-main"><span>P</span><img className="brand-wordmark-pillar" src="/assets/pillar-brief-wordmark-pillar.png" alt="" /><span>LLAR</span></span>
-      <span className="brand-wordmark-product">Brief</span>
+      <span className="brand-wordmark-product">Time</span>
     </span>
   </span>;
 }
@@ -477,7 +483,7 @@ function useDesktopUpdates() {
         version,
         status: update ? "available" : "current",
         update,
-        message: update ? `Version ${update.version} is ready to install.` : "Pillar Brief is up to date.",
+        message: update ? `Version ${update.version} is ready to install.` : "Pillar Time is up to date.",
         progress: "",
       }));
       return update;
@@ -525,7 +531,7 @@ function useDesktopUpdates() {
       setUpdateState((current) => ({
         ...current,
         status: "installed",
-        message: "Update installed. Restart Pillar Brief to finish.",
+        message: "Update installed. Restart Pillar Time to finish.",
         progress: "",
       }));
     } catch (error) {
@@ -570,7 +576,7 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
     : desktopUpdate?.status === "installed"
       ? "Restart to finish updating"
       : desktopUpdate?.status === "current"
-        ? "Pillar Brief is up to date"
+        ? "Pillar Time is up to date"
         : desktopUpdate?.status === "error"
           ? "Update check failed"
           : "Check for signed desktop updates";
@@ -584,8 +590,8 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
   }, [helpOpen]);
   return <div className="app">
     <header className="app-header">
-      <button className="brand" onClick={() => setRoute("overview")}>
-        <PillarBriefLockup alt={state?.briefConfig?.productName || "Pillar Brief"} />
+      <button className="brand" onClick={() => setRoute("today")}>
+        <PillarBriefLockup alt={state?.briefConfig?.productName || "Pillar Time"} />
       </button>
       <nav className="nav">
         {nav.flatMap(([, items]) => items).map(([id, label]) => <button key={id} className={`nav-item ${route === id ? "active" : ""}`} onClick={() => setRoute(id)}>
@@ -598,7 +604,7 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
         </button>
         {helpOpen && <div className="help-menu" role="menu">
           <div className="help-menu-head">
-            <strong>Pillar Brief</strong>
+            <strong>Pillar Time</strong>
             <span>{desktopUpdate?.version ? `Version ${desktopUpdate.version}` : "Desktop app"}</span>
           </div>
           <div className={`help-update-status ${desktopUpdate?.status === "error" ? "warn" : ""}`}>
@@ -856,6 +862,212 @@ function WorkflowMini() {
 
 function ListRow({ title, sub, right }) {
   return <div className="list-row"><div><strong>{title}</strong><small>{sub}</small></div>{right}</div>;
+}
+
+function latestCalendarAgenda(state) {
+  const completed = state.workflowRuns?.find((run) => run.status === "completed" && run.artifact);
+  return completed?.artifact?.calendarAgenda || completed?.artifact?.calendarFetches?.flatMap((fetch) => fetch.events || []) || [];
+}
+
+function todayTime(state) {
+  return state.time || { preferences: {}, suggestions: [], commitments: [], tasks: [], reminders: [], reviews: [], importantDates: [], meetings: [], scheduler: {} };
+}
+
+function TimeSuggestionCard({ suggestion, mutate }) {
+  const accept = () => mutate("/api/time/commitments", {
+    title: suggestion.title,
+    notes: suggestion.reason || suggestion.notes || "",
+    sourceSuggestionId: suggestion.feedbackKey || suggestion.id,
+  });
+  const feedback = (value) => mutate(`/api/time/suggestions/${encodeURIComponent(suggestion.feedbackKey || suggestion.id || suggestion.title)}/feedback`, { feedback: value });
+  return <div className="time-card">
+    <div className="time-card-head">
+      <div><strong>{suggestion.title}</strong><small>{suggestion.reason || "High-leverage candidate for today."}</small></div>
+      <Badge tone="ok">{Math.round(suggestion.score || 0)}</Badge>
+    </div>
+    <div className="chips"><span>{suggestion.leverageCategory || "admin"}</span><span>{suggestion.source || "manual"}</span>{suggestion.estimateMinutes && <span>{suggestion.estimateMinutes} min</span>}</div>
+    <div className="row tight-row">
+      <Button icon="check" kind="primary" onClick={accept}>Accept</Button>
+      <Button icon="clock" onClick={() => feedback("notToday")}>Not Today</Button>
+      <Button icon="x" onClick={() => feedback("incorrect")}>Incorrect</Button>
+    </div>
+  </div>;
+}
+
+function Today({ state, mutate, runWorkflow, setRoute }) {
+  const time = todayTime(state);
+  const [capture, setCapture] = React.useState("");
+  const agenda = latestCalendarAgenda(state).slice(0, 8);
+  const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
+  const suggestions = (time.suggestions || []).slice(0, 6);
+  const addTask = (event) => {
+    event.preventDefault();
+    if (!capture.trim()) return;
+    mutate("/api/time/tasks", { title: capture.trim(), source: "quick-capture" }).then(() => setCapture(""));
+  };
+  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, and the intelligence brief." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate Intelligence</Button>}>
+    <div className="metric-grid">
+      <Metric label="Today" value={time.todayKey || "-"} sub={time.preferences?.timezone || "local"} />
+      <Metric label="Today’s Three" value={activeCommitments.filter((item) => item.status === "active").length} sub="accepted commitments" />
+      <Metric label="Suggestions" value={suggestions.length} sub="ranked options" />
+      <Metric label="Reminders" value={(time.reminders || []).filter((item) => item.enabled).length} sub={time.scheduler?.active ? "scheduler active" : "scheduler idle"} alert={!time.scheduler?.active} />
+    </div>
+    <div className="time-layout">
+      <section className="panel">
+        <PanelTitle icon="today" title="Highest Leverage Today" sub="These are offerings, not orders. Change them until they fit the day." />
+        <div className="time-card-list">{suggestions.length ? suggestions.map((suggestion) => <TimeSuggestionCard key={suggestion.id || suggestion.feedbackKey || suggestion.title} suggestion={suggestion} mutate={mutate} />) : <Empty icon="planner" title="No ranked suggestions yet" body="Capture a task or connect calendar and intelligence sources." />}</div>
+      </section>
+      <section className="panel">
+        <PanelTitle icon="check" title="Today’s Three" sub="The commitments Pillar Time will protect for this date." />
+        {activeCommitments.length ? activeCommitments.map((item) => <ListRow key={item.id} title={item.title} sub={item.notes || item.status} right={<div className="row tight-row"><Button icon="check" onClick={() => mutate(`/api/time/commitments/${item.id}`, { ...item, status: "done" }, "PATCH")}>Done</Button><Button icon="x" onClick={() => mutate(`/api/time/commitments/${item.id}`, { ...item, status: "removed" }, "PATCH")}>Remove</Button></div>} />) : <Empty icon="check" title="No commitments selected" body="Accept up to three high-leverage suggestions or add one from Planner." />}
+        <form className="quick-capture" onSubmit={addTask}>
+          <input value={capture} onChange={(event) => setCapture(event.target.value)} placeholder="Quick capture a task or obligation" />
+          <Button icon="plus" kind="primary">Capture</Button>
+        </form>
+      </section>
+      <section className="panel">
+        <PanelTitle icon="calendar" title="Timeline" sub="Calendar context from the latest successful intelligence run." />
+        {agenda.length ? agenda.map((event, index) => <ListRow key={`${event.title || event.summary}-${index}`} title={event.title || event.summary || "Calendar event"} sub={[event.start, event.end].filter(Boolean).join(" to ") || event.when || "Today"} right={event.calendarUrl && <Button icon="calendar" onClick={() => openExternalUrl(event.calendarUrl)}>Open</Button>} />) : <Empty icon="calendar" title="No agenda loaded" body="Connect Google Calendar and generate intelligence to bring today’s events into this view." />}
+      </section>
+      <section className="panel">
+        <PanelTitle icon="reminders" title="Next Reminders" sub="Regular and sporadic nudges, paused by default until you enable them." />
+        {(time.reminders || []).slice(0, 6).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.nextOccurrence.dateKey} at ${formatDeliveryTime(reminder.nextOccurrence.localTime)}` : "No next occurrence"} right={<div className="row tight-row"><Badge tone={reminder.enabled ? "ok" : "muted"}>{reminder.enabled ? "On" : "Off"}</Badge><Button icon="settings" onClick={() => setRoute("reminders")}>Edit</Button></div>} />)}
+      </section>
+    </div>
+  </Page>;
+}
+
+function Planner({ state, mutate }) {
+  const time = todayTime(state);
+  const [task, setTask] = React.useState({ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" });
+  const [importantDate, setImportantDate] = React.useState({ title: "", date: "" });
+  const createTask = (event) => {
+    event.preventDefault();
+    if (!task.title.trim()) return;
+    mutate("/api/time/tasks", task).then(() => setTask({ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" }));
+  };
+  const createDate = (event) => {
+    event.preventDefault();
+    if (!importantDate.title.trim() || !importantDate.date) return;
+    mutate("/api/time/important-dates", importantDate).then(() => setImportantDate({ title: "", date: "" }));
+  };
+  return <Page title="Planner" desc="Capture obligations, map leverage, and keep personal dates beside work context." wide>
+    <div className="split">
+      <section className="panel">
+        <PanelTitle icon="planner" title="Add Task" sub="Rankable work that can become a Today suggestion." />
+        <form className="form" onSubmit={createTask}>
+          <Field label="Title" value={task.title} onChange={(title) => setTask({ ...task, title })} />
+          <TextArea label="Notes" value={task.notes || ""} rows={3} onChange={(notes) => setTask({ ...task, notes })} />
+          <Select label="Leverage" value={task.leverageCategory} onChange={(leverageCategory) => setTask({ ...task, leverageCategory })} options={["unblock", "launchRevenue", "leadership", "deadline", "healthFamilyRecovery", "deepWork", "admin"]} />
+          <div className="row"><Field label="Estimate minutes" value={String(task.estimateMinutes)} onChange={(estimateMinutes) => setTask({ ...task, estimateMinutes })} /><Select label="Priority" value={task.priority} onChange={(priority) => setTask({ ...task, priority })} options={["low", "normal", "high"]} /></div>
+          <Button icon="plus" kind="primary">Add Task</Button>
+        </form>
+      </section>
+      <section className="panel">
+        <PanelTitle icon="check" title="Task Backlog" sub={`${(time.tasks || []).length} captured tasks.`} />
+        {(time.tasks || []).length ? time.tasks.map((item) => <ListRow key={item.id} title={item.title} sub={`${item.leverageCategory || "admin"} · ${item.status || "inbox"} · ${item.estimateMinutes || 30} min`} right={<div className="row tight-row"><Button icon="check" onClick={() => mutate(`/api/time/tasks/${item.id}`, { status: "done" }, "PATCH")}>Done</Button><Button icon="x" onClick={() => mutate(`/api/time/tasks/${item.id}`, { status: "archived" }, "PATCH")}>Archive</Button></div>} />) : <Empty icon="planner" title="No tasks captured" body="Add one task to start giving the ranking engine something real to work with." />}
+      </section>
+    </div>
+    <section className="panel time-section">
+      <PanelTitle icon="calendar" title="Important Dates" sub="Birthdays, deadlines, renewals, trips, and rituals that should shape planning." />
+      <form className="quick-capture" onSubmit={createDate}>
+        <input value={importantDate.title} onChange={(event) => setImportantDate({ ...importantDate, title: event.target.value })} placeholder="Important date" />
+        <input type="date" value={importantDate.date} onChange={(event) => setImportantDate({ ...importantDate, date: event.target.value })} />
+        <Button icon="plus" kind="primary">Add</Button>
+      </form>
+      {(time.importantDates || []).map((item) => <ListRow key={item.id} title={item.title} sub={[item.date, item.category].filter(Boolean).join(" · ")} right={<Badge>{item.enabled ? "active" : "off"}</Badge>} />)}
+    </section>
+  </Page>;
+}
+
+function Reminders({ state, mutate }) {
+  const time = todayTime(state);
+  const prefs = time.preferences || {};
+  const [form, setForm] = React.useState({ title: "", body: "", type: "regular", scheduleType: "daily", localTime: "09:00", enabled: false, channels: { desktopText: true, telegramText: false } });
+  const savePrefs = (patch) => mutate("/api/time/preferences", { ...prefs, ...patch }, "PATCH");
+  const createReminder = (event) => {
+    event.preventDefault();
+    if (!form.title.trim()) return;
+    mutate("/api/time/reminders", form).then(() => setForm({ title: "", body: "", type: "regular", scheduleType: "daily", localTime: "09:00", enabled: false, channels: { desktopText: true, telegramText: false } }));
+  };
+  return <Page title="Reminders" desc="Local-first reminders with explicit channel switches and no surprise delivery." wide>
+    <div className="metric-grid">
+      <Metric label="Master" value={prefs.reminderMasterEnabled ? "On" : "Off"} sub="global reminder gate" alert={!prefs.reminderMasterEnabled} />
+      <Metric label="Regular" value={prefs.regularRemindersEnabled ? "On" : "Off"} sub="scheduled prompts" />
+      <Metric label="Sporadic" value={prefs.sporadicRemindersEnabled ? "On" : "Off"} sub="deterministic random windows" />
+      <Metric label="Delivery" value={prefs.channels?.telegramText ? "Telegram" : "Desktop"} sub="configured channel" />
+    </div>
+    <section className="panel">
+      <PanelTitle icon="settings" title="Reminder Controls" sub="Everything stays disabled unless the master switch and individual reminder are on." />
+      <div className="toggle-grid">
+        {[
+          ["reminderMasterEnabled", "Master reminders"],
+          ["regularRemindersEnabled", "Regular reminders"],
+          ["sporadicRemindersEnabled", "Sporadic reminders"],
+        ].map(([key, label]) => <label className="switch-row" key={key}><span>{label}</span><label className="switch"><input type="checkbox" checked={!!prefs[key]} onChange={(event) => savePrefs({ [key]: event.target.checked })} /><span /></label></label>)}
+        {["desktopText", "desktopAudio", "telegramText", "telegramAudio"].map((key) => <label className="switch-row" key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!prefs.channels?.[key]} onChange={(event) => savePrefs({ channels: { ...(prefs.channels || {}), [key]: event.target.checked } })} /><span /></label></label>)}
+      </div>
+    </section>
+    <div className="split time-section">
+      <section className="panel">
+        <PanelTitle icon="plus" title="Create Reminder" sub="The new reminder is off unless you enable it." />
+        <form className="form" onSubmit={createReminder}>
+          <Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} />
+          <TextArea label="Body" value={form.body} rows={3} onChange={(body) => setForm({ ...form, body })} />
+          <Select label="Type" value={form.type} onChange={(type) => setForm({ ...form, type })} options={["regular", "sporadic", "review"]} />
+          <Select label="Schedule" value={form.scheduleType} onChange={(scheduleType) => setForm({ ...form, scheduleType })} options={["once", "daily", "weekday", "weekly", "selected-days", "monthly", "quarterly"]} />
+          <Field label="Local time" value={form.localTime} onChange={(localTime) => setForm({ ...form, localTime })} />
+          <label className="check"><input type="checkbox" checked={!!form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} /> Enable immediately</label>
+          <Button icon="plus" kind="primary">Create Reminder</Button>
+        </form>
+      </section>
+      <section className="panel">
+        <PanelTitle icon="reminders" title="Reminder List" sub="Pause, enable, disable, or archive any reminder." />
+        {(time.reminders || []).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.scheduleType} · next ${reminder.nextOccurrence.dateKey} ${reminder.nextOccurrence.localTime}` : reminder.scheduleType} right={<div className="row tight-row"><Button icon={reminder.enabled ? "x" : "check"} onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { enabled: !reminder.enabled }, "PATCH")}>{reminder.enabled ? "Disable" : "Enable"}</Button><Button icon="clock" onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { pausedUntil: new Date(Date.now() + 86400000).toISOString() }, "PATCH")}>Pause</Button><Button icon="x" onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { archive: true }, "PATCH")}>Archive</Button></div>} />)}
+      </section>
+    </div>
+  </Page>;
+}
+
+function Reviews({ state, mutate }) {
+  const time = todayTime(state);
+  return <Page title="Reviews" desc="Morning, midday, weekly, monthly, quarterly, and annual review templates." wide>
+    <section className="panel">
+      <PanelTitle icon="reviews" title="Review Templates" sub="Turn templates on when you are ready for Pillar Time to schedule them." />
+      <div className="review-grid">{(time.reviews || []).map((review) => <div className="time-card" key={review.id}>
+        <div className="time-card-head"><div><strong>{review.title}</strong><small>{review.cadence} · {review.description}</small></div><Badge tone={review.enabled ? "ok" : "muted"}>{review.enabled ? "On" : "Off"}</Badge></div>
+        <Markdown text={(review.prompts || []).map((question) => `- ${question}`).join("\n")} />
+        <Button icon={review.enabled ? "x" : "check"} onClick={() => mutate(`/api/time/reviews/${review.id}`, { enabled: !review.enabled }, "PATCH")}>{review.enabled ? "Disable" : "Enable"}</Button>
+      </div>)}</div>
+    </section>
+  </Page>;
+}
+
+function Meetings({ state, mutate }) {
+  const time = todayTime(state);
+  const [form, setForm] = React.useState({ title: "", startsAt: "", notes: "" });
+  const createMeeting = (event) => {
+    event.preventDefault();
+    if (!form.title.trim()) return;
+    mutate("/api/time/meetings", form).then(() => setForm({ title: "", startsAt: "", notes: "" }));
+  };
+  return <Page title="Meetings" desc="Capture meeting intent, notes, decisions, and follow-ups for planning context." wide>
+    <div className="split">
+      <section className="panel">
+        <PanelTitle icon="meetings" title="Record Meeting" sub="Use this for prep notes or after-action notes." />
+        <form className="form" onSubmit={createMeeting}>
+          <Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} />
+          <Field label="Start time" value={form.startsAt} onChange={(startsAt) => setForm({ ...form, startsAt })} />
+          <TextArea label="Notes" value={form.notes} rows={5} onChange={(notes) => setForm({ ...form, notes })} />
+          <Button icon="plus" kind="primary">Save Meeting</Button>
+        </form>
+      </section>
+      <section className="panel">
+        <PanelTitle icon="meetings" title="Meeting Records" sub={`${(time.meetings || []).length} saved records.`} />
+        {(time.meetings || []).length ? time.meetings.map((meeting) => <ListRow key={meeting.id} title={meeting.title} sub={[meeting.objective, meeting.prepNotes].filter(Boolean).join(" · ")} right={<Badge>{meeting.calendarEventId ? "calendar" : "manual"}</Badge>} />) : <Empty icon="meetings" title="No meeting records" body="Add prep or notes here; future suggestions can use them as planning context." />}
+      </section>
+    </div>
+  </Page>;
 }
 
 function Sources({ state, mutate }) {
@@ -1549,7 +1761,7 @@ const setupLinks = {
   x: {
     keyUrl: "https://developer.x.com/en/portal/dashboard",
     docsUrl: "https://docs.x.com/x-api/getting-started/getting-access",
-    helper: "Create or open an X developer app and copy its Bearer Token. Pillar Brief uses locked quick search to keep usage small.",
+    helper: "Create or open an X developer app and copy its Bearer Token. Pillar Time uses locked quick search to keep usage small.",
   },
   ffmpeg: {
     keyUrl: "https://brew.sh",
@@ -1700,7 +1912,7 @@ function localBriefSetupDraft(briefPrompt = "", current = {}) {
   return {
     ...current,
     ownerName: owner,
-    productName: current.productName || "Pillar Brief",
+    productName: current.productName || "Pillar Time",
     audienceContext: `A private daily brief for ${owner} focused on ${topicText}. Use only source items published today, with enough context to understand why they matter.${preferenceText}`,
     voiceRules: `Natural, direct, and useful. Prefer plain English, sharp bullets, and concrete takeaways. Avoid corporate stiffness, filler, fake certainty, and false-balance flattening of stated preferences.${preferenceHints.length ? " Keep stated worldview/taste/source preferences visible when source evidence supports them." : ""}`,
     sections: putCalendarBriefSectionFirst([
@@ -1774,7 +1986,7 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
           apiKey,
           voiceId,
           modelId,
-          text: "This is your Pillar Brief audio preview. Your daily brief can be read aloud with this ElevenLabs voice.",
+          text: "This is your Pillar Time audio preview. Your daily brief can be read aloud with this ElevenLabs voice.",
         }),
       });
       setPreviewUrl(result.audio.url);
@@ -2511,7 +2723,7 @@ function Onboarding({ state, mutate, refresh }) {
         <div className="setup-card">
           <div className="setup-card-head">
             <BrandLogo name="Calendar" />
-            <div><h3>Google Calendar</h3><p>Pillar Brief requests read-only access. Calendar events are used as private schedule context, not as public news sources.</p></div>
+            <div><h3>Google Calendar</h3><p>Pillar Time requests read-only access. Calendar events are used as private schedule context, not as public news sources.</p></div>
             <Badge tone={googleCalendarConnected ? "ok" : "muted"}>{googleCalendarConnected ? "Connected" : "Optional"}</Badge>
           </div>
           <div className="notice">
@@ -2534,7 +2746,7 @@ function Onboarding({ state, mutate, refresh }) {
       </section>}
       {step === "telegram" && <section className="onboarding-panel onboarding-panel-wide">
         <h1>Pair Telegram.</h1>
-        <p>Optional: pair Telegram if you want briefs delivered outside the app. You can skip this and read briefs in Pillar Brief.</p>
+        <p>Optional: pair Telegram if you want briefs delivered outside the app. You can skip this and read briefs in Pillar Time.</p>
         <TelegramPairingFlow state={state} refresh={refresh} onPaired={() => go("schedule")} />
         <div className="row"><Button onClick={() => go("audio")}>Back</Button><Button onClick={() => go("schedule")}>Skip Telegram</Button><Button kind="primary" onClick={() => go("schedule")}>Continue</Button></div>
       </section>}
@@ -2921,11 +3133,11 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     <div className="settings-dashboard">
       {desktopUpdate?.isDesktop && <section className="panel connector-card">
         <div className="connector-head">
-          <div className="connector-title"><span className="connector-icon blue"><Icon name="download" /></span><div><h2>App Updates</h2><p>Install signed Pillar Brief desktop releases from GitHub.</p></div></div>
+          <div className="connector-title"><span className="connector-icon blue"><Icon name="download" /></span><div><h2>App Updates</h2><p>Install signed Pillar Time desktop releases from GitHub.</p></div></div>
           <Badge tone={updateTone}>{updateLabel}</Badge>
         </div>
         <div className="connector-row dependency-row">
-          <div className="connector-name"><span className="source-icon-box"><Icon name="download" /></span><div><strong>Pillar Brief desktop</strong><small>Current version {desktopUpdate.version || "unknown"}</small></div></div>
+          <div className="connector-name"><span className="source-icon-box"><Icon name="download" /></span><div><strong>Pillar Time desktop</strong><small>Current version {desktopUpdate.version || "unknown"}</small></div></div>
           <span>GitHub Releases</span>
           <Badge tone={updateTone}>{desktopUpdate.update?.version ? `v${desktopUpdate.update.version}` : updateLabel}</Badge>
           <span>{desktopUpdate.progress || desktopUpdate.message || "Check for signed updates."}</span>
@@ -2937,7 +3149,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         </div>
         <div className={`notice ${desktopUpdate.status === "error" ? "notice-warn" : ""}`}>
           <strong>{desktopUpdate.status === "available" ? "A signed update is ready" : desktopUpdate.status === "installed" ? "Restart to finish updating" : "Automatic update checks are enabled"}</strong>
-          <span>{desktopUpdate.message || "Pillar Brief checks once on startup and lets you install from Settings."}</span>
+          <span>{desktopUpdate.message || "Pillar Time checks once on startup and lets you install from Settings."}</span>
         </div>
       </section>}
       <section className="panel connector-card">
@@ -3104,12 +3316,12 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     </div>}
     {googleCalendarModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeGoogleCalendarModal(); }}>
       <form className="modal-card connector-modal form" onSubmit={startGoogleCalendarOAuth}>
-        <div className="modal-head"><div><h2>Google Calendar</h2><p>Connect read-only calendar access so Pillar Brief can include today's agenda.</p></div><button type="button" onClick={closeGoogleCalendarModal}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2>Google Calendar</h2><p>Connect read-only calendar access so Pillar Time can include today's agenda.</p></div><button type="button" onClick={closeGoogleCalendarModal}><Icon name="x" /></button></div>
         <div className="notice">
           <strong>Read-only access</strong>
-          <span>Pillar Brief requests permission to view calendar events and calendar names so you can choose which calendars appear in your brief.</span>
+          <span>Pillar Time requests permission to view calendar events and calendar names so you can choose which calendars appear in your brief.</span>
         </div>
-        <p className="hint">Uses the official Pillar Brief Google OAuth client. Tokens stay in this app's local data store.</p>
+        <p className="hint">Uses the configured Google OAuth client. Tokens stay in this app's local data store.</p>
         <div className={`notice ${googleCalendarConnected ? "" : "notice-warn"}`}>
           <strong>{googleCalendarConnected ? "Google Calendar ready" : "Google Calendar not connected"}</strong>
           <span>{state.connectors?.googleCalendar?.lastError || googleCalendarMessage || "Connect Google, then choose which calendars should feed your daily brief."}</span>
@@ -3143,7 +3355,7 @@ function Select({ label, value, onChange, options }) {
 }
 
 function routeFromHash() {
-  return location.hash.replace(/^#\/?/, "") || "overview";
+  return location.hash.replace(/^#\/?/, "") || "today";
 }
 
 function App() {
@@ -3207,9 +3419,14 @@ function App() {
     }
   };
   if (error) return <div className="boot">API error: {error}</div>;
-  if (!state) return <div className="boot">Loading Pillar Brief...</div>;
+  if (!state) return <div className="boot">Loading Pillar Time...</div>;
   if (!state.onboarding?.completed) return <Onboarding state={state} mutate={mutate} refresh={refresh} />;
   const screens = {
+    today: <Today state={state} mutate={mutate} runWorkflow={runWorkflow} setRoute={requestRoute} />,
+    planner: <Planner state={state} mutate={mutate} />,
+    reminders: <Reminders state={state} mutate={mutate} />,
+    reviews: <Reviews state={state} mutate={mutate} />,
+    meetings: <Meetings state={state} mutate={mutate} />,
     overview: <Overview state={state} setRoute={requestRoute} runWorkflow={runWorkflow} mutate={mutate} />,
     briefs: <Briefs state={state} runWorkflow={runWorkflow} refresh={refresh} />,
     generating: <GeneratingBrief runState={runState} />,

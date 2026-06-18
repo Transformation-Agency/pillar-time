@@ -11,7 +11,7 @@ const backendDir = path.join(resourcesDir, "backend");
 const whisperResourcesDir = path.join(resourcesDir, "whisper");
 const whisperVendorDir = process.env.PILLAR_WHISPER_VENDOR_DIR || path.join(root, "vendor", "whisper");
 const binariesDir = path.join(tauriDir, "binaries");
-const sidecarName = "pillar-brief-backend";
+const sidecarName = "pillar-time-backend";
 const legacySidecarName = "jack-daily-brief-backend";
 const whisperSidecarName = "whisper-cli";
 const backendRuntimeDependencies = ["express"];
@@ -150,7 +150,7 @@ for (const dependency of backendRuntimeDependencies) {
   copyRuntimePackage(dependency);
 }
 fs.writeFileSync(path.join(backendDir, "package.json"), `${JSON.stringify({
-  name: "pillar-brief-backend-runtime",
+  name: "pillar-time-backend-runtime",
   version: "0.1.0",
   type: "module",
   private: true,

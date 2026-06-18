@@ -5,7 +5,7 @@ const releaseDir = process.env.RELEASE_DIR || "release";
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
 const version = process.env.VERSION || pkg.version;
 const tag = process.env.RELEASE_TAG || `v${version}`;
-const repo = process.env.GITHUB_REPOSITORY || "Transformation-Agency/pillar-brief";
+const repo = process.env.GITHUB_REPOSITORY || "Transformation-Agency/pillar-time";
 const baseUrl = `https://github.com/${repo}/releases/download/${tag}`;
 const releaseNotes = process.env.RELEASE_NOTES_FILE && fs.existsSync(process.env.RELEASE_NOTES_FILE)
   ? fs.readFileSync(process.env.RELEASE_NOTES_FILE, "utf8").trim()

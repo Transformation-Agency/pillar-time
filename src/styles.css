@@ -758,6 +758,74 @@ td {
   align-items: center;
   flex-wrap: wrap;
 }
+.tight-row .btn {
+  min-height: 36px;
+  padding-inline: 12px;
+  box-shadow: none;
+}
+.time-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+  gap: 24px;
+  align-items: start;
+}
+.time-section { margin-top: 24px; }
+.time-card-list, .review-grid {
+  display: grid;
+  gap: 14px;
+}
+.review-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.time-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.54);
+  padding: 15px;
+  display: grid;
+  gap: 12px;
+}
+.time-card-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: start;
+}
+.time-card-head strong,
+.time-card-head small {
+  display: block;
+}
+.time-card-head small {
+  color: var(--muted);
+  margin-top: 4px;
+}
+.quick-capture {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 16px;
+}
+.quick-capture input[type="date"] {
+  max-width: 190px;
+}
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+.switch-row {
+  min-height: 58px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.54);
+  padding: 12px 14px;
+  font-weight: 800;
+}
 .mono, pre { font-family: var(--mono); }
 pre {
   max-height: 360px;
@@ -2676,7 +2744,7 @@ span.section-target-select {
   }
   .brand-sub { display: none; }
   .hero { min-height: 360px; padding: 40px 32px; }
-  .home-grid, .split, .two, .wf-layout, .metric-grid, .briefs-layout, .setup-layout, .brief-stat-bar, .sources-workspace, .lens-workspace, .council-workspace, .analyzer-card, .perspective-prompt-row { grid-template-columns: 1fr; }
+  .home-grid, .split, .two, .wf-layout, .metric-grid, .time-layout, .briefs-layout, .setup-layout, .brief-stat-bar, .sources-workspace, .lens-workspace, .council-workspace, .analyzer-card, .perspective-prompt-row { grid-template-columns: 1fr; }
   .analyzer-card .field:nth-of-type(n+3), .analyzer-card .btn { grid-column: 1; }
   .brief-stat-bar .metric { border-right: 0; border-bottom: 1px solid var(--line); }
   .brief-stat-bar .metric:last-child { border-bottom: 0; }
@@ -2713,7 +2781,7 @@ span.section-target-select {
   .hero-art img { object-position: 72% center; }
   .hero h1 { font-size: 44px; }
   .hero p { font-size: 18px; }
-  .hero-actions, .delivery-row, .deliver-grid, .choice-grid, .brief-columns, .step-grid, .mini-steps, .how-steps, .source-type-grid, .lens-detail-grid, .member-strip { grid-template-columns: 1fr; }
+  .hero-actions, .delivery-row, .deliver-grid, .choice-grid, .quick-capture, .brief-columns, .step-grid, .mini-steps, .how-steps, .source-type-grid, .lens-detail-grid, .member-strip { grid-template-columns: 1fr; }
   .choice-grid, .delivery-row, .deliver-grid { display: grid; }
   .how-steps { display: grid; }
   .how-arrow { display: none; }

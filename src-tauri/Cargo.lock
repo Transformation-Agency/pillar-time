@@ -2631,7 +2631,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pillar-brief"
+name = "pillar-time"
 version = "0.1.3"
 dependencies = [
  "block2",

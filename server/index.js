@@ -7,19 +7,39 @@ import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
+import { localDateKey, nextOccurrence, rankActions, sporadicTimes } from "./timeEngine.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
-const appMode = process.env.PILLAR_APP_MODE || (process.env.PILLAR_DESKTOP ? "desktop" : "web");
+const appMode = process.env.PILLAR_TIME_APP_MODE || process.env.PILLAR_APP_MODE || (process.env.PILLAR_DESKTOP ? "desktop" : "web");
 const isDesktop = appMode === "desktop";
-const dataDir = process.env.PILLAR_DATA_DIR ? path.resolve(process.env.PILLAR_DATA_DIR) : path.join(root, "data");
+const dataDir = process.env.PILLAR_TIME_DATA_DIR ? path.resolve(process.env.PILLAR_TIME_DATA_DIR) : process.env.PILLAR_DATA_DIR ? path.resolve(process.env.PILLAR_DATA_DIR) : path.join(root, "data");
 fs.mkdirSync(dataDir, { recursive: true });
-const dbPath = process.env.PILLAR_DB_PATH ? path.resolve(process.env.PILLAR_DB_PATH) : path.join(dataDir, "pillar-brief.sqlite");
+const dbPath = process.env.PILLAR_TIME_DB_PATH ? path.resolve(process.env.PILLAR_TIME_DB_PATH) : process.env.PILLAR_DB_PATH ? path.resolve(process.env.PILLAR_DB_PATH) : path.join(dataDir, "pillar-time.sqlite");
 const execFileAsync = promisify(execFile);
 const audioDir = path.join(dataDir, "audio");
 fs.mkdirSync(audioDir, { recursive: true });
 const modelsDir = path.join(dataDir, "models");
 fs.mkdirSync(modelsDir, { recursive: true });
+
+function backupDatabaseBeforePillarTimeMigration() {
+  const legacyPath = path.join(dataDir, "pillar-brief.sqlite");
+  const marker = path.join(dataDir, ".pillar-time-migration-backup-created");
+  const source = fs.existsSync(dbPath) ? dbPath : fs.existsSync(legacyPath) ? legacyPath : "";
+  if (!source || fs.existsSync(marker)) return;
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = path.join(dataDir, `pillar-time-pre-migration-${stamp}.sqlite`);
+  try {
+    fs.copyFileSync(source, backupPath);
+    fs.writeFileSync(marker, JSON.stringify({ source, backupPath, createdAt: new Date().toISOString() }, null, 2));
+  } catch (error) {
+    const failurePath = path.join(dataDir, "pillar-time-migration-failed.json");
+    fs.writeFileSync(failurePath, JSON.stringify({ source, error: error.message || String(error), failedAt: new Date().toISOString() }, null, 2));
+    throw error;
+  }
+}
+
+backupDatabaseBeforePillarTimeMigration();
 
 const db = new DatabaseSync(dbPath);
 db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
@@ -182,7 +202,7 @@ function migrate() {
     CREATE TABLE IF NOT EXISTS brief_config (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       owner_name TEXT NOT NULL DEFAULT 'You',
-      product_name TEXT NOT NULL DEFAULT 'Pillar Brief',
+      product_name TEXT NOT NULL DEFAULT 'Pillar Time',
       audience_context TEXT NOT NULL DEFAULT '',
       voice_rules TEXT NOT NULL DEFAULT '',
       delivery_frequency TEXT NOT NULL DEFAULT 'Daily',
@@ -226,6 +246,146 @@ function migrate() {
       value TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS time_preferences (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      timezone TEXT NOT NULL DEFAULT 'America/Denver',
+      work_hours_json TEXT NOT NULL DEFAULT '{"start":"09:00","end":"17:00","weekdays":[1,2,3,4,5]}',
+      protected_hours_json TEXT NOT NULL DEFAULT '[]',
+      quiet_hours_json TEXT NOT NULL DEFAULT '{"start":"21:00","end":"07:00"}',
+      focus_block_minutes INTEGER NOT NULL DEFAULT 90,
+      meeting_buffer_minutes INTEGER NOT NULL DEFAULT 10,
+      reminder_master_enabled INTEGER NOT NULL DEFAULT 0,
+      regular_reminders_enabled INTEGER NOT NULL DEFAULT 0,
+      sporadic_reminders_enabled INTEGER NOT NULL DEFAULT 0,
+      desktop_text_enabled INTEGER NOT NULL DEFAULT 1,
+      desktop_audio_enabled INTEGER NOT NULL DEFAULT 0,
+      telegram_text_enabled INTEGER NOT NULL DEFAULT 0,
+      telegram_audio_enabled INTEGER NOT NULL DEFAULT 0,
+      operating_manual TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS time_tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      domain TEXT NOT NULL DEFAULT 'work',
+      project TEXT NOT NULL DEFAULT '',
+      goal TEXT NOT NULL DEFAULT '',
+      owner TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'inbox',
+      due_at TEXT,
+      estimate_minutes INTEGER NOT NULL DEFAULT 30,
+      priority TEXT NOT NULL DEFAULT 'normal',
+      leverage_category TEXT NOT NULL DEFAULT 'admin',
+      energy TEXT NOT NULL DEFAULT 'medium',
+      dependencies TEXT NOT NULL DEFAULT '',
+      waiting_on TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT 'manual',
+      related_event_id TEXT NOT NULL DEFAULT '',
+      recurrence_json TEXT NOT NULL DEFAULT '{}',
+      reminder_ids_json TEXT NOT NULL DEFAULT '[]',
+      completed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS daily_commitments (
+      id TEXT PRIMARY KEY,
+      local_date TEXT NOT NULL,
+      timezone TEXT NOT NULL DEFAULT 'America/Denver',
+      title TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      source_suggestion_id TEXT NOT NULL DEFAULT '',
+      rank INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'active',
+      completed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS suggestion_feedback (
+      id TEXT PRIMARY KEY,
+      feedback_key TEXT NOT NULL,
+      feedback TEXT NOT NULL,
+      note TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS reminders (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      type TEXT NOT NULL DEFAULT 'regular',
+      schedule_type TEXT NOT NULL DEFAULT 'once',
+      local_time TEXT NOT NULL DEFAULT '09:00',
+      timezone TEXT NOT NULL DEFAULT 'America/Denver',
+      weekdays_json TEXT NOT NULL DEFAULT '[]',
+      start_date TEXT NOT NULL,
+      end_date TEXT,
+      quiet_behavior TEXT NOT NULL DEFAULT 'skip',
+      catchup_policy TEXT NOT NULL DEFAULT 'latest-once',
+      channels_json TEXT NOT NULL DEFAULT '{"desktopText":true,"desktopAudio":false,"telegramText":false,"telegramAudio":false}',
+      sporadic_json TEXT NOT NULL DEFAULT '{}',
+      enabled INTEGER NOT NULL DEFAULT 0,
+      paused_until TEXT,
+      skipped_dedupe_key TEXT NOT NULL DEFAULT '',
+      archived_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS reminder_occurrences (
+      id TEXT PRIMARY KEY,
+      reminder_id TEXT NOT NULL REFERENCES reminders(id) ON DELETE CASCADE,
+      intended_local_date TEXT NOT NULL,
+      intended_local_time TEXT NOT NULL,
+      dedupe_key TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      due_at TEXT NOT NULL,
+      delivered_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS reminder_delivery_attempts (
+      id TEXT PRIMARY KEY,
+      occurrence_id TEXT NOT NULL REFERENCES reminder_occurrences(id) ON DELETE CASCADE,
+      channel TEXT NOT NULL,
+      mode TEXT NOT NULL DEFAULT 'text',
+      status TEXT NOT NULL DEFAULT 'pending',
+      error TEXT NOT NULL DEFAULT '',
+      response_json TEXT NOT NULL DEFAULT '{}',
+      attempted_at TEXT NOT NULL,
+      dedupe_key TEXT NOT NULL UNIQUE
+    );
+    CREATE TABLE IF NOT EXISTS review_templates (
+      id TEXT PRIMARY KEY,
+      cadence TEXT NOT NULL,
+      title TEXT NOT NULL,
+      prompt_json TEXT NOT NULL DEFAULT '[]',
+      enabled INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS important_dates (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      date TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'personal',
+      notes TEXT NOT NULL DEFAULT '',
+      prep_sequence_json TEXT NOT NULL DEFAULT '[]',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS meeting_records (
+      id TEXT PRIMARY KEY,
+      calendar_event_id TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL,
+      objective TEXT NOT NULL DEFAULT '',
+      agenda TEXT NOT NULL DEFAULT '',
+      prep_notes TEXT NOT NULL DEFAULT '',
+      attendees TEXT NOT NULL DEFAULT '',
+      decisions TEXT NOT NULL DEFAULT '',
+      action_items_json TEXT NOT NULL DEFAULT '[]',
+      followup_reminder_ids_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   const sourceColumns = db.prepare("PRAGMA table_info(sources)").all().map((c) => c.name);
   if (!sourceColumns.includes("config_json")) {
@@ -253,7 +413,8 @@ function migrate() {
   if (!normalizedColumns.includes("last_used_at")) db.exec("ALTER TABLE normalized_items ADD COLUMN last_used_at TEXT;");
   if (!normalizedColumns.includes("usage_count")) db.exec("ALTER TABLE normalized_items ADD COLUMN usage_count INTEGER NOT NULL DEFAULT 0;");
   db.exec("UPDATE normalized_items SET first_seen_at = COALESCE(first_seen_at, created_at), last_seen_at = COALESCE(last_seen_at, created_at) WHERE first_seen_at IS NULL OR last_seen_at IS NULL;");
-  db.exec("UPDATE brief_config SET product_name='Pillar Brief' WHERE product_name IN ('Strategy Console', 'Intelligence Desk');");
+  db.exec("UPDATE brief_config SET product_name='Pillar Time' WHERE product_name IN ('Pillar Brief', 'Strategy Console', 'Intelligence Desk');");
+  runMigrationMarker("pillar_time_core_schema_v1");
 }
 
 const now = () => new Date().toISOString();
@@ -330,6 +491,16 @@ function legacyLensesAsPerspectiveLenses() {
 const run = (sql, params = {}) => db.prepare(sql).run(params);
 const all = (sql, params = {}) => db.prepare(sql).all(params);
 const get = (sql, params = {}) => db.prepare(sql).get(params);
+
+function runMigrationMarker(key) {
+  const t = now();
+  run(`INSERT INTO app_state (key, value, updated_at) VALUES ($key, $value, $t)
+       ON CONFLICT(key) DO UPDATE SET value=$value, updated_at=$t`, {
+    $key: `migration:${key}`,
+    $value: json({ ok: true, migratedAt: t }),
+    $t: t,
+  });
+}
 const addMinutes = (minutes) => new Date(Date.now() + minutes * 60 * 1000).toISOString();
 const randomCode = () => Math.random().toString(36).replace(/[^a-z0-9]/g, "").slice(2, 8).toUpperCase().padEnd(6, "X");
 const candidateBrewPaths = ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"];
@@ -481,7 +652,7 @@ async function openHomebrewBootstrapInstaller() {
   const scriptPath = path.join(dataDir, "install-ffmpeg-macos.sh");
   const script = `#!/bin/bash
 set -e
-echo "Pillar Brief FFmpeg installer"
+echo "Pillar Time FFmpeg installer"
 echo
 if ! command -v brew >/dev/null 2>&1; then
   echo "Installing Homebrew..."
@@ -495,7 +666,7 @@ fi
 echo "Installing FFmpeg..."
 brew install ffmpeg
 echo
-echo "FFmpeg install complete. Return to Pillar Brief and click Re-check."
+echo "FFmpeg install complete. Return to Pillar Time and click Re-check."
 read -n 1 -s -r -p "Press any key to close this window."
 `;
   fs.writeFileSync(scriptPath, script, { mode: 0o755 });
@@ -704,7 +875,7 @@ function sanitizeBriefSetupDraft(item = {}, current = briefConfig()) {
   })).filter((section) => section.key && section.label), { addIfConnected: true });
   return {
     ownerName: String(item.ownerName || current.ownerName || "You").trim().slice(0, 80) || "You",
-    productName: String(item.productName || current.productName || "Pillar Brief").trim().slice(0, 80) || "Pillar Brief",
+    productName: String(item.productName || current.productName || "Pillar Time").trim().slice(0, 80) || "Pillar Time",
     audienceContext: String(item.audienceContext || current.audienceContext || "").trim().slice(0, 1200),
     voiceRules: String(item.voiceRules || current.voiceRules || "").trim().slice(0, 1200),
     deliveryFrequency: current.deliveryFrequency || "Daily",
@@ -849,7 +1020,7 @@ function fallbackBriefSetupDraft(briefPrompt = "", current = briefConfig()) {
   const topicText = topics.length ? topics.join(", ") : "the topics in the brief request";
   return sanitizeBriefSetupDraft({
     ownerName: owner,
-    productName: current.productName || "Pillar Brief",
+    productName: current.productName || "Pillar Time",
     audienceContext: `A private daily brief for ${owner} focused on ${topicText}. Assume ${owner} wants the latest useful signals from today, with enough context to understand why they matter.${preferenceText}`,
     voiceRules: `Natural, direct, and useful. Prefer plain English, sharp bullets, and concrete takeaways. Avoid corporate stiffness, filler, fake certainty, and false-balance flattening of stated preferences.${preferenceHints.length ? " Keep stated worldview/taste/source preferences visible when source evidence supports them." : ""}`,
     sections: [
@@ -939,7 +1110,7 @@ async function sendTelegramMarkdown(botToken, chatId, markdown, options = {}) {
 
 function telegramPairingErrorMessage(description = "") {
   if (/terminated by other getUpdates request|conflict/i.test(description)) {
-    return "Telegram says another app is already polling this bot token. Close any other Pillar Brief windows, stop any local/VPS server using the same bot, or create a fresh bot in BotFather, then start a new pairing code.";
+    return "Telegram says another app is already polling this bot token. Close any other Pillar Time windows, stop any local/VPS server using the same bot, or create a fresh bot in BotFather, then start a new pairing code.";
   }
   if (/webhook/i.test(description)) {
     return "Telegram says this bot has a webhook configured. Remove the webhook before using pairing.";
@@ -1774,7 +1945,7 @@ async function fetchRssSource(source) {
   const config = source.config || {};
   const feedUrl = config.feedUrl || source.locator;
   if (!feedUrl) return { ok: true, skipped: true, reason: "No RSS feed URL configured", seen: 0, inserted: 0 };
-  const headers = { "User-Agent": "PillarBrief/0.1" };
+  const headers = { "User-Agent": "PillarTime/0.1" };
   if (config.lastEtag) headers["If-None-Match"] = config.lastEtag;
   if (config.lastModified) headers["If-Modified-Since"] = config.lastModified;
   const response = await fetchWithTimeout(feedUrl, { headers });
@@ -1877,9 +2048,9 @@ async function fetchRedditSource(source) {
     audit("reddit.fetched", "source", source.id, `Fetched ${parsedPosts.length} Reddit OAuth posts; ${posts.length} published today; inserted ${inserted}`, { fetched: parsedPosts.length, today: posts.length, inserted, mode: "oauth-api" }, "system");
     return { ok: true, skipped: false, seen: parsedPosts.length, today: posts.length, inserted, mode: "oauth-api" };
   }
-  const response = await fetchWithTimeout(redditUrlForSource(source), { headers: { "User-Agent": "PillarBrief/0.1 by operator" } });
+  const response = await fetchWithTimeout(redditUrlForSource(source), { headers: { "User-Agent": "PillarTime/0.1 by operator" } });
   if (response.status === 403 || response.status === 429) {
-    const rss = await fetchWithTimeout(redditRssUrlForSource(source), { headers: { "User-Agent": "PillarBrief/0.1 by operator" } });
+    const rss = await fetchWithTimeout(redditRssUrlForSource(source), { headers: { "User-Agent": "PillarTime/0.1 by operator" } });
     if (!rss.ok) throw new Error(`Reddit fetch failed: ${response.status} ${response.statusText}; RSS fallback failed: ${rss.status} ${rss.statusText}`);
     const parsedItems = parseGenericFeed(await rss.text()).slice(0, Number(config.maxItems || 10));
     const items = parsedItems.filter((item) => publishedToday(item.publishedAt));
@@ -1931,7 +2102,7 @@ async function fetchWebSource(source) {
   const config = source.config || {};
   const url = config.url || source.locator;
   if (!url || !/^https?:\/\//.test(url)) return { ok: true, skipped: true, reason: "No public web URL configured", seen: 0, inserted: 0 };
-  const headers = { "User-Agent": "PillarBrief/0.1" };
+  const headers = { "User-Agent": "PillarTime/0.1" };
   if (config.lastEtag) headers["If-None-Match"] = config.lastEtag;
   if (config.lastModified) headers["If-Modified-Since"] = config.lastModified;
   const response = await fetchWithTimeout(url, { headers });
@@ -2158,7 +2329,7 @@ async function refreshRedditAccessToken({ force = false } = {}) {
     headers: {
       Authorization: `Basic ${basic}`,
       "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": "PillarBrief/0.1 by operator",
+      "User-Agent": "PillarTime/0.1 by operator",
     },
     body,
   }, 15000);
@@ -2182,7 +2353,7 @@ async function fetchRedditOAuthJson(path) {
   const response = await fetchWithTimeout(`https://oauth.reddit.com${path}`, {
     headers: {
       Authorization: `Bearer ${token}`,
-      "User-Agent": "PillarBrief/0.1 by operator",
+      "User-Agent": "PillarTime/0.1 by operator",
     },
   }, 15000);
   if (!response.ok) {
@@ -3048,6 +3219,40 @@ function seedDefaultYouTubeSources() {
   });
 }
 
+function seedTimeDefaults() {
+  const t = now();
+  if (!get("SELECT id FROM time_preferences WHERE id=1")) {
+    run("INSERT INTO time_preferences (id, updated_at) VALUES (1, $t)", { $t: t });
+  }
+  const templates = [
+    ["review-morning", "morning", "Morning planning", ["What is already on the calendar?", "What are the top leverage candidates?", "What should become Today's Three?", "What needs preparation or follow-up?"]],
+    ["review-midday", "midday", "Midday reset", ["What changed?", "What is complete?", "What still matters this afternoon?", "Is rest, food, or recovery needed?"]],
+    ["review-eod", "end-of-day", "End-of-day wrap", ["What was completed?", "What should carry forward?", "Who is waiting?", "What should be prepared for tomorrow?"]],
+    ["review-weekly-kickoff", "weekly-kickoff", "Weekly kickoff", ["What outcomes matter this week?", "Where are the major meetings/deadlines?", "Where should focus time be protected?"]],
+    ["review-midweek", "midweek", "Midweek checkpoint", ["What is off track?", "What changed since Monday?", "What should be adjusted before Friday?"]],
+    ["review-weekly-wrap", "weekly-wrap", "Weekly wrap-up", ["What was planned vs completed?", "What remains waiting or blocked?", "What needs next week preparation?"]],
+    ["review-monthly", "monthly", "Monthly planning", ["What important dates are coming?", "What goals need attention?", "What recurring process should improve?"]],
+    ["review-quarterly", "quarterly", "Quarterly strategy review", ["What outcomes mattered?", "What commitments should continue or stop?", "What are next-quarter priorities?"]],
+    ["review-annual", "annual", "Annual planning", ["What changed this year?", "What should be protected next year?", "What are the few core priorities?"]],
+  ];
+  for (const [idValue, cadence, title, prompts] of templates) {
+    run(`INSERT INTO review_templates (id, cadence, title, prompt_json, enabled, created_at, updated_at)
+         VALUES ($id, $cadence, $title, $prompts, 0, $t, $t)
+         ON CONFLICT(id) DO NOTHING`, { $id: idValue, $cadence: cadence, $title: title, $prompts: json(prompts), $t: t });
+  }
+  const reminderTemplates = [
+    ["reminder-template-morning", "Morning command", "regular", "weekday", "08:00"],
+    ["reminder-template-midday", "Midday reset", "regular", "weekday", "12:30"],
+    ["reminder-template-eod", "End-of-day wrap", "regular", "weekday", "17:15"],
+    ["reminder-template-weekly", "Monday weekly kickoff", "regular", "weekly", "08:30"],
+  ];
+  for (const [reminderId, title, type, scheduleType, localTime] of reminderTemplates) {
+    run(`INSERT INTO reminders (id, title, body, type, schedule_type, local_time, start_date, weekdays_json, enabled, created_at, updated_at)
+         VALUES ($id, $title, 'Template reminder. Enable and edit before use.', $type, $scheduleType, $localTime, $start, '[1,2,3,4,5]', 0, $t, $t)
+         ON CONFLICT(id) DO NOTHING`, { $id: reminderId, $title: title, $type: type, $scheduleType: scheduleType, $localTime: localTime, $start: localDateKey(new Date(), "America/Denver"), $t: t });
+  }
+}
+
 function audit(action, entityType, entityId, note = "", diff = {}, actor = "operator") {
   run(`INSERT INTO audit_logs (id, ts, actor, action, entity_type, entity_id, note, diff_json)
        VALUES ($id, $ts, $actor, $action, $entityType, $entityId, $note, $diff)`, {
@@ -3057,6 +3262,7 @@ function audit(action, entityType, entityId, note = "", diff = {}, actor = "oper
 }
 
 function seed() {
+  seedTimeDefaults();
   seedDefaultRssSources();
   seedDefaultRedditSources();
   seedDefaultXSources();
@@ -3119,7 +3325,7 @@ function seed() {
     run(`INSERT INTO brief_config (id, owner_name, product_name, audience_context, voice_rules, delivery_frequency, delivery_time, delivery_timezone, delivery_day, section_schema_json, analyzers_json, analyzer_behavior, perspective_lenses_json, perspective_lenses_migrated, updated_at)
          VALUES (1, $owner, $product, $audience, $voice, 'Daily', '08:00', 'America/Denver', 'Monday', $sections, $analyzers, $behavior, '[]', 1, $t)`, {
       $owner: "You",
-      $product: "Pillar Brief",
+      $product: "Pillar Time",
       $audience: "A private daily intelligence brief for the brief owner. Explain sources, entities, mechanisms, or technical terms when useful.",
       $voice: "Concise, strategic, candid, approval-safe, specific, and plain-English. Avoid generic corporate language.",
       $sections: json([
@@ -3178,6 +3384,292 @@ function sources() {
     note: r.note, config: parse(r.config_json, {}), createdAt: r.created_at, updatedAt: r.updated_at,
   }));
 }
+
+function timePreferences() {
+  const r = get("SELECT * FROM time_preferences WHERE id=1") || {};
+  return {
+    timezone: r.timezone || "America/Denver",
+    workHours: parse(r.work_hours_json, { start: "09:00", end: "17:00", weekdays: [1, 2, 3, 4, 5] }),
+    protectedHours: parse(r.protected_hours_json, []),
+    quietHours: parse(r.quiet_hours_json, { start: "21:00", end: "07:00" }),
+    focusBlockMinutes: Number(r.focus_block_minutes || 90),
+    meetingBufferMinutes: Number(r.meeting_buffer_minutes || 10),
+    reminderMasterEnabled: !!r.reminder_master_enabled,
+    regularRemindersEnabled: !!r.regular_reminders_enabled,
+    sporadicRemindersEnabled: !!r.sporadic_reminders_enabled,
+    channels: {
+      desktopText: !!r.desktop_text_enabled,
+      desktopAudio: !!r.desktop_audio_enabled,
+      telegramText: !!r.telegram_text_enabled,
+      telegramAudio: !!r.telegram_audio_enabled,
+    },
+    operatingManual: r.operating_manual || "",
+    updatedAt: r.updated_at || null,
+  };
+}
+
+function timeTasks() {
+  return all("SELECT * FROM time_tasks WHERE status NOT IN ('done','canceled') ORDER BY COALESCE(due_at, '9999'), created_at DESC").map((r) => ({
+    id: r.id,
+    title: r.title,
+    notes: r.notes,
+    domain: r.domain,
+    project: r.project,
+    goal: r.goal,
+    owner: r.owner,
+    status: r.status,
+    dueAt: r.due_at,
+    estimateMinutes: r.estimate_minutes,
+    priority: r.priority,
+    leverageCategory: r.leverage_category,
+    energy: r.energy,
+    dependencies: r.dependencies,
+    waitingOn: r.waiting_on,
+    source: r.source,
+    relatedEventId: r.related_event_id,
+    recurrence: parse(r.recurrence_json, {}),
+    reminderIds: parse(r.reminder_ids_json, []),
+    completedAt: r.completed_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+function dailyCommitments(dateKey = localDateKey(new Date(), timePreferences().timezone)) {
+  return all("SELECT * FROM daily_commitments WHERE local_date=$date AND status!='removed' ORDER BY rank ASC, created_at ASC", { $date: dateKey }).map((r) => ({
+    id: r.id,
+    localDate: r.local_date,
+    timezone: r.timezone,
+    title: r.title,
+    notes: r.notes,
+    sourceSuggestionId: r.source_suggestion_id,
+    rank: r.rank,
+    status: r.status,
+    completedAt: r.completed_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+function reminders() {
+  return all("SELECT * FROM reminders WHERE archived_at IS NULL ORDER BY enabled DESC, local_time ASC, created_at DESC").map((r) => ({
+    id: r.id,
+    title: r.title,
+    body: r.body,
+    type: r.type,
+    scheduleType: r.schedule_type,
+    localTime: r.local_time,
+    timezone: r.timezone,
+    weekdays: parse(r.weekdays_json, []),
+    startDate: r.start_date,
+    endDate: r.end_date,
+    quietBehavior: r.quiet_behavior,
+    catchupPolicy: r.catchup_policy,
+    channels: parse(r.channels_json, {}),
+    sporadic: parse(r.sporadic_json, {}),
+    enabled: !!r.enabled,
+    pausedUntil: r.paused_until,
+    skippedDedupeKey: r.skipped_dedupe_key,
+    nextOccurrence: nextOccurrence({
+      id: r.id,
+      enabled: !!r.enabled,
+      scheduleType: r.schedule_type,
+      localTime: r.local_time,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      weekdays: parse(r.weekdays_json, []),
+      weekday: parse(r.weekdays_json, [])[0],
+    }, new Date(), r.timezone),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+function reviewTemplates() {
+  return all("SELECT * FROM review_templates ORDER BY created_at ASC").map((r) => ({
+    id: r.id,
+    cadence: r.cadence,
+    title: r.title,
+    prompts: parse(r.prompt_json, []),
+    enabled: !!r.enabled,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+function importantDates() {
+  return all("SELECT * FROM important_dates ORDER BY date ASC").map((r) => ({
+    id: r.id,
+    title: r.title,
+    date: r.date,
+    category: r.category,
+    notes: r.notes,
+    prepSequence: parse(r.prep_sequence_json, []),
+    enabled: !!r.enabled,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+function meetingRecords() {
+  return all("SELECT * FROM meeting_records ORDER BY updated_at DESC LIMIT 100").map((r) => ({
+    id: r.id,
+    calendarEventId: r.calendar_event_id,
+    title: r.title,
+    objective: r.objective,
+    agenda: r.agenda,
+    prepNotes: r.prep_notes,
+    attendees: r.attendees,
+    decisions: r.decisions,
+    actionItems: parse(r.action_items_json, []),
+    followupReminderIds: parse(r.followup_reminder_ids_json, []),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+function timeSuggestions() {
+  const prefs = timePreferences();
+  const tasks = timeTasks();
+  const feedback = all("SELECT feedback_key AS key, feedback FROM suggestion_feedback");
+  const candidates = tasks.map((task) => ({
+    id: `task:${task.id}`,
+    taskId: task.id,
+    title: task.title,
+    notes: task.notes,
+    leverageCategory: task.leverageCategory,
+    reason: task.waitingOn ? `Waiting on ${task.waitingOn}; moving this may unblock someone.` : "",
+    source: "task",
+    dueAt: task.dueAt,
+    estimateMinutes: task.estimateMinutes,
+    status: task.status,
+    waitingOn: task.waitingOn,
+    feedbackKey: task.id,
+  }));
+  const dateKey = localDateKey(new Date(), prefs.timezone);
+  const calendarItems = all(`SELECT title, body, published_at, canonical_url FROM normalized_items ni
+                             LEFT JOIN sources s ON s.id=ni.source_id
+                             WHERE s.type='Calendar' AND ni.published_at >= $start
+                             ORDER BY ni.published_at ASC LIMIT 12`, { $start: `${dateKey}T00:00:00.000Z` });
+  for (const item of calendarItems) {
+    if (/meet|call|huddle|checkpoint|review|planning/i.test(item.title)) {
+      candidates.push({
+        id: `calendar:${item.canonical_url || item.title}`,
+        title: `Prepare for ${String(item.title).replace(/^Calendar:\s*/i, "")}`,
+        leverageCategory: "leadership",
+        reason: "Calendar item may need preparation, decisions, or follow-up.",
+        source: "calendar",
+        dueAt: item.published_at,
+        estimateMinutes: prefs.meetingBufferMinutes || 10,
+        feedbackKey: `calendar:${item.title}`,
+      });
+    }
+  }
+  const ranked = rankActions(candidates, feedback).slice(0, 8);
+  if (!ranked.length) {
+    ranked.push({
+      id: "starter:plan",
+      title: "Choose Today's Three",
+      leverageCategory: "leadership",
+      reason: "A small explicit plan prevents the app from quietly deciding for you.",
+      source: "system",
+      estimateMinutes: 10,
+      score: 60,
+      confidence: 0.7,
+    });
+  }
+  return ranked.slice(0, 3);
+}
+
+const timeSchedulerState = { running: false, lastTickAt: null, lastError: "", deliveredThisRun: 0 };
+
+function schedulerHealth() {
+  const next = reminders().filter((reminder) => reminder.enabled && reminder.nextOccurrence)[0]?.nextOccurrence || null;
+  return {
+    running: timeSchedulerState.running,
+    lastTickAt: timeSchedulerState.lastTickAt,
+    lastError: timeSchedulerState.lastError,
+    deliveredThisRun: timeSchedulerState.deliveredThisRun,
+    nextDueOccurrence: next,
+    backgroundAvailable: isDesktop,
+    notificationPermission: isDesktop ? "requires desktop permission" : "web mode",
+  };
+}
+
+async function runTimeReminderSchedulerTick(trigger = "tick") {
+  const prefs = timePreferences();
+  timeSchedulerState.running = true;
+  timeSchedulerState.lastTickAt = now();
+  try {
+    if (!prefs.reminderMasterEnabled) return;
+    for (const reminder of reminders()) {
+      if (!reminder.enabled) continue;
+      if (reminder.type === "regular" && !prefs.regularRemindersEnabled) continue;
+      if (reminder.type === "sporadic" && !prefs.sporadicRemindersEnabled) continue;
+      if (reminder.pausedUntil && new Date(reminder.pausedUntil) > new Date()) continue;
+      const next = reminder.nextOccurrence;
+      if (!next) continue;
+      const dueKey = next.dedupeKey;
+      if (reminder.skippedDedupeKey === dueKey) continue;
+      const occurrenceId = `occ-${createHash("sha1").update(dueKey).digest("hex").slice(0, 16)}`;
+      const dueAt = new Date().toISOString();
+      run(`INSERT INTO reminder_occurrences (id, reminder_id, intended_local_date, intended_local_time, dedupe_key, status, due_at, created_at)
+           VALUES ($id, $reminderId, $date, $time, $dedupe, 'scheduled', $dueAt, $t)
+           ON CONFLICT(dedupe_key) DO NOTHING`, { $id: occurrenceId, $reminderId: reminder.id, $date: next.dateKey, $time: next.localTime, $dedupe: dueKey, $dueAt: dueAt, $t: now() });
+      if (!shouldDeliverLocalOccurrence(next, reminder.timezone)) continue;
+      const channels = reminder.channels || {};
+      if (channels.telegramText && prefs.channels.telegramText) {
+        await deliverTimeReminder({ reminder, occurrenceId, channel: "telegram", mode: "text" });
+      }
+      if (channels.desktopText && prefs.channels.desktopText) {
+        recordReminderAttempt({ occurrenceId, channel: "desktop", mode: "text", status: "skipped", error: "Desktop notification adapter pending Tauri notification permission wiring." });
+      }
+    }
+    timeSchedulerState.lastError = "";
+  } catch (error) {
+    timeSchedulerState.lastError = error.message || "Reminder scheduler failed";
+    audit("time.scheduler_failed", "scheduler", "time", timeSchedulerState.lastError, { trigger }, "system");
+  }
+}
+
+function startTimeReminderScheduler() {
+  runTimeReminderSchedulerTick("launch").catch(() => {});
+  setInterval(() => runTimeReminderSchedulerTick("interval").catch(() => {}), 60000).unref?.();
+}
+
+function shouldDeliverLocalOccurrence(occurrence, timezone = "America/Denver") {
+  const nowDate = new Date();
+  const dateKey = localDateKey(nowDate, timezone);
+  if (occurrence.dateKey !== dateKey) return false;
+  const currentTime = nowDate.toLocaleTimeString("en-US", { timeZone: timezone, hour12: false, hour: "2-digit", minute: "2-digit" });
+  return occurrence.localTime <= currentTime;
+}
+
+function recordReminderAttempt({ occurrenceId, channel, mode = "text", status = "pending", error = "", response = {} }) {
+  const dedupeKey = `${occurrenceId}:${channel}:${mode}`;
+  run(`INSERT INTO reminder_delivery_attempts (id, occurrence_id, channel, mode, status, error, response_json, attempted_at, dedupe_key)
+       VALUES ($id, $occurrenceId, $channel, $mode, $status, $error, $response, $t, $dedupe)
+       ON CONFLICT(dedupe_key) DO NOTHING`, {
+    $id: id("attempt"), $occurrenceId: occurrenceId, $channel: channel, $mode: mode, $status: status, $error: error, $response: json(response), $t: now(), $dedupe: dedupeKey,
+  });
+}
+
+async function deliverTimeReminder({ reminder, occurrenceId, channel, mode }) {
+  if (channel !== "telegram") return;
+  const tg = get("SELECT * FROM telegram_settings WHERE id=1");
+  if (!tg?.enabled || !tg.bot_token || !tg.chat_id) {
+    recordReminderAttempt({ occurrenceId, channel, mode, status: "failed", error: "Telegram is not configured." });
+    return;
+  }
+  try {
+    const payload = await sendTelegramMessage(tg.bot_token, tg.chat_id, `Pillar Time reminder\n\n${reminder.title}${reminder.body ? `\n${reminder.body}` : ""}`);
+    recordReminderAttempt({ occurrenceId, channel, mode, status: "sent", response: { messageId: payload.result?.message_id } });
+    timeSchedulerState.deliveredThisRun += 1;
+  } catch (error) {
+    recordReminderAttempt({ occurrenceId, channel, mode, status: "failed", error: error.message || "Telegram reminder failed" });
+  }
+}
+
 function lenses() {
   return all("SELECT * FROM lenses ORDER BY created_at ASC").map((r) => ({
     id: r.id, name: r.name, role: r.role, description: r.description, instructions: r.instructions,
@@ -3365,7 +3857,9 @@ function workflowProgressSteps({ activeKey = "fetch", completed = new Set(), out
 }
 
 function state() {
-  return { sources: sources(), lenses: lenses(), councils: councils(), documents: documents(), workflowRuns: workflowRuns(), approvals: approvals(), auditLogs: audits(), telegram: telegramSettings(), model: modelSettings(), tts: ttsSettings(), connectors: connectorSettings(), briefConfig: briefConfig(), onboarding: onboardingState(), runtime: { mode: appMode, isDesktop, dataDir, workflowSteps: workflowPlan() } };
+  const prefs = timePreferences();
+  const todayKey = localDateKey(new Date(), prefs.timezone);
+  return { sources: sources(), lenses: lenses(), councils: councils(), documents: documents(), workflowRuns: workflowRuns(), approvals: approvals(), auditLogs: audits(), telegram: telegramSettings(), model: modelSettings(), tts: ttsSettings(), connectors: connectorSettings(), briefConfig: briefConfig(), onboarding: onboardingState(), time: { preferences: prefs, todayKey, suggestions: timeSuggestions(), commitments: dailyCommitments(todayKey), tasks: timeTasks(), reminders: reminders(), reviews: reviewTemplates(), importantDates: importantDates(), meetings: meetingRecords(), scheduler: schedulerHealth() }, runtime: { mode: appMode, isDesktop, dataDir, workflowSteps: workflowPlan() } };
 }
 function briefConfig() {
   const r = get("SELECT * FROM brief_config WHERE id = 1");
@@ -3712,7 +4206,7 @@ async function evidencePacketForCandidate(candidate = {}) {
   if (!/^https?:\/\//i.test(candidate.url || "")) return base;
   try {
     const response = await fetchWithTimeout(candidate.url, {
-      headers: { "User-Agent": "PillarBrief/0.1 (+https://github.com/Transformation-Agency/pillar-brief)" },
+      headers: { "User-Agent": "PillarTime/0.1 (+https://github.com/Transformation-Agency/pillar-time)" },
     }, 8000);
     if ([401, 402, 403, 451].includes(response.status)) return { ...base, status: "blocked", httpStatus: response.status };
     if (!response.ok) return { ...base, status: "fetch-failed", httpStatus: response.status };
@@ -4718,6 +5212,175 @@ seed();
 const app = express();
 app.use(express.json({ limit: "2mb" }));
 
+app.patch("/api/time/preferences", (req, res) => {
+  const b = req.body || {};
+  const current = timePreferences();
+  const t = now();
+  run(`UPDATE time_preferences SET timezone=$timezone, work_hours_json=$workHours, protected_hours_json=$protectedHours, quiet_hours_json=$quietHours,
+       focus_block_minutes=$focus, meeting_buffer_minutes=$buffer, reminder_master_enabled=$master, regular_reminders_enabled=$regular,
+       sporadic_reminders_enabled=$sporadic, desktop_text_enabled=$desktopText, desktop_audio_enabled=$desktopAudio,
+       telegram_text_enabled=$telegramText, telegram_audio_enabled=$telegramAudio, operating_manual=$manual, updated_at=$t WHERE id=1`, {
+    $timezone: String(b.timezone || current.timezone || "America/Denver"),
+    $workHours: json(b.workHours || current.workHours),
+    $protectedHours: json(b.protectedHours || current.protectedHours),
+    $quietHours: json(b.quietHours || current.quietHours),
+    $focus: Number(b.focusBlockMinutes ?? current.focusBlockMinutes ?? 90),
+    $buffer: Number(b.meetingBufferMinutes ?? current.meetingBufferMinutes ?? 10),
+    $master: (b.reminderMasterEnabled ?? current.reminderMasterEnabled) ? 1 : 0,
+    $regular: (b.regularRemindersEnabled ?? current.regularRemindersEnabled) ? 1 : 0,
+    $sporadic: (b.sporadicRemindersEnabled ?? current.sporadicRemindersEnabled) ? 1 : 0,
+    $desktopText: (b.channels?.desktopText ?? current.channels.desktopText) ? 1 : 0,
+    $desktopAudio: (b.channels?.desktopAudio ?? current.channels.desktopAudio) ? 1 : 0,
+    $telegramText: (b.channels?.telegramText ?? current.channels.telegramText) ? 1 : 0,
+    $telegramAudio: (b.channels?.telegramAudio ?? current.channels.telegramAudio) ? 1 : 0,
+    $manual: String(b.operatingManual ?? current.operatingManual ?? ""),
+    $t: t,
+  });
+  audit("time.preferences_updated", "time_preferences", "1", "Pillar Time preferences updated", {}, "operator");
+  res.json(state());
+});
+
+app.post("/api/time/tasks", (req, res) => {
+  const b = req.body || {};
+  const t = now();
+  const taskId = b.id || id("task");
+  run(`INSERT INTO time_tasks (id, title, notes, domain, project, goal, owner, status, due_at, estimate_minutes, priority, leverage_category, energy, dependencies, waiting_on, source, related_event_id, recurrence_json, reminder_ids_json, completed_at, created_at, updated_at)
+       VALUES ($id, $title, $notes, $domain, $project, $goal, $owner, $status, $dueAt, $estimate, $priority, $category, $energy, $dependencies, $waitingOn, $source, $eventId, $recurrence, $reminders, NULL, $t, $t)
+       ON CONFLICT(id) DO UPDATE SET title=$title, notes=$notes, domain=$domain, project=$project, goal=$goal, owner=$owner, status=$status, due_at=$dueAt, estimate_minutes=$estimate, priority=$priority, leverage_category=$category, energy=$energy, dependencies=$dependencies, waiting_on=$waitingOn, source=$source, related_event_id=$eventId, recurrence_json=$recurrence, reminder_ids_json=$reminders, updated_at=$t`, {
+    $id: taskId, $title: String(b.title || "Untitled task").trim(), $notes: String(b.notes || ""), $domain: String(b.domain || "work"),
+    $project: String(b.project || ""), $goal: String(b.goal || ""), $owner: String(b.owner || ""), $status: String(b.status || "inbox"),
+    $dueAt: b.dueAt || null, $estimate: Number(b.estimateMinutes || 30), $priority: String(b.priority || "normal"),
+    $category: String(b.leverageCategory || "admin"), $energy: String(b.energy || "medium"), $dependencies: String(b.dependencies || ""),
+    $waitingOn: String(b.waitingOn || ""), $source: String(b.source || "manual"), $eventId: String(b.relatedEventId || ""),
+    $recurrence: json(b.recurrence || {}), $reminders: json(b.reminderIds || []), $t: t,
+  });
+  res.json(state());
+});
+
+app.patch("/api/time/tasks/:id", (req, res) => {
+  const existing = get("SELECT * FROM time_tasks WHERE id=$id", { $id: req.params.id });
+  if (!existing) return res.status(404).json({ error: "Task not found" });
+  const status = String(req.body?.status || existing.status);
+  run("UPDATE time_tasks SET status=$status, completed_at=$completed, updated_at=$t WHERE id=$id", {
+    $id: req.params.id, $status: status, $completed: status === "done" ? now() : existing.completed_at, $t: now(),
+  });
+  res.json(state());
+});
+
+app.post("/api/time/commitments", (req, res) => {
+  const prefs = timePreferences();
+  const b = req.body || {};
+  const t = now();
+  const dateKey = String(b.localDate || localDateKey(new Date(), prefs.timezone));
+  const commitmentId = b.id || id("commit");
+  run(`INSERT INTO daily_commitments (id, local_date, timezone, title, notes, source_suggestion_id, rank, status, created_at, updated_at)
+       VALUES ($id, $date, $timezone, $title, $notes, $sourceSuggestionId, $rank, 'active', $t, $t)
+       ON CONFLICT(id) DO UPDATE SET title=$title, notes=$notes, rank=$rank, updated_at=$t`, {
+    $id: commitmentId, $date: dateKey, $timezone: prefs.timezone, $title: String(b.title || "Untitled commitment").trim(),
+    $notes: String(b.notes || ""), $sourceSuggestionId: String(b.sourceSuggestionId || ""), $rank: Math.max(1, Math.min(3, Number(b.rank || dailyCommitments(dateKey).length + 1))), $t: t,
+  });
+  res.json(state());
+});
+
+app.patch("/api/time/commitments/:id", (req, res) => {
+  const existing = get("SELECT * FROM daily_commitments WHERE id=$id", { $id: req.params.id });
+  if (!existing) return res.status(404).json({ error: "Commitment not found" });
+  const b = req.body || {};
+  const status = String(b.status || existing.status);
+  run("UPDATE daily_commitments SET title=$title, notes=$notes, rank=$rank, status=$status, completed_at=$completed, updated_at=$t WHERE id=$id", {
+    $id: req.params.id, $title: String(b.title ?? existing.title), $notes: String(b.notes ?? existing.notes),
+    $rank: Number(b.rank ?? existing.rank), $status: status, $completed: status === "done" ? now() : existing.completed_at, $t: now(),
+  });
+  res.json(state());
+});
+
+app.post("/api/time/suggestions/:id/feedback", (req, res) => {
+  run("INSERT INTO suggestion_feedback (id, feedback_key, feedback, note, created_at) VALUES ($id, $key, $feedback, $note, $t)", {
+    $id: id("feedback"), $key: String(req.params.id), $feedback: String(req.body?.feedback || "notToday"), $note: String(req.body?.note || ""), $t: now(),
+  });
+  res.json(state());
+});
+
+app.post("/api/time/reminders", (req, res) => {
+  const prefs = timePreferences();
+  const b = req.body || {};
+  const t = now();
+  const reminderId = b.id || id("reminder");
+  run(`INSERT INTO reminders (id, title, body, type, schedule_type, local_time, timezone, weekdays_json, start_date, end_date, quiet_behavior, catchup_policy, channels_json, sporadic_json, enabled, paused_until, created_at, updated_at)
+       VALUES ($id, $title, $body, $type, $scheduleType, $localTime, $timezone, $weekdays, $startDate, $endDate, $quiet, $catchup, $channels, $sporadic, $enabled, $pausedUntil, $t, $t)
+       ON CONFLICT(id) DO UPDATE SET title=$title, body=$body, type=$type, schedule_type=$scheduleType, local_time=$localTime, timezone=$timezone, weekdays_json=$weekdays, start_date=$startDate, end_date=$endDate, quiet_behavior=$quiet, catchup_policy=$catchup, channels_json=$channels, sporadic_json=$sporadic, enabled=$enabled, paused_until=$pausedUntil, updated_at=$t`, {
+    $id: reminderId, $title: String(b.title || "Untitled reminder").trim(), $body: String(b.body || ""), $type: String(b.type || "regular"),
+    $scheduleType: String(b.scheduleType || "once"), $localTime: String(b.localTime || "09:00"), $timezone: String(b.timezone || prefs.timezone),
+    $weekdays: json(b.weekdays || []), $startDate: String(b.startDate || localDateKey(new Date(), prefs.timezone)), $endDate: b.endDate || null,
+    $quiet: String(b.quietBehavior || "skip"), $catchup: String(b.catchupPolicy || "latest-once"),
+    $channels: json(b.channels || { desktopText: true, desktopAudio: false, telegramText: false, telegramAudio: false }),
+    $sporadic: json(b.sporadic || {}), $enabled: b.enabled ? 1 : 0, $pausedUntil: b.pausedUntil || null, $t: t,
+  });
+  res.json(state());
+});
+
+app.patch("/api/time/reminders/:id", (req, res) => {
+  const existing = get("SELECT * FROM reminders WHERE id=$id", { $id: req.params.id });
+  if (!existing) return res.status(404).json({ error: "Reminder not found" });
+  const b = req.body || {};
+  run("UPDATE reminders SET enabled=$enabled, paused_until=$pausedUntil, skipped_dedupe_key=$skip, archived_at=$archived, updated_at=$t WHERE id=$id", {
+    $id: req.params.id, $enabled: b.enabled === undefined ? existing.enabled : b.enabled ? 1 : 0,
+    $pausedUntil: b.pausedUntil === undefined ? existing.paused_until : b.pausedUntil,
+    $skip: b.skipNext ? `skip:${now()}` : existing.skipped_dedupe_key, $archived: b.archive ? now() : existing.archived_at, $t: now(),
+  });
+  res.json(state());
+});
+
+app.patch("/api/time/reviews/:id", (req, res) => {
+  const existing = get("SELECT * FROM review_templates WHERE id=$id", { $id: req.params.id });
+  if (!existing) return res.status(404).json({ error: "Review template not found" });
+  run("UPDATE review_templates SET enabled=$enabled, updated_at=$t WHERE id=$id", { $id: req.params.id, $enabled: req.body?.enabled ? 1 : 0, $t: now() });
+  res.json(state());
+});
+
+app.post("/api/time/important-dates", (req, res) => {
+  const b = req.body || {};
+  if (!String(b.title || "").trim() || !String(b.date || "").trim()) return res.status(400).json({ error: "Important date title and date are required" });
+  const t = now();
+  const dateId = b.id || id("date");
+  run(`INSERT INTO important_dates (id, title, date, category, notes, prep_sequence_json, enabled, created_at, updated_at)
+       VALUES ($id, $title, $date, $category, $notes, $prep, $enabled, $t, $t)
+       ON CONFLICT(id) DO UPDATE SET title=$title, date=$date, category=$category, notes=$notes, prep_sequence_json=$prep, enabled=$enabled, updated_at=$t`, {
+    $id: dateId,
+    $title: String(b.title).trim(),
+    $date: String(b.date).trim(),
+    $category: String(b.category || b.kind || "personal"),
+    $notes: String(b.notes || ""),
+    $prep: json(b.prepSequence || []),
+    $enabled: b.enabled === false ? 0 : 1,
+    $t: t,
+  });
+  res.json(state());
+});
+
+app.post("/api/time/meetings", (req, res) => {
+  const b = req.body || {};
+  if (!String(b.title || "").trim()) return res.status(400).json({ error: "Meeting title is required" });
+  const t = now();
+  const meetingId = b.id || id("meeting");
+  run(`INSERT INTO meeting_records (id, calendar_event_id, title, objective, agenda, prep_notes, attendees, decisions, action_items_json, followup_reminder_ids_json, created_at, updated_at)
+       VALUES ($id, $eventId, $title, $objective, $agenda, $prepNotes, $attendees, $decisions, $actions, $followups, $t, $t)
+       ON CONFLICT(id) DO UPDATE SET calendar_event_id=$eventId, title=$title, objective=$objective, agenda=$agenda, prep_notes=$prepNotes, attendees=$attendees, decisions=$decisions, action_items_json=$actions, followup_reminder_ids_json=$followups, updated_at=$t`, {
+    $id: meetingId,
+    $title: String(b.title).trim(),
+    $eventId: String(b.calendarEventId || b.sourceEventId || ""),
+    $objective: String(b.objective || ""),
+    $agenda: Array.isArray(b.agenda) ? b.agenda.join("\n") : String(b.agenda || ""),
+    $prepNotes: String(b.prepNotes || b.notes || ""),
+    $attendees: Array.isArray(b.attendees) ? b.attendees.join(", ") : String(b.attendees || ""),
+    $decisions: Array.isArray(b.decisions) ? b.decisions.join("\n") : String(b.decisions || ""),
+    $actions: json(b.actionItems || []),
+    $followups: json(b.followupReminderIds || []),
+    $t: t,
+  });
+  res.json(state());
+});
+
 app.get("/api/state", async (req, res) => {
   try {
     await pollTelegramUpdates();
@@ -4740,7 +5403,7 @@ app.get("/api/notifications/latest-brief", (req, res) => {
 });
 
 app.post("/api/runtime/shutdown", (req, res) => {
-  console.log("Shutdown requested: a newer Pillar Brief backend is taking over the port.");
+  console.log("Shutdown requested: a newer Pillar Time backend is taking over the port.");
   res.json({ ok: true });
   setTimeout(() => process.exit(0), 150);
 });
@@ -4990,7 +5653,7 @@ app.patch("/api/brief-config", (req, res) => {
            updated_at=$t
        WHERE id=1`, {
     $owner: String(b.ownerName ?? current.ownerName ?? "You").trim() || "You",
-    $product: String(b.productName ?? current.productName ?? "Pillar Brief").trim() || "Pillar Brief",
+    $product: String(b.productName ?? current.productName ?? "Pillar Time").trim() || "Pillar Time",
     $audience: String(b.audienceContext ?? current.audienceContext ?? ""),
     $voice: String(b.voiceRules ?? current.voiceRules ?? ""),
     $frequency: ["Daily", "Weekly"].includes(b.deliveryFrequency) ? b.deliveryFrequency : current.deliveryFrequency,
@@ -5390,7 +6053,7 @@ app.post("/api/telegram/pairing/:id/poll", async (req, res) => {
       const from = message?.from || {};
       const normalized = text.replace(/^\/(start|pair)(@\w+)?\s*/i, "").trim().toUpperCase();
       if (chat?.type === "private" && /^\/start(@\w+)?$/i.test(text)) {
-        await sendTelegramMessage(tg.bot_token, String(chat.id), "Pillar Brief pairing is ready. Reply with the code shown in the app.");
+        await sendTelegramMessage(tg.bot_token, String(chat.id), "Pillar Time pairing is ready. Reply with the code shown in the app.");
       }
       if (chat?.type === "private" && (normalized === row.code || text.toUpperCase() === row.code)) {
         matched = { chat, from };
@@ -5409,7 +6072,7 @@ app.post("/api/telegram/pairing/:id/poll", async (req, res) => {
       run(`UPDATE telegram_settings
            SET chat_id=$chat, allowed_users=$allowed, enabled=1, last_checked_at=$t, last_error='', updated_at=$t
            WHERE id=1`, { $chat: chatId, $allowed: json(allowed), $t: now() });
-      await sendTelegramMessage(tg.bot_token, chatId, "Telegram is paired. Your brief delivery is ready.");
+      await sendTelegramMessage(tg.bot_token, chatId, "Telegram is paired. Your Pillar Time delivery is ready.");
       audit("telegram.paired", "telegram_settings", "1", `Paired Telegram chat ${chatId}`, { username }, "system");
     } else {
       run("UPDATE telegram_pairing_sessions SET update_offset=$offset WHERE id=$id", { $id: row.id, $offset: nextOffset });
@@ -5433,7 +6096,7 @@ app.post("/api/telegram/test", async (req, res) => {
     if (!me.ok || !mePayload.ok) {
       throw new Error(mePayload.description || `Telegram getMe failed: ${me.status} ${me.statusText}`);
     }
-    const text = `Pillar Brief test message.\nBot: @${mePayload.result?.username || "unknown"}\nTime: ${new Date().toLocaleString()}`;
+    const text = `Pillar Time test message.\nBot: @${mePayload.result?.username || "unknown"}\nTime: ${new Date().toLocaleString()}`;
     const send = await fetchWithTimeout(`${base}/sendMessage`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -5530,7 +6193,7 @@ app.get("/api/google-calendar/oauth/callback", async (req, res) => {
   const returnedState = String(req.query.state || "");
   const connector = googleCalendarCredential();
   const data = connector.data;
-  const render = (title, body, { autoReturn = false } = {}) => res.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>${autoReturn ? '<meta http-equiv="refresh" content="1.4; url=/#/settings">' : ''}<style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:48px;line-height:1.5;color:#111827}main{max-width:640px}.button{display:inline-flex;align-items:center;justify-content:center;margin-top:20px;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font-weight:800;padding:12px 16px}p{font-size:18px;color:#374151}code{background:#f3f4f6;padding:2px 6px;border-radius:6px}</style></head><body><main><h1>${title}</h1><p>${body}</p><p>${autoReturn ? "Returning to Pillar Brief Settings..." : "Use the button below to return to Pillar Brief."}</p><a class="button" href="/#/settings">Return to Pillar Brief</a></main><script>${autoReturn ? 'setTimeout(() => { window.location.href = "/#/settings"; }, 800);' : ''}</script></body></html>`);
+  const render = (title, body, { autoReturn = false } = {}) => res.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>${autoReturn ? '<meta http-equiv="refresh" content="1.4; url=/#/settings">' : ''}<style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:48px;line-height:1.5;color:#111827}main{max-width:640px}.button{display:inline-flex;align-items:center;justify-content:center;margin-top:20px;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font-weight:800;padding:12px 16px}p{font-size:18px;color:#374151}code{background:#f3f4f6;padding:2px 6px;border-radius:6px}</style></head><body><main><h1>${title}</h1><p>${body}</p><p>${autoReturn ? "Returning to Pillar Time Settings..." : "Use the button below to return to Pillar Time."}</p><a class="button" href="/#/settings">Return to Pillar Time</a></main><script>${autoReturn ? 'setTimeout(() => { window.location.href = "/#/settings"; }, 800);' : ''}</script></body></html>`);
   if (!code) {
     const error = String(req.query.error || "Missing OAuth code");
     run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: error, $t: now() });
@@ -5538,7 +6201,7 @@ app.get("/api/google-calendar/oauth/callback", async (req, res) => {
   }
   if (!data.oauthState || returnedState !== data.oauthState) {
     run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: "OAuth state did not match.", $t: now() });
-    return render("Google Calendar was not connected", "The OAuth state did not match. Start the connection again from Pillar Brief.");
+    return render("Google Calendar was not connected", "The OAuth state did not match. Start the connection again from Pillar Time.");
   }
   try {
     const token = await exchangeGoogleCalendarCode({
@@ -5570,7 +6233,7 @@ app.get("/api/google-calendar/oauth/callback", async (req, res) => {
     } catch {
       // Keep the connection valid even if calendar-list discovery needs a retry from the app.
     }
-    return render("Google Calendar connected", "Pillar Brief can now read today's events. Return to the app to choose calendars.", { autoReturn: true });
+    return render("Google Calendar connected", "Pillar Time can now read today's events. Return to the app to choose calendars.", { autoReturn: true });
   } catch (error) {
     const message = error.message || "Google Calendar OAuth failed";
     run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: message, $t: now() });
@@ -5745,7 +6408,7 @@ app.patch("/api/tts", (req, res) => {
 app.post("/api/tts/preview", async (req, res) => {
   try {
     const audio = await synthesizeElevenLabsAudio({
-      text: String(req.body?.text || "This is your Pillar Brief audio preview.").slice(0, 500),
+      text: String(req.body?.text || "This is your Pillar Time audio preview.").slice(0, 500),
       filenamePrefix: "preview",
       apiKey: req.body?.apiKey,
       voiceId: req.body?.voiceId,
@@ -5800,7 +6463,8 @@ const server = app.listen(port, host);
 server.on("listening", () => {
   startSourcePreflightScheduler();
   startBriefDeliveryScheduler();
-  console.log(`Pillar Brief running at http://${host}:${port}`);
+  startTimeReminderScheduler();
+  console.log(`Pillar Time running at http://${host}:${port}`);
   console.log(`SQLite database: ${dbPath}`);
 });
 if (googleCalendarCallbackPort && googleCalendarCallbackPort !== port) {
@@ -5819,7 +6483,7 @@ server.on("error", (error) => {
   if (error.code === "EADDRINUSE" && takeoverAttempts < 20) {
     takeoverAttempts += 1;
     if (takeoverAttempts === 1) {
-      console.error(`Port ${port} is in use; asking the previous Pillar Brief backend to exit.`);
+      console.error(`Port ${port} is in use; asking the previous Pillar Time backend to exit.`);
       fetch(`http://${host}:${port}/api/runtime/shutdown`, { method: "POST" }).catch(() => {});
     }
     setTimeout(() => server.listen(port, host), 500);

@@ -3,6 +3,6 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Pillar Brief uses the microphone only when you choose voice input to describe perspective lenses.</string>
+  <string>Pillar Time uses the microphone only when you choose voice input.</string>
 </dict>
 </plist>
