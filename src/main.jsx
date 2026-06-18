@@ -46,7 +46,7 @@ import "./styles.css";
 
 const nav = [
   ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
-  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"]]],
+  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["trustedContext", "Trusted Context"]]],
   ["Configure", [["briefSetup", "Brief Setup"], ["lenses", "Perspective Lenses"]]],
   ["System", [["settings", "Settings"]]],
 ];
@@ -306,6 +306,7 @@ function Icon({ name }) {
     reminders: Clock,
     reviews: Check,
     meetings: Users,
+    trustedContext: ShieldCheck,
     briefs: FileText,
     sources: Database,
     briefSetup: Sparkles,
@@ -1067,6 +1068,134 @@ function Meetings({ state, mutate }) {
         {(time.meetings || []).length ? time.meetings.map((meeting) => <ListRow key={meeting.id} title={meeting.title} sub={[meeting.objective, meeting.prepNotes].filter(Boolean).join(" · ")} right={<Badge>{meeting.calendarEventId ? "calendar" : "manual"}</Badge>} />) : <Empty icon="meetings" title="No meeting records" body="Add prep or notes here; future suggestions can use them as planning context." />}
       </section>
     </div>
+  </Page>;
+}
+
+function TrustedContext({ state, mutate }) {
+  const context = state.trustedContext || {};
+  const health = context.health || {};
+  const [factForm, setFactForm] = React.useState({
+    resourceType: "identity.profile",
+    fieldKey: "preferredName",
+    value: "",
+    partition: "professional",
+    visibility: "assistant",
+    trustLevel: "verified_canonical_profile",
+    verificationStatus: "verified",
+  });
+  const [previewRequest, setPreviewRequest] = React.useState({
+    mode: "speaking_to_subject",
+    partition: "professional",
+    task: "daily planning",
+    externalVisibility: "none",
+  });
+  const [preview, setPreview] = React.useState(context.envelopePreview);
+  const [message, setMessage] = React.useState("");
+  React.useEffect(() => setPreview(context.envelopePreview), [context.envelopePreview]);
+  const saveFact = async (event) => {
+    event.preventDefault();
+    setMessage("");
+    try {
+      await mutate("/api/trusted-context/facts", factForm, "POST");
+      setFactForm((current) => ({ ...current, value: "" }));
+      setMessage("Fact saved.");
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+  const previewEnvelope = async () => {
+    setMessage("");
+    try {
+      const result = await api("/api/trusted-context/envelope-preview", {
+        method: "POST",
+        body: JSON.stringify(previewRequest),
+      });
+      setPreview(result.envelope);
+      setMessage("Envelope refreshed.");
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+  const updateProposal = async (proposal, status) => {
+    await mutate(`/api/trusted-context/proposals/${proposal.id}`, { status }, "PATCH");
+  };
+  const toneForVisibility = (visibility) => visibility === "private" ? "warn" : visibility === "public" ? "ok" : "muted";
+  return <Page
+    title="Trusted Context"
+    desc="Profile facts, source authority, memory proposals, and context envelopes used by Pillar Time."
+    wide
+    action={<Button icon="run" kind="primary" onClick={previewEnvelope}>Preview envelope</Button>}
+  >
+    <div className="metric-row">
+      <Metric label="Profile facts" value={health.factCount || 0} sub={`${health.verifiedIdentityFacts || 0} verified identity`} />
+      <Metric label="Proposals" value={health.proposedUpdates || 0} sub="awaiting review" />
+      <Metric label="Live snapshots" value={health.liveSnapshotCount || 0} sub={(health.staleSources || []).length ? `${health.staleSources.length} stale` : "freshness tracked"} />
+    </div>
+    {!!(health.warnings || []).length && <section className="panel warning-panel">
+      <PanelTitle icon="trustedContext" title="Context Health" sub={`${health.warnings.length} warning${health.warnings.length === 1 ? "" : "s"}`} />
+      <div className="compact-list">{health.warnings.map((warning, index) => <ListRow key={`${warning}-${index}`} title={warning} sub="Quality warning" right={<Badge tone="warn">Review</Badge>} />)}</div>
+    </section>}
+    <div className="split">
+      <section className="panel">
+        <PanelTitle icon="trustedContext" title="Identity Kernel" sub="Highest-trust identity facts included in consequential context." />
+        {preview?.identityKernel && Object.keys(preview.identityKernel).length ? Object.entries(preview.identityKernel).map(([key, fact]) => (
+          <ListRow key={key} title={key} sub={`${fact.value} · ${fact.trustLevel}`} right={<Badge tone={fact.verified ? "ok" : "warn"}>{fact.verified ? "verified" : "unverified"}</Badge>} />
+        )) : <Empty icon="trustedContext" title="No identity kernel" body="Add a verified identity fact to make context envelopes stronger." />}
+      </section>
+      <section className="panel">
+        <PanelTitle icon="trustedContext" title="Envelope Preview" sub={preview?.quality?.ok ? "Quality checks passed." : "Quality warnings available."} />
+        <div className="form compact-form">
+          <Select label="Mode" value={previewRequest.mode} onChange={(mode) => setPreviewRequest({ ...previewRequest, mode })} options={["speaking_to_subject", "speaking_for_subject", "speaking_about_subject", "internal_administrative_action"].map((value) => ({ value, label: value }))} />
+          <Select label="Partition" value={previewRequest.partition} onChange={(partition) => setPreviewRequest({ ...previewRequest, partition })} options={["professional", "personal", "shared"].map((value) => ({ value, label: value }))} />
+          <Select label="External visibility" value={previewRequest.externalVisibility} onChange={(externalVisibility) => setPreviewRequest({ ...previewRequest, externalVisibility })} options={["none", "internal", "external"].map((value) => ({ value, label: value }))} />
+          <Field label="Task" value={previewRequest.task} onChange={(task) => setPreviewRequest({ ...previewRequest, task })} />
+        </div>
+        <details className="raw-json" open><summary>Envelope JSON</summary><pre>{JSON.stringify(preview, null, 2)}</pre></details>
+      </section>
+    </div>
+    <div className="split">
+      <section className="panel">
+        <PanelTitle icon="plus" title="Add Profile Fact" sub="Facts stay separate from proposals and live state." />
+        <form className="form" onSubmit={saveFact}>
+          <Field label="Resource type" value={factForm.resourceType} onChange={(resourceType) => setFactForm({ ...factForm, resourceType })} />
+          <Field label="Field key" value={factForm.fieldKey} onChange={(fieldKey) => setFactForm({ ...factForm, fieldKey })} />
+          <TextArea label="Value" value={factForm.value} rows={3} onChange={(value) => setFactForm({ ...factForm, value })} />
+          <div className="form-grid">
+            <Select label="Partition" value={factForm.partition} onChange={(partition) => setFactForm({ ...factForm, partition })} options={["professional", "personal", "shared"].map((value) => ({ value, label: value }))} />
+            <Select label="Visibility" value={factForm.visibility} onChange={(visibility) => setFactForm({ ...factForm, visibility })} options={["private", "subject", "assistant", "workspace", "public"].map((value) => ({ value, label: value }))} />
+          </div>
+          <div className="form-grid">
+            <Select label="Trust level" value={factForm.trustLevel} onChange={(trustLevel) => setFactForm({ ...factForm, trustLevel })} options={Object.keys(health.trustLevels || { verified_canonical_profile: 6, imported_unverified: 9 }).map((value) => ({ value, label: value }))} />
+            <Select label="Verification" value={factForm.verificationStatus} onChange={(verificationStatus) => setFactForm({ ...factForm, verificationStatus })} options={["verified", "user_confirmed", "source_verified", "system_verified", "unverified", "observed", "inferred"].map((value) => ({ value, label: value }))} />
+          </div>
+          <Button icon="save" kind="primary">Save fact</Button>
+        </form>
+        {message && <p className={message.includes("saved") || message.includes("refreshed") ? "ok-text" : "warn-text"}>{message}</p>}
+      </section>
+      <section className="panel">
+        <PanelTitle icon="trustedContext" title="Memory Proposals" sub={`${(context.proposals || []).filter((item) => item.status === "proposed").length} proposed`} />
+        {(context.proposals || []).length ? <div className="compact-list">{context.proposals.map((proposal) => <ListRow
+          key={proposal.id}
+          title={`${proposal.fieldKey}: ${proposal.proposedValue}`}
+          sub={`${proposal.resourceType} · ${proposal.source} · confidence ${Math.round((proposal.confidence || 0) * 100)}%`}
+          right={<div className="row tight-row"><Badge tone={proposal.status === "approved" ? "ok" : proposal.status === "rejected" ? "warn" : "muted"}>{proposal.status}</Badge>{proposal.status === "proposed" && <><Button icon="check" onClick={() => updateProposal(proposal, "approved")}>Approve</Button><Button icon="x" onClick={() => updateProposal(proposal, "rejected")}>Reject</Button></>}</div>}
+        />)}</div> : <Empty icon="trustedContext" title="No proposals" body="Learned observations will wait here until you approve them." />}
+      </section>
+    </div>
+    <section className="panel">
+      <PanelTitle icon="trustedContext" title="Profile Facts" sub={`${(context.facts || []).length} stored facts`} />
+      {(context.facts || []).length ? <table className="source-table simplified"><thead><tr><th>Field</th><th>Value</th><th>Trust</th><th>Scope</th><th>Status</th></tr></thead><tbody>{context.facts.map((fact) => <tr key={fact.id}>
+        <td><strong>{fact.fieldKey}</strong><small>{fact.resourceType}</small></td>
+        <td>{String(fact.value || "").slice(0, 140)}</td>
+        <td>{fact.trustLevel}</td>
+        <td><Badge tone={toneForVisibility(fact.visibility)}>{fact.partition} · {fact.visibility}</Badge></td>
+        <td><Badge tone={fact.verificationStatus === "verified" ? "ok" : "muted"}>{fact.status}</Badge></td>
+      </tr>)}</tbody></table> : <Empty icon="trustedContext" title="No facts yet" body="Add a profile fact to seed Trusted Context." />}
+    </section>
+    <section className="panel">
+      <PanelTitle icon="trustedContext" title="Workspace Constitution" sub={`Version ${context.constitution?.version || 0}`} />
+      <details className="raw-json"><summary>Current constitution</summary><pre>{JSON.stringify(context.constitution?.body || {}, null, 2)}</pre></details>
+    </section>
   </Page>;
 }
 
@@ -3558,6 +3687,7 @@ function App() {
     generating: <GeneratingBrief runState={runState} />,
     briefSetup: <BriefSetup state={state} mutate={mutate} />,
     sources: <Sources state={state} mutate={mutate} />,
+    trustedContext: <TrustedContext state={state} mutate={mutate} />,
     lenses: <Lenses state={state} mutate={mutate} />,
     telegram: <Telegram state={state} mutate={mutate} refresh={refresh} />,
     settings: <Settings state={state} mutate={mutate} refresh={refresh} desktopUpdate={desktopUpdate} />,
