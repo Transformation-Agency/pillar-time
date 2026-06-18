@@ -3812,7 +3812,7 @@ function onboardingState() {
     briefConfigDraft: sanitizeBriefSetupDraft(parse(r.brief_config_draft_json, {})),
     updatedAt: r.updated_at,
     readiness,
-    canComplete: ownerNameReady && model.status === "ready" && !!String(r.brief_prompt || "").trim() && activeSources > 0 && scheduleSet,
+    canComplete: ownerNameReady && scheduleSet,
   };
 }
 function workflowTemplate(config = briefConfig()) {

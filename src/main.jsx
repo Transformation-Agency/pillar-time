@@ -2033,15 +2033,12 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
 }
 
 function Onboarding({ state, mutate, refresh }) {
-  const steps = ["welcome", "model", "intent", "setup", "perspectives", "sources", "access", "calendar", "audio", "telegram", "schedule", "review"];
+  const steps = ["welcome", "profile", "today", "reminders", "reviews", "model", "intent", "sources", "calendar", "telegram", "schedule", "review"];
   const readiness = state.onboarding.readiness || {};
   const savedOwnerName = state.briefConfig?.ownerName || "";
   const hasSavedFirstName = !isDefaultOwnerName(savedOwnerName);
   const initialIncomplete = () => {
     if (!hasSavedFirstName) return "welcome";
-    if (!readiness.modelReady) return "model";
-    if (!readiness.briefPromptSaved) return "intent";
-    if (!readiness.sourceReady) return "sources";
     if (!readiness.scheduleSet) return "schedule";
     return "review";
   };
@@ -2055,17 +2052,18 @@ function Onboarding({ state, mutate, refresh }) {
   const [firstName, setFirstName] = React.useState(hasSavedFirstName ? savedOwnerName : "");
   const firstNameReady = !isDefaultOwnerName(firstName.trim() || savedOwnerName);
   const reviewReadiness = { ...readiness, ownerNameReady: firstNameReady };
-  const canComplete = reviewReadiness.ownerNameReady && reviewReadiness.modelReady && reviewReadiness.briefPromptSaved && reviewReadiness.sourceReady && reviewReadiness.scheduleSet;
+  const canComplete = reviewReadiness.ownerNameReady && reviewReadiness.scheduleSet;
   const firstIncomplete = () => {
     if (!reviewReadiness.ownerNameReady) return "welcome";
-    if (!reviewReadiness.modelReady) return "model";
-    if (!reviewReadiness.briefPromptSaved) return "intent";
-    if (!reviewReadiness.sourceReady) return "sources";
     if (!reviewReadiness.scheduleSet) return "schedule";
     return "review";
   };
   const [nameMessage, setNameMessage] = React.useState("");
   const [savingFirstName, setSavingFirstName] = React.useState(false);
+  const [operatingManual, setOperatingManual] = React.useState(state.time?.preferences?.operatingManual || "");
+  const [starterCommitment, setStarterCommitment] = React.useState("");
+  const [starterMessage, setStarterMessage] = React.useState("");
+  const [reviewMessage, setReviewMessage] = React.useState("");
   const [briefPrompt, setBriefPrompt] = React.useState(state.onboarding.briefPrompt || "");
   const [briefDraft, setBriefDraft] = React.useState({ ...(state.onboarding.briefConfigDraft || state.briefConfig), ownerName: hasSavedFirstName ? savedOwnerName : "" });
   const [draftingBriefSetup, setDraftingBriefSetup] = React.useState(false);
@@ -2137,6 +2135,70 @@ function Onboarding({ state, mutate, refresh }) {
       return false;
     } finally {
       setSavingFirstName(false);
+    }
+  };
+  const saveExecutiveProfile = async (event) => {
+    event.preventDefault();
+    const ownerName = firstName.trim();
+    if (!ownerName) {
+      setNameMessage("Enter the executive's first name before continuing.");
+      return;
+    }
+    setSavingFirstName(true);
+    setNameMessage("");
+    try {
+      await mutate("/api/brief-config", {
+        ...state.briefConfig,
+        ownerName,
+        audienceContext: state.briefConfig.audienceContext || `A private executive operating system for ${ownerName}, focused on commitments, calendar pressure, preparation, reminders, reviews, and source-grounded intelligence.`,
+        voiceRules: state.briefConfig.voiceRules || "Be concise, explicit about uncertainty, and distinguish facts, commitments, suggestions, and approvals.",
+      }, "PATCH");
+      await mutate("/api/time/preferences", {
+        ...(state.time?.preferences || {}),
+        operatingManual,
+      }, "PATCH");
+      await go("today");
+    } catch (error) {
+      setNameMessage(error.message || "Could not save executive profile.");
+    } finally {
+      setSavingFirstName(false);
+    }
+  };
+  const addStarterCommitment = async (event) => {
+    event.preventDefault();
+    if (!starterCommitment.trim()) {
+      setStarterMessage("Write one commitment or priority first.");
+      return;
+    }
+    setStarterMessage("");
+    try {
+      const title = starterCommitment.trim();
+      await api("/api/time/tasks", { method: "POST", body: JSON.stringify({ title, source: "onboarding", leverageCategory: "deepWork", priority: "high" }) });
+      await api("/api/time/commitments", { method: "POST", body: JSON.stringify({ title, notes: "Added during onboarding.", rank: Math.min(3, (state.time?.commitments || []).length + 1) }) });
+      setStarterCommitment("");
+      setStarterMessage("Added to Planner and Today’s Three.");
+      await refresh();
+    } catch (error) {
+      setStarterMessage(error.message || "Could not add commitment.");
+    }
+  };
+  const saveReminderDefaults = async (patch = {}) => {
+    try {
+      await mutate("/api/time/preferences", {
+        ...(state.time?.preferences || {}),
+        ...patch,
+      }, "PATCH");
+    } catch (error) {
+      setStarterMessage(error.message || "Could not save reminder settings.");
+    }
+  };
+  const toggleReview = async (review) => {
+    setReviewMessage("");
+    try {
+      await mutate(`/api/time/reviews/${review.id}`, { enabled: !review.enabled }, "PATCH");
+      setReviewMessage(`${review.title} ${review.enabled ? "disabled" : "enabled"}.`);
+    } catch (error) {
+      setReviewMessage(error.message || "Could not update review.");
     }
   };
   const detectModels = async () => {
@@ -2553,32 +2615,96 @@ function Onboarding({ state, mutate, refresh }) {
   };
   const stepIndex = Math.max(0, steps.indexOf(step));
   const activeModelProvider = modelProviderRows.find((row) => row.provider === model.provider) || modelProviderRows[0];
+  const stepLabels = {
+    welcome: "Start",
+    profile: "Profile",
+    today: "Today",
+    reminders: "Reminders",
+    reviews: "Reviews",
+    model: "AI",
+    intent: "Brief",
+    sources: "Sources",
+    calendar: "Calendar",
+    telegram: "Telegram",
+    schedule: "Schedule",
+    review: "Review",
+  };
   return <div className="onboarding-shell">
     <aside className="onboarding-rail">
       <PillarBriefLockup />
-      <div className="onboarding-progress">{steps.map((id, index) => <button key={id} className={index === stepIndex ? "active" : index < stepIndex ? "done" : ""} onClick={() => setStep(id)}><b>{index + 1}</b><span>{id === "intent" ? "Brief" : id === "setup" ? "Setup" : id === "perspectives" ? "Lenses" : id === "access" ? "Access" : id === "calendar" ? "Calendar" : id === "audio" ? "Audio" : id}</span></button>)}</div>
+      <div className="onboarding-progress">{steps.map((id, index) => <button key={id} className={index === stepIndex ? "active" : index < stepIndex ? "done" : ""} onClick={() => setStep(id)}><b>{index + 1}</b><span>{stepLabels[id] || id}</span></button>)}</div>
     </aside>
     <main className="onboarding-main">
       <button className="onboarding-skip" type="button" onClick={skipOnboarding}><Icon name="x" />Skip and set up manually</button>
       {step === "welcome" && <section className="onboarding-panel">
         <Badge>First run</Badge>
-        <h1>Set up your daily intelligence brief.</h1>
-        <p>We will personalize the brief, connect a model, learn what you want covered, suggest real sources, optionally add your calendar, pair Telegram, and set the delivery time.</p>
-        <form className="form onboarding-form" onSubmit={async (event) => { event.preventDefault(); if (await saveFirstName()) await go("model"); }}>
+        <h1>Set up your executive operating system.</h1>
+        <p>Pillar Time starts as a private desktop command center for commitments, reminders, reviews, calendar pressure, meeting prep, and source-grounded intelligence. AI and external connectors are optional.</p>
+        <form className="form onboarding-form" onSubmit={async (event) => { event.preventDefault(); if (await saveFirstName()) await go("profile"); }}>
           <Field label="Your first name" value={firstName} onChange={(value) => { setFirstName(value); if (nameMessage) setNameMessage(""); }} placeholder="First name" required />
           {nameMessage && <p className="warn-text">{nameMessage}</p>}
-          <Button icon="run" kind="accent" disabled={savingFirstName}>{savingFirstName ? "Saving..." : "Start setup"}</Button>
+          <Button icon="run" kind="accent" disabled={savingFirstName}>{savingFirstName ? "Saving..." : "Start Pillar Time"}</Button>
         </form>
         <div className="onboarding-cards">
-          <div><Icon name="settings" /><strong>Model</strong><span>Used to analyze and write the brief.</span></div>
-          <div><Icon name="sources" /><strong>Sources</strong><span>AI suggests what to monitor from your prompt.</span></div>
-          <div><Icon name="calendar" /><strong>Calendar</strong><span>Optional agenda context for today's prep.</span></div>
-          <div><Icon name="telegram" /><strong>Telegram</strong><span>One-button pairing. No chat ID hunting.</span></div>
+          <div><Icon name="today" /><strong>Today</strong><span>Choose commitments and protect the day.</span></div>
+          <div><Icon name="reminders" /><strong>Reminders</strong><span>Enable only the channels you want.</span></div>
+          <div><Icon name="reviews" /><strong>Reviews</strong><span>Daily, weekly, monthly, and quarterly planning rituals.</span></div>
+          <div><Icon name="sources" /><strong>Intelligence</strong><span>Optional model, sources, calendar, and Telegram delivery.</span></div>
         </div>
       </section>}
+      {step === "profile" && <section className="onboarding-panel onboarding-panel-wide">
+        <h1>Define the executive profile.</h1>
+        <p>This creates the local operating context. In this desktop build it stays in your local SQLite database.</p>
+        <form className="form onboarding-form" onSubmit={saveExecutiveProfile}>
+          <Field label="Executive first name" value={firstName} onChange={(value) => setFirstName(value)} placeholder="First name" required />
+          <TextArea label="Operating manual" value={operatingManual} onChange={setOperatingManual} rows={7} placeholder="Preferences, working style, meeting prep rules, protected hours, delegation principles, communication tone, people or projects to remember." />
+          <div className="notice">
+            <strong>Personal Desktop Mode</strong>
+            <span>This build is for one local user. Executive Workspace Mode, assistants, shared approvals, and policy-controlled external action execution are architecture commitments, not enabled in this DMG.</span>
+          </div>
+          {nameMessage && <p className="warn-text">{nameMessage}</p>}
+          <div className="row"><Button type="button" onClick={() => go("welcome")}>Back</Button><Button icon="save" kind="primary" disabled={savingFirstName}>{savingFirstName ? "Saving..." : "Save profile"}</Button></div>
+        </form>
+      </section>}
+      {step === "today" && <section className="onboarding-panel onboarding-panel-wide">
+        <h1>Seed Today’s Three.</h1>
+        <p>Add one commitment or priority you want Pillar Time to protect today. You can add more from Today or Planner after onboarding.</p>
+        <form className="quick-capture" onSubmit={addStarterCommitment}>
+          <input value={starterCommitment} onChange={(event) => setStarterCommitment(event.target.value)} placeholder="Example: Prepare for the Week-1 checkpoint" />
+          <Button icon="plus" kind="primary">Add</Button>
+        </form>
+        <div className="readiness-list">
+          {(state.time?.commitments || []).slice(0, 3).map((item) => <div key={item.id}><Icon name="check" /><span>{item.title}</span><Badge tone={item.status === "done" ? "ok" : "muted"}>{item.status}</Badge></div>)}
+        </div>
+        {starterMessage && <p className={starterMessage.includes("Added") ? "ok-text" : "warn-text"}>{starterMessage}</p>}
+        <div className="row"><Button onClick={() => go("profile")}>Back</Button><Button kind="primary" onClick={() => go("reminders")}>Continue</Button></div>
+      </section>}
+      {step === "reminders" && <section className="onboarding-panel onboarding-panel-wide">
+        <h1>Choose reminder defaults.</h1>
+        <p>Reminders stay quiet unless the master switch is on and an individual reminder is enabled. Telegram delivery only works after Telegram is paired.</p>
+        <div className="toggle-grid">
+          {[
+            ["reminderMasterEnabled", "Master reminders"],
+            ["regularRemindersEnabled", "Regular reminders"],
+            ["sporadicRemindersEnabled", "Sporadic reminders"],
+          ].map(([key, label]) => <label className="switch-row" key={key}><span>{label}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.[key]} onChange={(event) => saveReminderDefaults({ [key]: event.target.checked })} /><span /></label></label>)}
+          {["desktopText", "telegramText"].map((key) => <label className="switch-row" key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.channels?.[key]} onChange={(event) => saveReminderDefaults({ channels: { ...(state.time?.preferences?.channels || {}), [key]: event.target.checked } })} /><span /></label></label>)}
+        </div>
+        <div className="row"><Button onClick={() => go("today")}>Back</Button><Button kind="primary" onClick={() => go("reviews")}>Continue</Button></div>
+      </section>}
+      {step === "reviews" && <section className="onboarding-panel onboarding-panel-wide">
+        <h1>Turn on planning reviews.</h1>
+        <p>These are native planning rituals. Enable the ones you want; you can adjust them later from Reviews.</p>
+        <div className="review-grid">{(state.time?.reviews || []).map((review) => <div className="time-card" key={review.id}>
+          <div className="time-card-head"><div><strong>{review.title}</strong><small>{review.cadence}</small></div><Badge tone={review.enabled ? "ok" : "muted"}>{review.enabled ? "On" : "Off"}</Badge></div>
+          <Button icon={review.enabled ? "x" : "check"} onClick={() => toggleReview(review)}>{review.enabled ? "Disable" : "Enable"}</Button>
+        </div>)}</div>
+        {reviewMessage && <p className={reviewMessage.includes("enabled") || reviewMessage.includes("disabled") ? "ok-text" : "warn-text"}>{reviewMessage}</p>}
+        <div className="row"><Button onClick={() => go("reminders")}>Back</Button><Button kind="primary" onClick={() => go("model")}>Continue</Button></div>
+      </section>}
       {step === "model" && <section className="onboarding-panel">
-        <h1>Connect the model.</h1>
-        <p>Paste an API key, let the app discover available models, then save the model you want to use for brief generation.</p>
+        <h1>Optional: connect an AI model.</h1>
+        <p>Pillar Time works locally without this. Add a model when you want source-grounded briefs, source suggestions, perspective generation, transcription fallback, and drafting support.</p>
         <div className="notice">
           <strong>Model costs vary</strong>
           <span>Our defaults select cost-efficient models that work well for briefs. For an average-sized brief scheduled daily with 5-10 sources, expect roughly $5-10/month in model usage. If this is a new provider account, you may also need to add credits or enable billing in that platform's dashboard before requests will run.</span>
@@ -2593,15 +2719,15 @@ function Onboarding({ state, mutate, refresh }) {
           </div>
           <Field label="API key" type="password" value={model.apiKey} onChange={(apiKey) => setModel({ ...model, apiKey })} placeholder={(state.model.providerCredentials?.[model.provider]?.apiKeySaved || (state.model.provider === model.provider && state.model.apiKeySaved)) ? "Saved. Paste a new key to replace it." : "Paste provider API key"} />
           {modelOptionsProvider === model.provider && modelOptions.length ? <Select label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} options={modelOptions.includes(model.model) || !model.model ? modelOptions : [model.model, ...modelOptions]} /> : <Field label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} placeholder="Detect models or enter one manually" />}
-          <div className="row"><Button type="button" icon="search" onClick={detectModels} disabled={detecting}>{detecting ? "Checking..." : "Validate key"}</Button><Button icon="save" kind="primary" disabled={!model.model}>Save model</Button></div>
+          <div className="row"><Button type="button" onClick={() => go("intent")}>Skip AI for now</Button><Button type="button" icon="search" onClick={detectModels} disabled={detecting}>{detecting ? "Checking..." : "Validate key"}</Button><Button icon="save" kind="primary" disabled={!model.model}>Save model</Button></div>
           {modelMessage && <p className={modelMessage.includes("saved") || modelMessage.includes("works") ? "ok-text" : "warn-text"}>{modelMessage}</p>}
         </form>
       </section>}
       {step === "intent" && <section className="onboarding-panel">
-        <h1>Describe the brief you want.</h1>
-        <p>Use normal language. Mention topics, people, companies, source types, tone, and anything you want avoided.</p>
-        <TextArea label="Brief request" value={briefPrompt} onChange={setBriefPrompt} rows={9} />
-        <div className="row"><Button onClick={() => go("model")}>Back</Button><Button icon="run" kind="primary" onClick={generateBriefSetupDraft} disabled={briefPrompt.trim().length < 20 || draftingBriefSetup}>{draftingBriefSetup ? "Drafting..." : "Generate brief setup"}</Button></div>
+        <h1>Optional: describe your intelligence brief.</h1>
+        <p>Use normal language. Mention topics, people, companies, source types, tone, and anything you want avoided. Skip this if you only want the local planner for now.</p>
+        <TextArea label="Intelligence brief request" value={briefPrompt} onChange={setBriefPrompt} rows={9} />
+        <div className="row"><Button onClick={() => go("model")}>Back</Button><Button onClick={() => go("sources")}>Skip intelligence setup</Button><Button icon="run" kind="primary" onClick={generateBriefSetupDraft} disabled={briefPrompt.trim().length < 20 || draftingBriefSetup}>{draftingBriefSetup ? "Drafting..." : "Generate brief setup"}</Button></div>
         {briefDraftMessage && <p className={briefDraftMessage.includes("Drafted") || briefDraftMessage.includes("saved") ? "ok-text" : "warn-text"}>{briefDraftMessage}</p>}
       </section>}
       {step === "setup" && <section className="onboarding-panel onboarding-panel-wide">
@@ -2663,7 +2789,7 @@ function Onboarding({ state, mutate, refresh }) {
           </label>;
         })}</div>
         {!suggestingSources && !suggestions.length && <Empty icon="sources" title="No suggestions yet" body="Generate source suggestions from your brief request." action={<Button icon="run" kind="primary" onClick={suggestSources}>Generate suggestions</Button>} />}
-        <div className="row"><Button onClick={() => go("perspectives")}>Back</Button><Button icon="run" onClick={suggestSources} disabled={suggestingSources}>{suggestingSources ? "Gathering..." : "Regenerate"}</Button><Button icon="plus" kind="primary" disabled={savingSources || suggestingSources || !suggestions.length} onClick={addSelectedSources}>{savingSources ? "Adding..." : "Add selected"}</Button></div>
+        <div className="row"><Button onClick={() => go("intent")}>Back</Button><Button onClick={() => go("calendar")}>Skip sources</Button><Button icon="run" onClick={suggestSources} disabled={suggestingSources || briefPrompt.trim().length < 20}>{suggestingSources ? "Gathering..." : "Generate"}</Button><Button icon="plus" kind="primary" disabled={savingSources || suggestingSources || !suggestions.length} onClick={addSelectedSources}>{savingSources ? "Adding..." : "Add selected"}</Button></div>
         {sourceMessage && <p className={sourceMessage.includes("added") || sourceMessage.includes("Review") || sourceMessage.includes("Found") ? "ok-text" : "warn-text"}>{sourceMessage}</p>}
       </section>}
       {step === "access" && <section className="onboarding-panel onboarding-panel-wide">
@@ -2766,7 +2892,7 @@ function Onboarding({ state, mutate, refresh }) {
       {step === "review" && <section className="onboarding-panel">
         <h1>Ready to open the app.</h1>
         <div className="readiness-list">
-          {[["First name saved", reviewReadiness.ownerNameReady, false], ["Model connected", reviewReadiness.modelReady, false], ["Brief prompt saved", reviewReadiness.briefPromptSaved, false], ["Sources added", reviewReadiness.sourceReady, false], ["Perspective lenses", (state.briefConfig?.perspectiveLenses || []).length > 0, true], ["Google Calendar", googleCalendarConnected, true], ["Audio brief", state.tts?.status === "ready", true], ["Telegram paired", reviewReadiness.telegramReady, true], ["Schedule set", reviewReadiness.scheduleSet, false]].map(([label, ok, optional]) => <div key={label}><Icon name={ok ? "check" : optional ? "volume" : "x"} /><span>{label}</span><Badge tone={ok ? "ok" : optional ? "muted" : "warn"}>{ok ? "Done" : optional ? "Optional" : "Needs setup"}</Badge></div>)}
+          {[["Executive profile", reviewReadiness.ownerNameReady, false], ["Schedule set", reviewReadiness.scheduleSet, false], ["Today seeded", (state.time?.commitments || []).length > 0, true], ["Reminder defaults", !!state.time?.preferences?.reminderMasterEnabled, true], ["Planning reviews", (state.time?.reviews || []).some((review) => review.enabled), true], ["Model connected", reviewReadiness.modelReady, true], ["Brief prompt saved", reviewReadiness.briefPromptSaved, true], ["Sources added", reviewReadiness.sourceReady, true], ["Google Calendar", googleCalendarConnected, true], ["Telegram paired", reviewReadiness.telegramReady, true]].map(([label, ok, optional]) => <div key={label}><Icon name={ok ? "check" : optional ? "volume" : "x"} /><span>{label}</span><Badge tone={ok ? "ok" : optional ? "muted" : "warn"}>{ok ? "Done" : optional ? "Optional" : "Needs setup"}</Badge></div>)}
         </div>
         <div className="row"><Button onClick={() => go(firstIncomplete())}>Fix missing step</Button><Button onClick={skipOnboarding}>Finish later</Button><Button icon="check" kind="accent" disabled={!canComplete} onClick={complete}>Finish onboarding</Button></div>
       </section>}
