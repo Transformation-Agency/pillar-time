@@ -40,7 +40,7 @@ Pillar Time includes a personal Linear connector for the Transformation Agency w
 Setup:
 
 1. Create a personal API key in Linear under Settings > Security & access > Personal API keys.
-2. Add `LINEAR_API_KEY=...` to your local `.env` or launch environment.
+2. Add `LINEAR_API_KEY=...` to your local `.env`, launch environment, or desktop app data env file at `~/Library/Application Support/com.pillartime.desktop/.env`.
 3. Restart Pillar Time so the backend sees the key.
 4. Open Settings > Linear > Test.
 5. Open the Linear page to review grouped issues, create work, move workflow states, and add comments.

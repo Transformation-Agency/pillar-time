@@ -21,10 +21,44 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
+
+function parseEnvLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed || trimmed.startsWith("#")) return null;
+  const match = trimmed.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+  if (!match) return null;
+  let value = match[2].trim();
+  if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+    value = value.slice(1, -1);
+  } else {
+    value = value.replace(/\s+#.*$/, "");
+  }
+  return [match[1], value];
+}
+
+function loadEnvFiles(paths) {
+  for (const envPath of paths) {
+    try {
+      if (!envPath || !fs.existsSync(envPath)) continue;
+      for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+        const entry = parseEnvLine(line);
+        if (!entry) continue;
+        const [key, value] = entry;
+        if (process.env[key] === undefined) process.env[key] = value;
+      }
+    } catch {
+      // Environment files are optional; connector tests surface missing keys.
+    }
+  }
+}
+
+loadEnvFiles([path.join(process.cwd(), ".env"), path.join(process.cwd(), ".env.local"), path.join(root, ".env"), path.join(root, ".env.local")]);
+
 const appMode = process.env.PILLAR_TIME_APP_MODE || process.env.PILLAR_APP_MODE || (process.env.PILLAR_DESKTOP ? "desktop" : "web");
 const isDesktop = appMode === "desktop";
 const dataDir = process.env.PILLAR_TIME_DATA_DIR ? path.resolve(process.env.PILLAR_TIME_DATA_DIR) : process.env.PILLAR_DATA_DIR ? path.resolve(process.env.PILLAR_DATA_DIR) : path.join(root, "data");
 fs.mkdirSync(dataDir, { recursive: true });
+loadEnvFiles([path.join(dataDir, ".env"), path.join(dataDir, ".env.local")]);
 const dbPath = process.env.PILLAR_TIME_DB_PATH ? path.resolve(process.env.PILLAR_TIME_DB_PATH) : process.env.PILLAR_DB_PATH ? path.resolve(process.env.PILLAR_DB_PATH) : path.join(dataDir, "pillar-time.sqlite");
 const execFileAsync = promisify(execFile);
 const audioDir = path.join(dataDir, "audio");
