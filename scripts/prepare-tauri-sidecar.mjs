@@ -21,6 +21,15 @@ function rmrf(target) {
 }
 
 function copy(src, dest) {
+  if (process.platform === "darwin") {
+    try {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      execFileSync("ditto", ["--noextattr", "--norsrc", src, dest], { stdio: "ignore" });
+      return;
+    } catch {
+      // Fall through to fs.cp when ditto is unavailable or cannot copy this path.
+    }
+  }
   fs.cpSync(src, dest, {
     recursive: true,
     dereference: true,
