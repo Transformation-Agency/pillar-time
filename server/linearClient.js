@@ -76,7 +76,6 @@ export function mapLinearIssue(issue) {
     assignee: mapUser(issue.assignee),
     project: mapProject(issue.project),
     labels: connectionNodes(issue.labels).map((label) => ({ id: label.id, name: label.name, color: label.color || "" })),
-    blockedBy: connectionNodes(issue.blockedBy).map((item) => ({ id: item.id, identifier: item.identifier, title: item.title, url: item.url || "" })),
     comments: connectionNodes(issue.comments).map((comment) => ({
       id: comment.id,
       body: comment.body || "",
@@ -102,7 +101,6 @@ const ISSUE_FIELDS = `
   assignee { id name displayName email url }
   project { id name state url teams { nodes { id key name } } }
   labels { nodes { id name color } }
-  blockedBy { nodes { id identifier title url } }
 `;
 
 export class LinearClient {
