@@ -2244,16 +2244,21 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
   const [busy, setBusy] = React.useState(false);
   const [previewUrl, setPreviewUrl] = React.useState("");
   const selectedVoice = voices.find((voice) => voice.id === voiceId);
+  const fetchVoices = async () => {
+    const result = await api("/api/tts/voices", { method: "POST", body: JSON.stringify({ apiKey }) });
+    const nextVoices = result.voices || [];
+    setVoices(nextVoices);
+    const nextVoiceId = nextVoices.some((voice) => voice.id === voiceId) ? voiceId : nextVoices[0]?.id || "";
+    if (nextVoiceId) setVoiceId(nextVoiceId);
+    await refresh?.();
+    return { voices: nextVoices, voiceId: nextVoiceId };
+  };
   const detectVoices = async () => {
     setBusy(true);
     setMessage("");
     try {
-      const result = await api("/api/tts/voices", { method: "POST", body: JSON.stringify({ apiKey }) });
-      const nextVoices = result.voices || [];
-      setVoices(nextVoices);
-      if (nextVoices.length && !nextVoices.some((voice) => voice.id === voiceId)) setVoiceId(nextVoices[0].id);
-      setMessage(nextVoices.length ? `Detected ${nextVoices.length} voice${nextVoices.length === 1 ? "" : "s"}.` : "No voices returned for this account.");
-      await refresh?.();
+      const result = await fetchVoices();
+      setMessage(result.voices.length ? `Detected ${result.voices.length} voice${result.voices.length === 1 ? "" : "s"}.` : "No voices returned for this account.");
     } catch (error) {
       setMessage(error.message);
     } finally {
@@ -2265,13 +2270,22 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
     setBusy(true);
     setMessage("");
     try {
+      let nextVoiceId = voiceId;
+      let nextVoiceName = selectedVoice?.name || state.tts?.voiceName || "";
+      if (!nextVoiceId && (apiKey || state.tts?.apiKeySaved)) {
+        const detected = await fetchVoices();
+        const detectedVoice = detected.voices.find((voice) => voice.id === detected.voiceId);
+        nextVoiceId = detected.voiceId;
+        nextVoiceName = detectedVoice?.name || nextVoiceName;
+      }
+      if (!nextVoiceId) throw new Error("Choose a voice or detect voices before saving ElevenLabs audio.");
       await mutate("/api/tts", {
         apiKey,
-        voiceId,
-        voiceName: selectedVoice?.name || state.tts?.voiceName || "",
+        voiceId: nextVoiceId,
+        voiceName: nextVoiceName,
         modelId,
         telegramAutoSend,
-        enabled: enabled || !!voiceId,
+        enabled: enabled || !!nextVoiceId,
       }, "PATCH");
       setApiKey("");
       setMessage("ElevenLabs audio saved.");
@@ -2333,7 +2347,7 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
     <div className="row">
       {onSkip && <Button type="button" onClick={onSkip}>Skip audio</Button>}
       <Button type="button" icon="volume" onClick={preview} disabled={busy || !voiceId}>Play preview</Button>
-      <Button icon="save" kind="primary" disabled={busy || !voiceId}>{busy ? "Saving..." : "Save audio"}</Button>
+      <Button icon="save" kind="primary" disabled={busy || (!voiceId && !apiKey && !state.tts?.apiKeySaved)}>{busy ? "Saving..." : "Save audio"}</Button>
     </div>
   </form>;
 }
