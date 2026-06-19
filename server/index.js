@@ -3255,7 +3255,7 @@ const DEFAULT_YOUTUBE_SOURCES = [
   ["Mark Rober", "@MarkRober", "UCY1kMZp36IQSyNx_9h4mpCg", "Engineering projects and spectacle."],
 ];
 
-function seedSourceRecord({ name, type = "RSS", locator, status = "active", note = "", config }) {
+function seedSourceRecord({ name, type = "RSS", locator, status = "paused", note = "", config }) {
   const t = now();
   const existing = get("SELECT * FROM sources WHERE type=$type AND (name=$name OR locator=$locator)", { $type: type, $name: name, $locator: locator });
   const configJson = json(config || (type === "RSS" ? { mode: "feed", feedUrl: locator } : defaultSourceConfig(type)));
