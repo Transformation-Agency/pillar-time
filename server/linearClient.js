@@ -155,7 +155,7 @@ export class LinearClient {
   }
 
   async projects({ teamKey = "" } = {}) {
-    const data = await this.graphql("query Projects { projects(first: 250) { nodes { id name state url teams { nodes { id key name } } } } }");
+    const data = await this.graphql("query Projects { projects(first: 100) { nodes { id name state url teams { nodes { id key name } } } } }");
     return connectionNodes(data.projects)
       .map(mapProject)
       .filter(Boolean)
