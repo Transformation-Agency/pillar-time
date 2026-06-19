@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
 import { localDateKey, nextOccurrence, rankActions, sporadicTimes } from "./timeEngine.js";
+import { groupIssuesByProject, LinearClient } from "./linearClient.js";
 import {
   buildContextEnvelope,
   interactionModes,
@@ -2359,6 +2360,34 @@ function xBearerToken() {
 }
 
 const REDDIT_PROVIDER = "reddit";
+const LINEAR_PROVIDER = "linear";
+const DEFAULT_LINEAR_TEAM_KEY = "TRA";
+
+function linearApiKey() {
+  return String(process.env.LINEAR_API_KEY || "").trim();
+}
+
+function linearClient() {
+  return new LinearClient({ apiKey: linearApiKey() });
+}
+
+function linearPublicConnector(row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: LINEAR_PROVIDER })) {
+  const hasEnvKey = !!linearApiKey();
+  return {
+    provider: LINEAR_PROVIDER,
+    enabled: !!row?.enabled && hasEnvKey,
+    apiKeySaved: false,
+    credentialStatus: hasEnvKey ? "env" : "missing",
+    status: hasEnvKey && row?.enabled ? "ready" : hasEnvKey ? "disabled" : "missing env",
+    teamKey: DEFAULT_LINEAR_TEAM_KEY,
+    workspaceHint: "Transformation Agency",
+    writeEnabled: hasEnvKey && !!row?.enabled,
+    lastCheckedAt: row?.last_checked_at || null,
+    lastError: row?.last_error || "",
+    updatedAt: row?.updated_at || null,
+  };
+}
+
 function redditCredential() {
   const row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: REDDIT_PROVIDER });
   const data = parse(row?.api_key, {});
@@ -3492,6 +3521,9 @@ function seed() {
   if (!get("SELECT provider FROM connector_credentials WHERE provider = $provider", { $provider: REDDIT_PROVIDER })) {
     run("INSERT INTO connector_credentials (provider, updated_at) VALUES ($provider, $t)", { $provider: REDDIT_PROVIDER, $t: t });
   }
+  if (!get("SELECT provider FROM connector_credentials WHERE provider = $provider", { $provider: LINEAR_PROVIDER })) {
+    run("INSERT INTO connector_credentials (provider, enabled, updated_at) VALUES ($provider, $enabled, $t)", { $provider: LINEAR_PROVIDER, $enabled: linearApiKey() ? 1 : 0, $t: t });
+  }
   if (!get("SELECT provider FROM connector_credentials WHERE provider = $provider", { $provider: GOOGLE_CALENDAR_PROVIDER })) {
     run("INSERT INTO connector_credentials (provider, updated_at) VALUES ($provider, $t)", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: t });
   }
@@ -4084,6 +4116,7 @@ function connectorSettings() {
   const connectors = Object.fromEntries(rows.map((r) => {
     if (r.provider === GOOGLE_CALENDAR_PROVIDER) return [r.provider, googleCalendarPublicConnector({ row: r, data: parse(r.api_key, {}), enabled: !!r.enabled })];
     if (r.provider === REDDIT_PROVIDER) return [r.provider, redditPublicConnector({ row: r, data: parse(r.api_key, {}), enabled: !!r.enabled })];
+    if (r.provider === LINEAR_PROVIDER) return [r.provider, linearPublicConnector(r)];
     const hasKey = !!r.api_key;
     return [r.provider, {
       provider: r.provider,
@@ -4118,6 +4151,7 @@ function connectorSettings() {
       updatedAt: null,
     },
     reddit: connectors[REDDIT_PROVIDER] || redditPublicConnector({ row: null, data: {}, enabled: false }),
+    linear: connectors[LINEAR_PROVIDER] || linearPublicConnector(null),
     googleCalendar: connectors[GOOGLE_CALENDAR_PROVIDER] || googleCalendarPublicConnector({ row: null, data: {}, enabled: false }),
   };
 }
@@ -5983,7 +6017,7 @@ app.post("/api/runtime/ffmpeg/install", async (req, res) => {
 
 app.post("/api/runtime/open-url", async (req, res) => {
   const url = String(req.body?.url || "").trim();
-  if (!/^https:\/\/(core\.telegram\.org|telegram\.org|t\.me|brew\.sh|formulae\.brew\.sh|ffmpeg\.org|platform\.openai\.com|help\.openai\.com|console\.anthropic\.com|docs\.anthropic\.com|openrouter\.ai|aistudio\.google\.com|ai\.google\.dev|developer\.x\.com|docs\.x\.com|console\.x\.ai|docs\.x\.ai|elevenlabs\.io)(\/|$)/i.test(url)) {
+  if (!/^https:\/\/(core\.telegram\.org|telegram\.org|t\.me|brew\.sh|formulae\.brew\.sh|ffmpeg\.org|platform\.openai\.com|help\.openai\.com|console\.anthropic\.com|docs\.anthropic\.com|openrouter\.ai|aistudio\.google\.com|ai\.google\.dev|developer\.x\.com|docs\.x\.com|console\.x\.ai|docs\.x\.ai|elevenlabs\.io|linear\.app)(\/|$)/i.test(url)) {
     return res.status(400).json({ error: "That external URL is not allowed.", state: state() });
   }
   if (isDesktop && process.platform === "darwin") {
@@ -6802,9 +6836,23 @@ app.post("/api/google-calendar/disconnect", (req, res) => {
 
 app.patch("/api/connectors/:provider", (req, res) => {
   const provider = String(req.params.provider || "").toLowerCase();
-  if (!["x", "elevenlabs", REDDIT_PROVIDER].includes(provider)) return res.status(404).json({ error: "Connector not found" });
+  if (!["x", "elevenlabs", REDDIT_PROVIDER, LINEAR_PROVIDER].includes(provider)) return res.status(404).json({ error: "Connector not found" });
   const b = req.body || {};
   const current = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: provider }) || {};
+  if (provider === LINEAR_PROVIDER) {
+    const enabled = b.enabled !== false;
+    const missing = enabled && !linearApiKey();
+    run(`INSERT INTO connector_credentials (provider, api_key, enabled, last_error, updated_at)
+         VALUES ($provider, '', $enabled, $err, $t)
+         ON CONFLICT(provider) DO UPDATE SET api_key='', enabled=$enabled, last_error=$err, updated_at=$t`, {
+      $provider: LINEAR_PROVIDER,
+      $enabled: enabled ? 1 : 0,
+      $err: missing ? "Set LINEAR_API_KEY in the environment, then restart Pillar Time." : "",
+      $t: now(),
+    });
+    audit("connector.settings_updated", "connector", LINEAR_PROVIDER, enabled ? "Linear connector enabled" : "Linear connector disabled", {}, "system");
+    return res.json(state());
+  }
   if (provider === REDDIT_PROVIDER) {
     const currentData = parse(current.api_key, {});
     const nextData = {
@@ -6860,6 +6908,125 @@ app.post("/api/reddit/test", async (req, res) => {
   } catch (error) {
     run("UPDATE connector_credentials SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: REDDIT_PROVIDER, $t: now(), $err: error.message || "Reddit test failed" });
     res.status(400).json({ error: error.message || "Reddit test failed", state: state() });
+  }
+});
+
+app.post("/api/linear/test", async (req, res) => {
+  try {
+    const viewer = await linearClient().viewer();
+    run("UPDATE connector_credentials SET enabled=1, last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now() });
+    audit("linear.test_succeeded", "connector", LINEAR_PROVIDER, `Connected Linear as ${viewer?.name || viewer?.email || "viewer"}`, {}, "system");
+    res.json({ ok: true, viewer, connector: linearPublicConnector(), state: state() });
+  } catch (error) {
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now(), $err: error.message || "Linear test failed" });
+    audit("linear.test_failed", "connector", LINEAR_PROVIDER, error.message || "Linear test failed", {}, "system");
+    res.status(400).json({ error: error.message || "Linear test failed", connector: linearPublicConnector(), state: state() });
+  }
+});
+
+app.get("/api/linear/bootstrap", async (req, res) => {
+  try {
+    const client = linearClient();
+    const [viewer, teams, projects, workflowStates] = await Promise.all([
+      client.viewer(),
+      client.teams(),
+      client.projects({ teamKey: String(req.query.teamKey || DEFAULT_LINEAR_TEAM_KEY) }),
+      client.workflowStates({ teamKey: String(req.query.teamKey || DEFAULT_LINEAR_TEAM_KEY) }),
+    ]);
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now() });
+    res.json({ viewer, teams, projects, workflowStates, connector: linearPublicConnector(), state: state() });
+  } catch (error) {
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now(), $err: error.message || "Linear bootstrap failed" });
+    res.status(400).json({ error: error.message || "Linear bootstrap failed", connector: linearPublicConnector(), state: state() });
+  }
+});
+
+app.get("/api/linear/issues", async (req, res) => {
+  try {
+    const teamKey = String(req.query.teamKey || DEFAULT_LINEAR_TEAM_KEY);
+    const stateTypes = req.query.stateTypes === "all" ? [] : String(req.query.stateTypes || "backlog,unstarted,started").split(",").map((item) => item.trim()).filter(Boolean);
+    const result = await linearClient().issues({
+      teamKey,
+      assignee: String(req.query.assignee || "me"),
+      projectId: String(req.query.projectId || ""),
+      labelId: String(req.query.labelId || ""),
+      stateId: String(req.query.stateId || ""),
+      stateTypes,
+      first: Number(req.query.first || 50),
+      pages: Number(req.query.pages || 3),
+    });
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now() });
+    res.json({ ...result, groups: groupIssuesByProject(result.issues), connector: linearPublicConnector(), state: state() });
+  } catch (error) {
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now(), $err: error.message || "Linear issue fetch failed" });
+    res.status(400).json({ error: error.message || "Linear issue fetch failed", connector: linearPublicConnector(), state: state() });
+  }
+});
+
+app.get("/api/linear/issues/:id", async (req, res) => {
+  try {
+    const issue = await linearClient().issue(req.params.id);
+    res.json({ issue, connector: linearPublicConnector(), state: state() });
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Linear issue fetch failed", connector: linearPublicConnector(), state: state() });
+  }
+});
+
+app.post("/api/linear/issues", async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!String(b.title || "").trim()) return res.status(400).json({ error: "Issue title is required.", state: state() });
+    if (!String(b.teamId || "").trim()) return res.status(400).json({ error: "Choose a Linear team before creating an issue.", state: state() });
+    const issue = await linearClient().createIssue({
+      teamId: String(b.teamId),
+      title: String(b.title).trim(),
+      description: String(b.description || ""),
+      projectId: b.projectId || undefined,
+      stateId: b.stateId || undefined,
+      assigneeId: b.assigneeId || undefined,
+      priority: b.priority === "" || b.priority === undefined ? undefined : Number(b.priority),
+      dueDate: b.dueDate || undefined,
+      labelIds: Array.isArray(b.labelIds) && b.labelIds.length ? b.labelIds : undefined,
+    });
+    audit("linear.issue_created", "linear_issue", issue.id, `${issue.identifier}: ${issue.title}`, { url: issue.url }, "operator");
+    res.json({ issue, connector: linearPublicConnector(), state: state() });
+  } catch (error) {
+    audit("linear.issue_create_failed", "linear_issue", "new", error.message || "Linear issue create failed", {}, "operator");
+    res.status(400).json({ error: error.message || "Linear issue create failed", connector: linearPublicConnector(), state: state() });
+  }
+});
+
+app.patch("/api/linear/issues/:id", async (req, res) => {
+  try {
+    const b = req.body || {};
+    const issue = await linearClient().updateIssue(req.params.id, {
+      title: b.title,
+      description: b.description,
+      stateId: b.stateId,
+      assigneeId: b.assigneeId,
+      projectId: b.projectId,
+      priority: b.priority === "" || b.priority === undefined ? undefined : Number(b.priority),
+      dueDate: b.dueDate,
+      labelIds: Array.isArray(b.labelIds) ? b.labelIds : undefined,
+    });
+    audit("linear.issue_updated", "linear_issue", issue.id, `${issue.identifier}: ${issue.title}`, { changedFields: Object.keys(b) }, "operator");
+    res.json({ issue, connector: linearPublicConnector(), state: state() });
+  } catch (error) {
+    audit("linear.issue_update_failed", "linear_issue", req.params.id, error.message || "Linear issue update failed", {}, "operator");
+    res.status(400).json({ error: error.message || "Linear issue update failed", connector: linearPublicConnector(), state: state() });
+  }
+});
+
+app.post("/api/linear/issues/:id/comments", async (req, res) => {
+  try {
+    const body = String(req.body?.body || "").trim();
+    if (!body) return res.status(400).json({ error: "Comment body is required.", state: state() });
+    const comment = await linearClient().addComment(req.params.id, body);
+    audit("linear.comment_created", "linear_issue", req.params.id, "Added Linear comment", { commentId: comment.id }, "operator");
+    res.json({ comment, connector: linearPublicConnector(), state: state() });
+  } catch (error) {
+    audit("linear.comment_create_failed", "linear_issue", req.params.id, error.message || "Linear comment create failed", {}, "operator");
+    res.status(400).json({ error: error.message || "Linear comment create failed", connector: linearPublicConnector(), state: state() });
   }
 });
 

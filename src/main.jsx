@@ -46,7 +46,7 @@ import "./styles.css";
 
 const nav = [
   ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
-  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["trustedContext", "Trusted Context"]]],
+  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"]]],
   ["Configure", [["briefSetup", "Brief Setup"], ["lenses", "Perspective Lenses"]]],
   ["System", [["settings", "Settings"]]],
 ];
@@ -307,6 +307,7 @@ function Icon({ name }) {
     reviews: Check,
     meetings: Users,
     trustedContext: ShieldCheck,
+    linear: Box,
     briefs: FileText,
     sources: Database,
     briefSetup: Sparkles,
@@ -369,6 +370,7 @@ function BrandLogo({ name }) {
   if (key.includes("reddit")) return <span className="brand-logo reddit" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21.7 10.6a2.5 2.5 0 0 0-4.2-1.8c-1.3-.8-3-1.3-4.8-1.4l.8-3.7 2.6.6a2 2 0 1 0 .3-1.2l-3.3-.7a.7.7 0 0 0-.8.5l-1 4.5c-1.9.1-3.6.6-5 1.4a2.5 2.5 0 1 0-2.7 4.1 4.4 4.4 0 0 0-.1.9c0 3.5 3.8 6.3 8.5 6.3s8.5-2.8 8.5-6.3c0-.3 0-.6-.1-.9.8-.4 1.3-1.3 1.3-2.3ZM8.1 12.7a1.3 1.3 0 1 1 2.6 0 1.3 1.3 0 0 1-2.6 0Zm7.1 4.1c-.9.9-2.6 1-3.2 1s-2.3-.1-3.2-1a.6.6 0 0 1 .8-.9c.5.5 1.6.7 2.4.7.8 0 1.9-.2 2.4-.7a.6.6 0 1 1 .8.9Zm.7-2.8a1.3 1.3 0 1 1 0-2.6 1.3 1.3 0 0 1 0 2.6Z" /></svg></span>;
   if (key === "x" || key.includes("twitter")) return <span className="brand-logo x-logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18.9 2h3.7l-8.1 9.2L24 22h-7.4l-5.8-6.9L4.2 22H.5l8.6-9.9L0 2h7.6l5.2 6.2L18.9 2Zm-1.3 18.1h2L6.5 3.8H4.3l13.3 16.3Z" /></svg></span>;
   if (key.includes("telegram")) return <span className="brand-logo telegram-logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21.9 4.3 18.6 20c-.2 1.1-.9 1.4-1.8.9l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.1 9.3-8.4c.4-.4-.1-.6-.6-.2L6 13.5 1.1 12c-1.1-.3-1.1-1.1.2-1.6L20.5 3c.9-.3 1.7.2 1.4 1.3Z" /></svg></span>;
+  if (key.includes("linear")) return <span className="brand-logo linear-logo" aria-hidden="true">Li</span>;
   if (key.includes("openai")) return <span className="brand-logo openai-logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M22 10.5a5.9 5.9 0 0 0-7.7-8.2A5.9 5.9 0 0 0 4.2 6.6a5.9 5.9 0 0 0 1.5 11.2 5.9 5.9 0 0 0 9.9 3.9 5.9 5.9 0 0 0 6.4-11.2Zm-6.5-6.9a4.4 4.4 0 0 1 4.9 6.1l-.2.3-4.8-2.8a1 1 0 0 0-.5-.1H9.4c.5-1.5 1.8-2.8 3.3-3.3.9-.3 1.9-.4 2.8-.2ZM7 4.8a4.4 4.4 0 0 1 5.7-1.2l.3.2-4.8 2.8a1 1 0 0 0-.4.4L5.1 11.7A4.4 4.4 0 0 1 7 4.8Zm-3.1 12a4.4 4.4 0 0 1-.2-7.2l.3-.2v5.5c0 .2 0 .4.2.5l2.7 4.7a4.4 4.4 0 0 1-3-3.3Zm4.6 4.3a4.4 4.4 0 0 1-1.7-.4l-.3-.2 4.8-2.8c.2-.1.3-.2.4-.4l2.8-4.7a4.4 4.4 0 0 1-6 8.5Zm2.3-5.2-2.3-1.3v-2.7l2.3-1.3 2.3 1.3v2.7l-2.3 1.3Zm8.4 3.3a4.4 4.4 0 0 1-2.9 1l-.3-.1 4.8-2.8c.2-.1.3-.2.4-.4l2.7-4.7a4.4 4.4 0 0 1-4.7 7Zm1.8-4.6-2.8 4.7a4.4 4.4 0 0 1-2.7-1.3l-.2-.2 4.8-2.8c.2-.1.3-.2.4-.4l2.7-4.7a4.4 4.4 0 0 1-2.2 4.7Z" /></svg></span>;
   if (key.includes("anthropic")) return <span className="brand-logo anthropic-logo" aria-hidden="true">AI</span>;
   if (key.includes("openrouter")) return <span className="brand-logo openrouter-logo" aria-hidden="true">OR</span>;
@@ -1444,6 +1446,181 @@ function Lenses({ state, mutate }) {
       {!filtered.length && <Empty icon="lenses" title="No perspective lenses" body="Add lenses here, or generate them during onboarding from natural language." />}
       {message && <p className={message.includes("saved") ? "ok-text" : message.includes("Unsaved") ? "hint" : "warn-text"}>{message}</p>}
     </section>
+  </Page>;
+}
+
+function Linear({ state, refresh }) {
+  const connector = state.connectors?.linear || {};
+  const ready = connector.status === "ready";
+  const [bootstrap, setBootstrap] = React.useState({ viewer: null, teams: [], projects: [], workflowStates: [] });
+  const [issuesPayload, setIssuesPayload] = React.useState({ issues: [], groups: [] });
+  const [filters, setFilters] = React.useState({ teamKey: connector.teamKey || "TRA", assignee: "me", stateTypes: "backlog,unstarted,started", projectId: "" });
+  const [newIssue, setNewIssue] = React.useState({ title: "", description: "", teamId: "", projectId: "", stateId: "", priority: "" });
+  const [commentDrafts, setCommentDrafts] = React.useState({});
+  const [message, setMessage] = React.useState("");
+  const [loading, setLoading] = React.useState(false);
+
+  const selectedTeam = bootstrap.teams.find((team) => team.key === filters.teamKey) || bootstrap.teams[0];
+  const stateOptions = bootstrap.workflowStates
+    .filter((item) => !selectedTeam?.key || item.team?.key === selectedTeam.key)
+    .sort((a, b) => (a.position || 0) - (b.position || 0));
+  const projectOptions = bootstrap.projects;
+
+  const loadBootstrap = React.useCallback(async () => {
+    if (!ready) return;
+    setLoading(true);
+    setMessage("");
+    try {
+      const params = new URLSearchParams({ teamKey: filters.teamKey || "TRA" });
+      const result = await api(`/api/linear/bootstrap?${params}`);
+      setBootstrap({ viewer: result.viewer, teams: result.teams || [], projects: result.projects || [], workflowStates: result.workflowStates || [] });
+      await refresh();
+    } catch (error) {
+      setMessage(error.message || "Linear setup failed.");
+      await refresh();
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.teamKey, ready, refresh]);
+
+  const loadIssues = React.useCallback(async () => {
+    if (!ready) return;
+    setLoading(true);
+    setMessage("");
+    try {
+      const params = new URLSearchParams({
+        teamKey: filters.teamKey || "TRA",
+        assignee: filters.assignee,
+        stateTypes: filters.stateTypes,
+        first: "50",
+        pages: "3",
+      });
+      if (filters.projectId) params.set("projectId", filters.projectId);
+      const result = await api(`/api/linear/issues?${params}`);
+      setIssuesPayload({ issues: result.issues || [], groups: result.groups || [] });
+      await refresh();
+    } catch (error) {
+      setMessage(error.message || "Could not load Linear issues.");
+      await refresh();
+    } finally {
+      setLoading(false);
+    }
+  }, [filters, ready, refresh]);
+
+  React.useEffect(() => { loadBootstrap(); }, [loadBootstrap]);
+  React.useEffect(() => { loadIssues(); }, [loadIssues]);
+  React.useEffect(() => {
+    if (newIssue.teamId || !selectedTeam?.id) return;
+    setNewIssue((current) => ({ ...current, teamId: selectedTeam.id }));
+  }, [newIssue.teamId, selectedTeam?.id]);
+
+  const patchIssue = async (issue, patch) => {
+    setMessage("");
+    try {
+      await api(`/api/linear/issues/${issue.id}`, { method: "PATCH", body: JSON.stringify(patch) });
+      setMessage(`${issue.identifier} updated.`);
+      await loadIssues();
+    } catch (error) {
+      setMessage(error.message || "Linear update failed.");
+    }
+  };
+
+  const createIssue = async (event) => {
+    event.preventDefault();
+    setMessage("");
+    try {
+      const result = await api("/api/linear/issues", { method: "POST", body: JSON.stringify(newIssue) });
+      setMessage(`${result.issue?.identifier || "Issue"} created.`);
+      setNewIssue({ title: "", description: "", teamId: selectedTeam?.id || "", projectId: "", stateId: "", priority: "" });
+      await loadIssues();
+    } catch (error) {
+      setMessage(error.message || "Linear create failed.");
+    }
+  };
+
+  const addComment = async (issue) => {
+    const body = String(commentDrafts[issue.id] || "").trim();
+    if (!body) return;
+    setMessage("");
+    try {
+      await api(`/api/linear/issues/${issue.id}/comments`, { method: "POST", body: JSON.stringify({ body }) });
+      setCommentDrafts((current) => ({ ...current, [issue.id]: "" }));
+      setMessage(`Comment added to ${issue.identifier}.`);
+    } catch (error) {
+      setMessage(error.message || "Linear comment failed.");
+    }
+  };
+
+  if (!ready) {
+    return <Page
+      title="Linear"
+      desc="Connect Pillar Time to Linear tasks, projects, workflow states, and comments."
+      action={<Button icon="settings" onClick={() => { location.hash = "settings"; }}>Settings</Button>}
+      wide
+    >
+      <section className="panel">
+        <PanelTitle icon="linear" title="Linear connector" sub={connector.status || "Not configured"} />
+        <div className="notice notice-warn">
+          <strong>{connector.credentialStatus === "missing" ? "LINEAR_API_KEY is missing" : "Linear is disabled"}</strong>
+          <span>{connector.lastError || "Add LINEAR_API_KEY to the app environment, restart Pillar Time, then test the connector in Settings."}</span>
+        </div>
+      </section>
+    </Page>;
+  }
+
+  return <Page
+    title="Linear"
+    desc="Review and update Transformation Agency work without leaving Pillar Time."
+    action={<div className="page-actions"><Button icon="run" onClick={loadIssues} disabled={loading}>{loading ? "Loading..." : "Refresh"}</Button></div>}
+    wide
+  >
+    <div className="settings-dashboard">
+      <section className="panel connector-card">
+        <div className="connector-head">
+          <div className="connector-title"><span className="connector-icon blue"><BrandLogo name="Linear" /></span><div><h2>Linear Workspace</h2><p>{bootstrap.viewer ? `Connected as ${bootstrap.viewer.displayName || bootstrap.viewer.name}` : connector.workspaceHint || "Transformation Agency"}</p></div></div>
+          <Badge tone="ok">Ready</Badge>
+        </div>
+        <div className="row">
+          <Select label="Team" value={filters.teamKey} onChange={(teamKey) => setFilters({ ...filters, teamKey, projectId: "" })} options={(bootstrap.teams.length ? bootstrap.teams : [{ key: "TRA", name: "Transformation Agency" }]).map((team) => ({ value: team.key, label: `${team.key} · ${team.name}` }))} />
+          <Select label="Assignee" value={filters.assignee} onChange={(assignee) => setFilters({ ...filters, assignee })} options={[{ value: "me", label: "Assigned to me" }, { value: "all", label: "All assignees" }]} />
+          <Select label="States" value={filters.stateTypes} onChange={(stateTypes) => setFilters({ ...filters, stateTypes })} options={[{ value: "backlog,unstarted,started", label: "Open" }, { value: "started", label: "Started" }, { value: "backlog,unstarted", label: "Not started" }, { value: "all", label: "All states" }]} />
+          <Select label="Project" value={filters.projectId} onChange={(projectId) => setFilters({ ...filters, projectId })} options={[{ value: "", label: "All projects" }, ...projectOptions.map((project) => ({ value: project.id, label: project.name }))]} />
+        </div>
+        {message && <p className={message.includes("failed") || message.includes("Could not") || message.includes("missing") ? "warn-text" : "ok-text"}>{message}</p>}
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon="linear" title="Issues by project" sub={`${issuesPayload.issues.length} loaded`} />
+        {issuesPayload.groups.length ? issuesPayload.groups.map((group) => <div className="source-config open" key={group.id}>
+          <div className="source-config-title"><Icon name="box" />{group.name}<Badge>{group.issues.length}</Badge></div>
+          <table className="source-table simplified"><thead><tr><th>Issue</th><th>State</th><th>Priority</th><th>Due</th><th>Comment</th><th></th></tr></thead><tbody>{group.issues.map((issue) => <tr key={issue.id}>
+            <td><div className="source-name-cell"><BrandLogo name="Linear" /><div><strong>{issue.identifier} · {issue.title}</strong><small>{issue.assignee?.displayName || issue.assignee?.name || "Unassigned"} · {issue.updatedAt ? relativeTime(issue.updatedAt) : "No update"}</small></div></div></td>
+            <td><select value={issue.state?.id || ""} onChange={(event) => patchIssue(issue, { stateId: event.target.value })}>{stateOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></td>
+            <td><Badge>{issue.priorityLabel || issue.priority || "No priority"}</Badge></td>
+            <td>{issue.dueDate || "-"}</td>
+            <td><input value={commentDrafts[issue.id] || ""} onChange={(event) => setCommentDrafts((current) => ({ ...current, [issue.id]: event.target.value }))} placeholder="Add comment..." /></td>
+            <td><div className="source-actions"><button type="button" onClick={() => addComment(issue)}><Icon name="send" />Comment</button>{issue.url && <button type="button" onClick={() => openExternalUrl(issue.url)}><Icon name="external" />Open</button>}</div></td>
+          </tr>)}</tbody></table>
+        </div>) : <Empty icon="linear" title={loading ? "Loading Linear issues" : "No matching issues"} body={loading ? "Fetching current work from Linear." : "Adjust filters or create a new issue below."} />}
+      </section>
+
+      <section className="panel">
+        <PanelTitle icon="plus" title="Create Linear issue" sub="Adds an issue to the selected workspace." />
+        <form className="form" onSubmit={createIssue}>
+          <div className="row">
+            <Field label="Title" value={newIssue.title} onChange={(title) => setNewIssue({ ...newIssue, title })} required />
+            <Select label="Team" value={newIssue.teamId} onChange={(teamId) => setNewIssue({ ...newIssue, teamId })} options={bootstrap.teams.map((team) => ({ value: team.id, label: `${team.key} · ${team.name}` }))} />
+          </div>
+          <TextArea label="Description" value={newIssue.description} onChange={(description) => setNewIssue({ ...newIssue, description })} rows={4} />
+          <div className="row">
+            <Select label="Project" value={newIssue.projectId} onChange={(projectId) => setNewIssue({ ...newIssue, projectId })} options={[{ value: "", label: "No project" }, ...projectOptions.map((project) => ({ value: project.id, label: project.name }))]} />
+            <Select label="State" value={newIssue.stateId} onChange={(stateId) => setNewIssue({ ...newIssue, stateId })} options={[{ value: "", label: "Default" }, ...stateOptions.map((item) => ({ value: item.id, label: item.name }))]} />
+            <Select label="Priority" value={newIssue.priority} onChange={(priority) => setNewIssue({ ...newIssue, priority })} options={[{ value: "", label: "Default" }, { value: "0", label: "No priority" }, { value: "1", label: "Urgent" }, { value: "2", label: "High" }, { value: "3", label: "Medium" }, { value: "4", label: "Low" }]} />
+          </div>
+          <div className="modal-actions"><Button icon="plus" kind="primary" disabled={!newIssue.title.trim() || !newIssue.teamId}>Create issue</Button></div>
+        </form>
+      </section>
+    </div>
   </Page>;
 }
 
@@ -3079,6 +3256,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const [xModal, setXModal] = React.useState(false);
   const [redditModal, setRedditModal] = React.useState(false);
   const [redditMessage, setRedditMessage] = React.useState("");
+  const [linearModal, setLinearModal] = React.useState(false);
+  const [linearMessage, setLinearMessage] = React.useState("");
   const [googleCalendarModal, setGoogleCalendarModal] = React.useState(false);
   const [googleCalendarSelection, setGoogleCalendarSelection] = React.useState(state.connectors?.googleCalendar?.selectedCalendarIds || ["primary"]);
   const [googleCalendarSelectionDirty, setGoogleCalendarSelectionDirty] = React.useState(false);
@@ -3181,6 +3360,35 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       await refresh();
     } catch (error) {
       setRedditMessage(error.message || "Reddit OAuth test failed.");
+      await refresh();
+    }
+  };
+  const enableLinearConnector = async () => {
+    setLinearMessage("");
+    try {
+      await mutate("/api/connectors/linear", { enabled: true }, "PATCH");
+      setLinearMessage("Linear connector enabled.");
+    } catch (error) {
+      setLinearMessage(error.message || "Could not enable Linear.");
+    }
+  };
+  const disableLinearConnector = async () => {
+    setLinearMessage("");
+    try {
+      await mutate("/api/connectors/linear", { enabled: false }, "PATCH");
+      setLinearMessage("Linear connector disabled.");
+    } catch (error) {
+      setLinearMessage(error.message || "Could not disable Linear.");
+    }
+  };
+  const testLinearConnector = async () => {
+    setLinearMessage("");
+    try {
+      const result = await api("/api/linear/test", { method: "POST", body: JSON.stringify({}) });
+      setLinearMessage(`Linear is ready${result.viewer?.displayName || result.viewer?.name ? ` for ${result.viewer.displayName || result.viewer.name}` : ""}.`);
+      await refresh();
+    } catch (error) {
+      setLinearMessage(error.message || "Linear test failed.");
       await refresh();
     }
   };
@@ -3297,6 +3505,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const modelConnected = state.model.status === "ready";
   const xConnected = state.connectors?.x?.status === "ready";
   const redditConnected = state.connectors?.reddit?.status === "ready";
+  const linearConnected = state.connectors?.linear?.status === "ready";
   const googleCalendarConnected = state.connectors?.googleCalendar?.status === "ready";
   const telegramConnected = state.telegram?.enabled && state.telegram?.chatId && state.telegram?.botToken;
   const providerRows = modelProviderRows;
@@ -3304,6 +3513,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     { service: "X (Twitter)", sub: "Search and monitor posts", type: "Social", logo: "X", status: xConnected ? "Connected" : "Needs token", connected: xConnected, action: "x" },
     { service: "Google Calendar", sub: "Add today's agenda to briefs", type: "Calendar", logo: "Calendar", status: googleCalendarConnected ? "Connected" : state.connectors?.googleCalendar?.status === "needs consent" ? "Needs consent" : "Needs OAuth", connected: googleCalendarConnected, action: "googleCalendar" },
     { service: "Reddit", sub: "Monitor subreddits and posts", type: "Social", logo: "Reddit", status: redditConnected ? "Connected" : "Needs OAuth", connected: redditConnected, action: "reddit" },
+    { service: "Linear", sub: "Read and update TRA issues", type: "Project", logo: "Linear", status: linearConnected ? "Connected" : state.connectors?.linear?.credentialStatus === "missing" ? "Needs env key" : "Disabled", connected: linearConnected, action: "linear" },
     { service: "Web Search", sub: "General web search", type: "Search", logo: "Web", status: "Available", connected: true },
     { service: "YouTube", sub: "Channels, uploads, and transcripts", type: "Video", logo: "YouTube", status: "Available", connected: true },
   ];
@@ -3450,7 +3660,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
             <span>{row.type}</span>
             <Badge tone={row.connected ? "ok" : "muted"}>{row.status}</Badge>
             <span>{row.connected ? "Ready" : "-"}</span>
-            <Button type="button" icon="pencil" onClick={() => row.action === "x" ? setXModal(true) : row.action === "googleCalendar" ? setGoogleCalendarModal(true) : row.action === "reddit" ? setRedditModal(true) : null}>{row.action === "x" || row.action === "googleCalendar" || row.action === "reddit" ? "Edit" : "View"}</Button>
+            <Button type="button" icon="pencil" onClick={() => row.action === "x" ? setXModal(true) : row.action === "googleCalendar" ? setGoogleCalendarModal(true) : row.action === "reddit" ? setRedditModal(true) : row.action === "linear" ? setLinearModal(true) : null}>{row.action === "x" || row.action === "googleCalendar" || row.action === "reddit" || row.action === "linear" ? "Edit" : "View"}</Button>
           </div>)}
         </div>
       </section>
@@ -3525,6 +3735,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <button type="button" onClick={() => { setConnectorModal(false); setGoogleCalendarModal(true); }}><BrandLogo name="Calendar" /><strong>Google Calendar</strong><span>Read today's agenda into each brief.</span></button>
           <button type="button" onClick={() => setConnectorModal(false)}><Icon name="volume" /><strong>ElevenLabs audio</strong><span>Use the Audio Briefs settings below.</span></button>
           <button type="button" onClick={() => { setConnectorModal(false); setRedditModal(true); }}><BrandLogo name="Reddit" /><strong>Reddit OAuth API</strong><span>Official app-only OAuth for subreddit sources.</span></button>
+          <button type="button" onClick={() => { setConnectorModal(false); setLinearModal(true); }}><BrandLogo name="Linear" /><strong>Linear</strong><span>Read and update project issues.</span></button>
         </div>
         <p className="hint">Most research connectors are added as Sources. Provider credentials live on this Settings page.</p>
       </div>
@@ -3568,6 +3779,23 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         {redditMessage && <p className={redditMessage.includes("ready") || redditMessage.includes("saved") ? "ok-text" : "warn-text"}>{redditMessage}</p>}
         <div className="modal-actions"><Button type="button" onClick={() => setRedditModal(false)}>Cancel</Button><Button type="button" icon="run" onClick={testRedditConnector}>Test</Button><Button icon="save" kind="primary">Save Reddit OAuth</Button></div>
       </form>
+    </div>}
+    {linearModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLinearModal(false); }}>
+      <div className="modal-card connector-modal form">
+        <div className="modal-head"><div><h2>Linear</h2><p>Use a local environment key to read and update Linear issues.</p></div><button type="button" onClick={() => setLinearModal(false)}><Icon name="x" /></button></div>
+        <div className={`notice ${linearConnected ? "" : "notice-warn"}`}>
+          <strong>{linearConnected ? "Linear ready" : state.connectors?.linear?.credentialStatus === "missing" ? "LINEAR_API_KEY missing" : "Linear disabled"}</strong>
+          <span>{state.connectors?.linear?.lastError || linearMessage || "Set LINEAR_API_KEY in the environment that launches Pillar Time, restart the app, then test the connector."}</span>
+        </div>
+        <p className="hint">The Linear personal API key is env-only. Pillar Time does not store it in SQLite or ask you to paste it into this screen.</p>
+        {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("enabled") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
+        <div className="modal-actions">
+          <Button type="button" onClick={() => setLinearModal(false)}>Cancel</Button>
+          <Button type="button" icon="run" onClick={testLinearConnector}>Test</Button>
+          {state.connectors?.linear?.enabled ? <Button type="button" icon="trash" onClick={disableLinearConnector}>Disable</Button> : <Button type="button" icon="save" onClick={enableLinearConnector}>Enable</Button>}
+          <Button type="button" icon="linear" kind="primary" onClick={() => { setLinearModal(false); location.hash = "linear"; }}>Open Linear</Button>
+        </div>
+      </div>
     </div>}
     {googleCalendarModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeGoogleCalendarModal(); }}>
       <form className="modal-card connector-modal form" onSubmit={startGoogleCalendarOAuth}>
@@ -3687,6 +3915,7 @@ function App() {
     generating: <GeneratingBrief runState={runState} />,
     briefSetup: <BriefSetup state={state} mutate={mutate} />,
     sources: <Sources state={state} mutate={mutate} />,
+    linear: <Linear state={state} refresh={refresh} />,
     trustedContext: <TrustedContext state={state} mutate={mutate} />,
     lenses: <Lenses state={state} mutate={mutate} />,
     telegram: <Telegram state={state} mutate={mutate} refresh={refresh} />,
