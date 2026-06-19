@@ -168,6 +168,7 @@ function migrate() {
       id TEXT PRIMARY KEY,
       label TEXT NOT NULL,
       trigger TEXT NOT NULL,
+      run_type TEXT NOT NULL DEFAULT 'intelligence',
       status TEXT NOT NULL,
       started_at TEXT NOT NULL,
       completed_at TEXT,
@@ -189,6 +190,21 @@ function migrate() {
       resolved_by TEXT,
       resolved_at TEXT,
       resolution_note TEXT
+    );
+    CREATE TABLE IF NOT EXISTS calendar_planning_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      calendar_title_prefix TEXT NOT NULL DEFAULT '',
+      color TEXT NOT NULL DEFAULT '',
+      default_minutes INTEGER NOT NULL DEFAULT 60,
+      min_minutes INTEGER NOT NULL DEFAULT 25,
+      max_minutes INTEGER NOT NULL DEFAULT 120,
+      leverage_category TEXT NOT NULL DEFAULT 'deepWork',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      protected INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS audit_logs (
       id TEXT PRIMARY KEY,
@@ -342,6 +358,34 @@ function migrate() {
       rank INTEGER NOT NULL DEFAULT 1,
       status TEXT NOT NULL DEFAULT 'active',
       completed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS commitments (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active',
+      owner TEXT NOT NULL DEFAULT '',
+      requested_by TEXT NOT NULL DEFAULT '',
+      due_at TEXT,
+      priority TEXT NOT NULL DEFAULT 'normal',
+      leverage_category TEXT NOT NULL DEFAULT 'admin',
+      source_system TEXT NOT NULL DEFAULT 'manual',
+      source_id TEXT NOT NULL DEFAULT '',
+      related_people_json TEXT NOT NULL DEFAULT '[]',
+      related_projects_json TEXT NOT NULL DEFAULT '[]',
+      related_events_json TEXT NOT NULL DEFAULT '[]',
+      next_action TEXT NOT NULL DEFAULT '',
+      estimate_minutes INTEGER NOT NULL DEFAULT 30,
+      waiting_on TEXT NOT NULL DEFAULT '',
+      blockers TEXT NOT NULL DEFAULT '',
+      partition TEXT NOT NULL DEFAULT 'professional',
+      confidence REAL NOT NULL DEFAULT 0.6,
+      verification_state TEXT NOT NULL DEFAULT 'unverified',
+      authoritative_system TEXT NOT NULL DEFAULT '',
+      external_refs_json TEXT NOT NULL DEFAULT '[]',
+      evidence_json TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -524,6 +568,8 @@ function migrate() {
   if (!sourceColumns.includes("config_json")) {
     db.exec("ALTER TABLE sources ADD COLUMN config_json TEXT NOT NULL DEFAULT '{}';");
   }
+  const workflowRunColumns = db.prepare("PRAGMA table_info(workflow_runs)").all().map((c) => c.name);
+  if (!workflowRunColumns.includes("run_type")) db.exec("ALTER TABLE workflow_runs ADD COLUMN run_type TEXT NOT NULL DEFAULT 'intelligence';");
   const briefColumns = db.prepare("PRAGMA table_info(brief_config)").all().map((c) => c.name);
   if (!briefColumns.includes("delivery_frequency")) db.exec("ALTER TABLE brief_config ADD COLUMN delivery_frequency TEXT NOT NULL DEFAULT 'Daily';");
   if (!briefColumns.includes("delivery_time")) db.exec("ALTER TABLE brief_config ADD COLUMN delivery_time TEXT NOT NULL DEFAULT '08:00';");
@@ -2563,10 +2609,11 @@ const GOOGLE_CALENDAR_DESKTOP_CLIENT_ID = process.env.PILLAR_GOOGLE_CALENDAR_CLI
 const GOOGLE_CALENDAR_CLIENT_SECRET = process.env.PILLAR_GOOGLE_CALENDAR_CLIENT_SECRET || GOOGLE_CALENDAR_LOCAL_OAUTH.clientSecret || "";
 const GOOGLE_CALENDAR_REDIRECT_URI = process.env.PILLAR_GOOGLE_CALENDAR_REDIRECT_URI || "";
 const GOOGLE_CALENDAR_SCOPES = [
-  "https://www.googleapis.com/auth/calendar.events.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ];
 const GOOGLE_CALENDAR_SCOPE = GOOGLE_CALENDAR_SCOPES.join(" ");
+const GOOGLE_CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
 function googleCalendarCredential() {
   const row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER });
@@ -2597,6 +2644,8 @@ function googleCalendarPublicConnector(connector = googleCalendarCredential()) {
   const { row, data, enabled } = connector;
   const hasClient = !!(data.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID);
   const hasRefreshToken = !!data.refreshToken;
+  const grantedScope = String(data.scope || "");
+  const writeReady = grantedScope.split(/\s+/).includes(GOOGLE_CALENDAR_WRITE_SCOPE);
   return {
     provider: "googleCalendar",
     enabled,
@@ -2604,6 +2653,8 @@ function googleCalendarPublicConnector(connector = googleCalendarCredential()) {
     clientConfigured: hasClient,
     credentialStatus: hasRefreshToken ? "saved" : hasClient ? "client configured" : "missing",
     status: enabled && hasRefreshToken ? "ready" : hasClient ? "needs consent" : "pending credentials",
+    writeReady,
+    needsReconnectForWrite: enabled && hasRefreshToken && !writeReady,
     calendarId: data.calendarId || "primary",
     selectedCalendarIds: Array.isArray(data.selectedCalendarIds) && data.selectedCalendarIds.length ? data.selectedCalendarIds : ["primary"],
     calendars: Array.isArray(data.calendars) ? data.calendars : [],
@@ -2696,6 +2747,47 @@ async function fetchGoogleCalendarList() {
     backgroundColor: calendar.backgroundColor || "",
     selected: calendar.selected !== false,
   })).filter((calendar) => calendar.id);
+}
+
+function assertGoogleCalendarWriteReady() {
+  const connector = googleCalendarCredential();
+  const grantedScope = String(connector.data?.scope || "");
+  if (!connector.enabled || !connector.data?.refreshToken) throw new Error("Google Calendar is not connected.");
+  if (!grantedScope.split(/\s+/).includes(GOOGLE_CALENDAR_WRITE_SCOPE)) {
+    throw new Error("Reconnect Google Calendar to grant calendar event write access before filling your calendar.");
+  }
+  return connector;
+}
+
+function googleCalendarWriteCalendarId(data = googleCalendarCredential().data || {}) {
+  if (data.calendarId && data.calendarId !== "selected") return data.calendarId;
+  const calendars = Array.isArray(data.calendars) ? data.calendars : [];
+  return calendars.find((calendar) => calendar.primary && /owner|writer/i.test(calendar.accessRole || ""))?.id
+    || calendars.find((calendar) => /owner|writer/i.test(calendar.accessRole || ""))?.id
+    || "primary";
+}
+
+async function createGoogleCalendarEvent({ calendarId = "primary", summary, description = "", start, end, timezone = "America/Denver", extendedProperties = {} }) {
+  assertGoogleCalendarWriteReady();
+  if (!String(summary || "").trim()) throw new Error("Calendar event summary is required.");
+  if (!start || !end) throw new Error("Calendar event start and end are required.");
+  const accessToken = await refreshGoogleCalendarAccessToken();
+  const body = {
+    summary: String(summary).trim(),
+    description: String(description || ""),
+    start: { dateTime: new Date(start).toISOString(), timeZone: timezone },
+    end: { dateTime: new Date(end).toISOString(), timeZone: timezone },
+    extendedProperties: { private: extendedProperties },
+  };
+  const targetCalendarId = calendarId === "selected" ? googleCalendarWriteCalendarId() : calendarId || "primary";
+  const response = await fetchWithTimeout(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCalendarId)}/events`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }, 20000);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error?.message || `Google Calendar event create failed: ${response.status} ${response.statusText}`);
+  return payload;
 }
 
 function xHeaders(token) {
@@ -3386,6 +3478,10 @@ function seedTimeDefaults() {
   if (!get("SELECT id FROM time_preferences WHERE id=1")) {
     run("INSERT INTO time_preferences (id, updated_at) VALUES (1, $t)", { $t: t });
   }
+  const prefs = get("SELECT operating_manual FROM time_preferences WHERE id=1") || {};
+  if (!String(prefs.operating_manual || "").trim()) {
+    run("UPDATE time_preferences SET operating_manual=$manual, updated_at=$t WHERE id=1", { $manual: DEFAULT_EXECUTIVE_SELF_STATEMENT, $t: t });
+  }
   const templates = [
     ["review-morning", "morning", "Morning planning", ["What is already on the calendar?", "What are the top leverage candidates?", "What should become Today's Three?", "What needs preparation or follow-up?"]],
     ["review-midday", "midday", "Midday reset", ["What changed?", "What is complete?", "What still matters this afternoon?", "Is rest, food, or recovery needed?"]],
@@ -3413,6 +3509,30 @@ function seedTimeDefaults() {
          VALUES ($id, $title, 'Template reminder. Enable and edit before use.', $type, $scheduleType, $localTime, $start, '[1,2,3,4,5]', 0, $t, $t)
          ON CONFLICT(id) DO NOTHING`, { $id: reminderId, $title: title, $type: type, $scheduleType: scheduleType, $localTime: localTime, $start: localDateKey(new Date(), "America/Denver"), $t: t });
   }
+  const planningCategories = [
+    ["schedule-category-deep-work", "Deep Work", "Protected focus time for the highest-leverage work candidate.", "Deep Work", "#1f6feb", 90, 45, 120, "deepWork"],
+    ["schedule-category-meeting-prep", "Meeting Prep", "Preparation block before meetings, calls, reviews, and checkpoints.", "Prep", "#8957e5", 25, 15, 45, "leadership"],
+    ["schedule-category-follow-up", "Follow-up", "Communication, callbacks, status checks, and commitment cleanup.", "Follow-up", "#2da44e", 30, 15, 60, "leadership"],
+    ["schedule-category-admin", "Admin / Inbox", "Operational cleanup, inbox triage, forms, and short maintenance work.", "Admin", "#bf8700", 45, 20, 60, "admin"],
+    ["schedule-category-health", "Health / Recovery", "Lunch, movement, reset, and recovery protection.", "Recovery", "#d1242f", 45, 20, 75, "healthFamilyRecovery"],
+    ["schedule-category-learning", "Learning / Research", "Reading, research, synthesis, and skill-building time.", "Learning", "#0969da", 60, 30, 90, "deepWork"],
+  ];
+  for (const [categoryId, name, description, prefix, color, defaultMinutes, minMinutes, maxMinutes, leverageCategory] of planningCategories) {
+    run(`INSERT INTO calendar_planning_categories (id, name, description, calendar_title_prefix, color, default_minutes, min_minutes, max_minutes, leverage_category, enabled, protected, created_at, updated_at)
+         VALUES ($id, $name, $description, $prefix, $color, $defaultMinutes, $minMinutes, $maxMinutes, $leverageCategory, 1, 1, $t, $t)
+         ON CONFLICT(id) DO NOTHING`, {
+      $id: categoryId,
+      $name: name,
+      $description: description,
+      $prefix: prefix,
+      $color: color,
+      $defaultMinutes: defaultMinutes,
+      $minMinutes: minMinutes,
+      $maxMinutes: maxMinutes,
+      $leverageCategory: leverageCategory,
+      $t: t,
+    });
+  }
 }
 
 function audit(action, entityType, entityId, note = "", diff = {}, actor = "operator") {
@@ -3422,6 +3542,24 @@ function audit(action, entityType, entityId, note = "", diff = {}, actor = "oper
     $entityType: entityType, $entityId: entityId, $note: note || "", $diff: json(diff || {}),
   });
 }
+
+const DEFAULT_EXECUTIVE_SELF_STATEMENT = [
+  "I carry a lot at once, move fast, and want my hours spent on what compounds: building, writing, important relationships, and the few commitments that actually move the work.",
+  "I can over-rely on my own reasoning and make a plan sound airtight even when it is avoiding the hard, undramatic next action.",
+  "Pillar Time should not become a cheerleader or mirror. It should point my time at what is true and what counts.",
+  "Talk to me straight. Tell me plainly when my plan does not match my stated priorities, when I am overcommitting, when something important has quietly slipped, or when I am dressing up procrastination as strategy.",
+  "Default to candor over comfort and specifics over reassurance. If unsure, say so instead of smoothing it over. Do not perform confidence.",
+  "The useful morning output is a clear read on where my time is actually going versus where I said it should go, plus the one question I am least likely to ask myself.",
+].join("\n");
+
+const DEFAULT_EXECUTIVE_COACHING_VOICE = [
+  "Speak like a precise executive coach who has permission to be candid.",
+  "Be warm enough to be usable, but never flattering, vague, or performatively positive.",
+  "Make the brief feel like a coaching session: explain why the top work is highest leverage, what tension it relieves, what it protects, and what would be avoidance.",
+  "Prefer direct second-person language, concrete tradeoffs, and a small number of sharp moves over formal lists.",
+  "Call out mismatch between calendar reality, Linear commitments, stated priorities, and proposed actions.",
+  "Ask one uncomfortable question the brief owner is least likely to ask today.",
+].join(" ");
 
 function defaultTrustedContextConstitution() {
   return {
@@ -3477,8 +3615,9 @@ function seedTrustedContextDefaults() {
     ["identity.profile", "preferredName", config.ownerName || "You", "verified_canonical_profile", "verified", "workspace"],
     ["identity.profile", "productName", config.productName || "Pillar Time", "application_default", "system_verified", "workspace"],
     ["identity.role", "primaryTimezone", prefs.timezone || config.deliveryTimezone || "America/Denver", "verified_canonical_profile", "verified", "workspace"],
-    ["profile.communication", "briefVoice", config.voiceRules || "Concise, strategic, candid, approval-safe, specific, and plain-English.", "verified_canonical_profile", "verified", "assistant"],
-    ["profile.timePolicy", "operatingManual", prefs.operatingManual || "", "verified_canonical_profile", "verified", "assistant"],
+    ["profile.communication", "briefVoice", config.voiceRules || DEFAULT_EXECUTIVE_COACHING_VOICE, "verified_canonical_profile", "verified", "assistant"],
+    ["profile.timePolicy", "operatingManual", prefs.operatingManual || DEFAULT_EXECUTIVE_SELF_STATEMENT, "verified_canonical_profile", "verified", "assistant"],
+    ["profile.timePolicy", "selfStatement", prefs.operatingManual || DEFAULT_EXECUTIVE_SELF_STATEMENT, "verified_canonical_profile", "verified", "assistant"],
   ];
   for (const [resourceType, fieldKey, value, trustLevel, verificationStatus, visibility] of seedFacts) {
     if (!String(value || "").trim()) continue;
@@ -3573,8 +3712,8 @@ function seed() {
          VALUES (1, $owner, $product, $audience, $voice, 'Daily', '08:00', 'America/Denver', 'Monday', $sections, $analyzers, $behavior, '[]', 1, $t)`, {
       $owner: "You",
       $product: "Pillar Time",
-      $audience: "A private daily intelligence brief for the brief owner. Explain sources, entities, mechanisms, or technical terms when useful.",
-      $voice: "Concise, strategic, candid, approval-safe, specific, and plain-English. Avoid generic corporate language.",
+      $audience: "A private executive operating system for the brief owner. Help the owner spend hours on compounding work, important relationships, and the few commitments that actually move the work. Check urgency theater, overcommitment, and polished self-justification against calendar reality, Linear commitments, and stated priorities.",
+      $voice: DEFAULT_EXECUTIVE_COACHING_VOICE,
       $sections: json([
         { key: "executiveRead", label: "Executive Read", enabled: true, instruction: "2-3 concise paragraphs that explain the situation without unexplained jargon." },
         { key: "backgroundContext", label: "Plain-English Context", enabled: true, instruction: "3-7 bullets explaining key terms, entities, mechanisms, and jargon." },
@@ -3683,6 +3822,24 @@ function timeTasks() {
   }));
 }
 
+function calendarPlanningCategories() {
+  return all("SELECT * FROM calendar_planning_categories ORDER BY name ASC").map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    calendarTitlePrefix: r.calendar_title_prefix,
+    color: r.color,
+    defaultMinutes: Number(r.default_minutes || 60),
+    minMinutes: Number(r.min_minutes || 25),
+    maxMinutes: Number(r.max_minutes || 120),
+    leverageCategory: r.leverage_category,
+    enabled: !!r.enabled,
+    protected: !!r.protected,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
 function dailyCommitments(dateKey = localDateKey(new Date(), timePreferences().timezone)) {
   return all("SELECT * FROM daily_commitments WHERE local_date=$date AND status!='removed' ORDER BY rank ASC, created_at ASC", { $date: dateKey }).map((r) => ({
     id: r.id,
@@ -3694,6 +3851,37 @@ function dailyCommitments(dateKey = localDateKey(new Date(), timePreferences().t
     rank: r.rank,
     status: r.status,
     completedAt: r.completed_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+function commitments() {
+  return all("SELECT * FROM commitments WHERE status NOT IN ('done','canceled','removed') ORDER BY COALESCE(due_at, '9999'), updated_at DESC").map((r) => ({
+    id: r.id,
+    title: r.title,
+    description: r.description,
+    status: r.status,
+    owner: r.owner,
+    requestedBy: r.requested_by,
+    dueAt: r.due_at,
+    priority: r.priority,
+    leverageCategory: r.leverage_category,
+    sourceSystem: r.source_system,
+    sourceId: r.source_id,
+    relatedPeople: parse(r.related_people_json, []),
+    relatedProjects: parse(r.related_projects_json, []),
+    relatedEvents: parse(r.related_events_json, []),
+    nextAction: r.next_action,
+    estimateMinutes: r.estimate_minutes,
+    waitingOn: r.waiting_on,
+    blockers: r.blockers,
+    partition: r.partition,
+    confidence: r.confidence,
+    verificationState: r.verification_state,
+    authoritativeSystem: r.authoritative_system,
+    externalRefs: parse(r.external_refs_json, []),
+    evidence: parse(r.evidence_json, []),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }));
@@ -4093,7 +4281,7 @@ function trustedContextState() {
 
 function workflowRuns() {
   return all("SELECT * FROM workflow_runs ORDER BY started_at DESC").map((r) => ({
-    id: r.id, label: r.label, trigger: r.trigger, status: r.status, startedAt: r.started_at,
+    id: r.id, label: r.label, trigger: r.trigger, runType: r.run_type || "intelligence", status: r.status, startedAt: r.started_at,
     completedAt: r.completed_at, steps: parse(r.steps_json, []), artifact: hydrateArtifact(parse(r.artifact_json, {})), error: r.error,
   }));
 }
@@ -4219,6 +4407,20 @@ function onboardingState() {
   };
 }
 function workflowTemplate(config = briefConfig()) {
+  const runType = typeof config === "string" ? config : arguments[1] || "executive_day";
+  if (runType === "executive_day") {
+    return [
+      ["context", "Load executive context", "retrieve"],
+      ["calendar", "Read calendar and meeting prep", "retrieve"],
+      ["linear", "Read Linear work and blockers", "retrieve"],
+      ["commitments", "Normalize commitments", "organize"],
+      ["risks", "Detect risks and prep gaps", "organize"],
+      ["rank", "Rank highest-leverage day", "decide"],
+      ["synthesize", "Render executive day brief", "generate"],
+      ["approvals", "Create approval-gated actions", "act"],
+      ["deliver", "Save artifact and optional outputs", "deliver"],
+    ];
+  }
   const enabledSections = (config.sections || []).filter((section) => section.enabled !== false && section.key !== "sourceEvidence");
   const synthesizeName = enabledSections.length
     ? `Synthesize ${enabledSections.length} configured section${enabledSections.length === 1 ? "" : "s"}`
@@ -4236,8 +4438,8 @@ function workflowTemplate(config = briefConfig()) {
   ];
 }
 
-function workflowPlan(config = briefConfig()) {
-  return workflowTemplate(config).map(([key, name, group], index) => ({
+function workflowPlan(config = briefConfig(), runType = "executive_day") {
+  return workflowTemplate(config, runType).map(([key, name, group], index) => ({
     key,
     name,
     group,
@@ -4245,9 +4447,9 @@ function workflowPlan(config = briefConfig()) {
   }));
 }
 
-function workflowProgressSteps({ activeKey = "fetch", completed = new Set(), outputs = {}, config = briefConfig() } = {}) {
+function workflowProgressSteps({ activeKey = "context", completed = new Set(), outputs = {}, config = briefConfig(), runType = "executive_day" } = {}) {
   const completedSet = completed instanceof Set ? completed : new Set(completed || []);
-  return workflowTemplate(config).map(([key, name, group], index) => ({
+  return workflowTemplate(config, runType).map(([key, name, group], index) => ({
     n: index + 1,
     key,
     name,
@@ -4262,7 +4464,7 @@ function workflowProgressSteps({ activeKey = "fetch", completed = new Set(), out
 function state() {
   const prefs = timePreferences();
   const todayKey = localDateKey(new Date(), prefs.timezone);
-  return { sources: sources(), lenses: lenses(), councils: councils(), documents: documents(), workflowRuns: workflowRuns(), approvals: approvals(), auditLogs: audits(), telegram: telegramSettings(), model: modelSettings(), tts: ttsSettings(), connectors: connectorSettings(), briefConfig: briefConfig(), onboarding: onboardingState(), trustedContext: trustedContextState(), time: { preferences: prefs, todayKey, suggestions: timeSuggestions(), commitments: dailyCommitments(todayKey), tasks: timeTasks(), reminders: reminders(), reviews: reviewTemplates(), importantDates: importantDates(), meetings: meetingRecords(), scheduler: schedulerHealth() }, runtime: { mode: appMode, isDesktop, dataDir, workflowSteps: workflowPlan() } };
+  return { sources: sources(), lenses: lenses(), councils: councils(), documents: documents(), workflowRuns: workflowRuns(), approvals: approvals(), auditLogs: audits(), telegram: telegramSettings(), model: modelSettings(), tts: ttsSettings(), connectors: connectorSettings(), briefConfig: briefConfig(), onboarding: onboardingState(), trustedContext: trustedContextState(), time: { preferences: prefs, todayKey, suggestions: timeSuggestions(), commitments: dailyCommitments(todayKey), canonicalCommitments: commitments(), tasks: timeTasks(), reminders: reminders(), reviews: reviewTemplates(), importantDates: importantDates(), meetings: meetingRecords(), calendarPlanningCategories: calendarPlanningCategories(), scheduler: schedulerHealth() }, runtime: { mode: appMode, isDesktop, dataDir, workflowSteps: workflowPlan() } };
 }
 function briefConfig() {
   const r = get("SELECT * FROM brief_config WHERE id = 1");
@@ -5411,6 +5613,698 @@ function saveBriefDocument({ runId, artifact }) {
   return docId;
 }
 
+function toDateMs(value) {
+  const date = value ? new Date(value) : null;
+  return date && Number.isFinite(date.getTime()) ? date.getTime() : 0;
+}
+
+function sameLocalDate(value, dateKey, timezone = "America/Denver") {
+  if (!value) return false;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) && localDateKey(date, timezone) === dateKey;
+}
+
+function daysUntilLocalDate(dateKey, timezone = "America/Denver") {
+  const today = localDateKey(new Date(), timezone);
+  return Math.round((new Date(`${dateKey}T12:00:00Z`).getTime() - new Date(`${today}T12:00:00Z`).getTime()) / 86400000);
+}
+
+async function fetchExecutiveCalendarAgenda({ timezone = "America/Denver" } = {}) {
+  const connector = googleCalendarCredential();
+  const data = connector.data || {};
+  const diagnostics = { provider: "googleCalendar", status: "not_connected", attempted: false, succeeded: false, eventCount: 0, error: "" };
+  if (!connector.enabled || !data.refreshToken) {
+    diagnostics.error = "Google Calendar is not connected.";
+    return { agenda: [], diagnostics };
+  }
+  diagnostics.attempted = true;
+  try {
+    const accessToken = await refreshGoogleCalendarAccessToken();
+    const selectedCalendarIds = Array.isArray(data.selectedCalendarIds) && data.selectedCalendarIds.length ? data.selectedCalendarIds : ["primary"];
+    const config = { calendarId: "selected", calendarIds: selectedCalendarIds, includeAttendees: true, includeDescriptions: false, includeDeclined: false, maxResults: 50 };
+    const source = { id: "google-calendar", name: "Google Calendar", config };
+    const rawEventsByCalendar = [];
+    for (const calendarId of selectedCalendarIds) {
+      const events = await fetchGoogleCalendarEventsForCalendar({ source, calendarId, accessToken, config });
+      rawEventsByCalendar.push(...events.map((event) => ({ ...event, pillarCalendarId: calendarId })));
+    }
+    const events = rawEventsByCalendar
+      .filter((event) => {
+        if (event.status === "cancelled") return false;
+        const selfAttendee = (event.attendees || []).find((attendee) => attendee.self);
+        return selfAttendee?.responseStatus !== "declined";
+      })
+      .sort((a, b) => String(eventDateTimeValue(a.start)).localeCompare(String(eventDateTimeValue(b.start))));
+    diagnostics.status = "ready";
+    diagnostics.succeeded = true;
+    diagnostics.eventCount = events.length;
+    diagnostics.calendarIds = selectedCalendarIds;
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now() });
+    return { agenda: dedupeCalendarAgenda(calendarAgendaFromEvents(events, source, config)), diagnostics };
+  } catch (error) {
+    diagnostics.status = "failed";
+    diagnostics.error = error.message || "Google Calendar fetch failed";
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now(), $err: diagnostics.error });
+    return { agenda: [], diagnostics };
+  }
+}
+
+async function fetchExecutiveLinearContext() {
+  const connector = linearPublicConnector();
+  const diagnostics = { provider: LINEAR_PROVIDER, status: connector.status, attempted: false, succeeded: false, issueCount: 0, error: "" };
+  if (connector.status !== "ready") {
+    diagnostics.error = connector.credentialStatus === "missing" ? "LINEAR_API_KEY is not configured." : "Linear connector is disabled.";
+    return { issues: [], groups: [], viewer: null, diagnostics };
+  }
+  diagnostics.attempted = true;
+  try {
+    const result = await linearClient().issues({ teamKey: DEFAULT_LINEAR_TEAM_KEY, assignee: "me", stateTypes: ["backlog", "unstarted", "started"], first: 50, pages: 3 });
+    diagnostics.status = "ready";
+    diagnostics.succeeded = true;
+    diagnostics.issueCount = result.issues.length;
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now() });
+    return { issues: result.issues, groups: groupIssuesByProject(result.issues), viewer: result.viewer, diagnostics };
+  } catch (error) {
+    diagnostics.status = "failed";
+    diagnostics.error = error.message || "Linear issue fetch failed";
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now(), $err: diagnostics.error });
+    return { issues: [], groups: [], viewer: null, diagnostics };
+  }
+}
+
+function commitmentRowsForExecutiveDay({ dateKey }) {
+  const canonical = commitments().map((item) => ({ ...item, source: item.sourceSystem || "commitment", kind: "canonical" }));
+  const daily = dailyCommitments(dateKey).map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: item.notes,
+    status: item.status,
+    dueAt: `${item.localDate}T23:59:00`,
+    priority: item.rank <= 3 ? "high" : "normal",
+    leverageCategory: "leadership",
+    source: "today",
+    kind: "daily",
+    evidence: [{ type: "daily_commitment", id: item.id }],
+  }));
+  return [...daily, ...canonical];
+}
+
+function buildExecutiveCandidates({ calendarAgenda = [], linearContext = {}, local = {}, dateKey, timezone }) {
+  const candidates = [];
+  for (const commitment of local.commitments || []) {
+    candidates.push({
+      id: `commitment:${commitment.id}`,
+      title: commitment.nextAction || commitment.title,
+      notes: commitment.description || commitment.notes || "",
+      leverageCategory: commitment.leverageCategory || (commitment.priority === "high" ? "leadership" : "admin"),
+      reason: commitment.waitingOn ? `Waiting on ${commitment.waitingOn}; moving this may unblock the commitment.` : "Active commitment in the executive record.",
+      source: commitment.source || "commitment",
+      dueAt: commitment.dueAt,
+      estimateMinutes: commitment.estimateMinutes || 30,
+      status: commitment.status,
+      waitingOn: commitment.waitingOn,
+      feedbackKey: commitment.id,
+      evidence: commitment.evidence || [],
+    });
+  }
+  for (const task of local.tasks || []) {
+    candidates.push({
+      id: `task:${task.id}`,
+      taskId: task.id,
+      title: task.title,
+      notes: task.notes,
+      leverageCategory: task.leverageCategory,
+      reason: task.waitingOn ? `Waiting on ${task.waitingOn}; moving this may unblock someone.` : "Open task from Pillar Time.",
+      source: "task",
+      dueAt: task.dueAt,
+      estimateMinutes: task.estimateMinutes,
+      status: task.status,
+      waitingOn: task.waitingOn,
+      feedbackKey: task.id,
+    });
+  }
+  for (const event of calendarAgenda) {
+    if (/meet|call|huddle|checkpoint|review|planning|interview|sync|standup/i.test(event.title || "")) {
+      candidates.push({
+        id: `calendar:${event.id || event.htmlLink || event.title}`,
+        title: `Prepare for ${event.title || "calendar event"}`,
+        notes: [event.time, event.attendees?.length ? `Attendees: ${event.attendees.join(", ")}` : ""].filter(Boolean).join(" · "),
+        leverageCategory: "leadership",
+        reason: "Calendar event may need prep, decisions, sequencing, or follow-up.",
+        source: "calendar",
+        dueAt: event.start,
+        estimateMinutes: local.preferences?.meetingBufferMinutes || 10,
+        feedbackKey: `calendar:${event.id || event.title}`,
+      });
+    }
+  }
+  for (const issue of linearContext.issues || []) {
+    const title = `${issue.identifier || "Linear"} ${issue.title || ""}`.trim();
+    const dueAt = issue.dueDate ? `${issue.dueDate}T17:00:00` : "";
+    const state = String(issue.state?.type || issue.state?.name || "").toLowerCase();
+    const priority = Number(issue.priority || 0);
+    const stale = toDateMs(issue.updatedAt) && Date.now() - toDateMs(issue.updatedAt) > 7 * 86400000;
+    const leverageCategory = state.includes("started") ? "unblock" : priority > 2 ? "deadline" : issue.project ? "deepWork" : "admin";
+    candidates.push({
+      id: `linear:${issue.id}`,
+      linearIssueId: issue.id,
+      title,
+      notes: [issue.project?.name, issue.state?.name, issue.url].filter(Boolean).join(" · "),
+      leverageCategory,
+      reason: stale ? "Linear issue has not moved recently and may need a decision or status update." : "Assigned open Linear issue.",
+      source: "linear",
+      dueAt,
+      estimateMinutes: 30,
+      status: state.includes("started") ? "started" : "open",
+      priority: issue.priorityLabel || priority,
+      feedbackKey: issue.id,
+      evidence: [{ type: "linear_issue", id: issue.id, identifier: issue.identifier, url: issue.url }],
+    });
+  }
+  for (const reminder of local.reminders || []) {
+    if (reminder.enabled && reminder.nextOccurrence?.dateKey === dateKey) {
+      candidates.push({
+        id: `reminder:${reminder.id}`,
+        title: reminder.title,
+        notes: reminder.body,
+        leverageCategory: "admin",
+        reason: `Reminder due today at ${reminder.nextOccurrence.localTime}.`,
+        source: "reminder",
+        dueAt: `${dateKey}T${reminder.nextOccurrence.localTime}:00`,
+        estimateMinutes: 5,
+        feedbackKey: reminder.id,
+      });
+    }
+  }
+  for (const date of local.importantDates || []) {
+    if (!date.enabled) continue;
+    const days = daysUntilLocalDate(date.date, timezone);
+    if (days >= 0 && days <= 14) {
+      candidates.push({
+        id: `important-date:${date.id}`,
+        title: `${date.title}${days === 0 ? " is today" : ` in ${days} day${days === 1 ? "" : "s"}`}`,
+        notes: date.notes,
+        leverageCategory: days <= 3 ? "deadline" : "admin",
+        reason: "Important date is inside the planning horizon.",
+        source: "important_date",
+        dueAt: `${date.date}T09:00:00`,
+        estimateMinutes: 15,
+        feedbackKey: date.id,
+      });
+    }
+  }
+  const feedback = all("SELECT feedback_key AS key, feedback FROM suggestion_feedback");
+  return rankActions(candidates, feedback).map((candidate, index) => ({ ...candidate, rank: index + 1 }));
+}
+
+function detectExecutiveRisks({ calendarAgenda = [], linearContext = {}, local = {}, connectorDiagnostics = {}, dateKey, timezone }) {
+  const risks = [];
+  const sortedEvents = [...calendarAgenda].filter((event) => event.start && event.end).sort((a, b) => toDateMs(a.start) - toDateMs(b.start));
+  let meetingMinutes = 0;
+  for (let i = 0; i < sortedEvents.length; i += 1) {
+    const current = sortedEvents[i];
+    const duration = Math.max(0, Math.round((toDateMs(current.end) - toDateMs(current.start)) / 60000));
+    meetingMinutes += duration;
+    const next = sortedEvents[i + 1];
+    if (next && toDateMs(current.end) > toDateMs(next.start)) risks.push({ type: "calendar_conflict", severity: "high", title: `Calendar overlap: ${current.title} and ${next.title}`, evidence: [current.id, next.id].filter(Boolean) });
+  }
+  if (meetingMinutes >= 240) risks.push({ type: "meeting_load", severity: "medium", title: `${Math.round(meetingMinutes / 60)} hours of meetings today`, evidence: { meetingMinutes } });
+  if (!connectorDiagnostics.googleCalendar?.succeeded) risks.push({ type: "calendar_unavailable", severity: "medium", title: "Calendar coverage is unavailable", detail: connectorDiagnostics.googleCalendar?.error || "Calendar connector is not ready." });
+  if (!connectorDiagnostics.linear?.succeeded) risks.push({ type: "linear_unavailable", severity: "medium", title: "Linear work coverage is unavailable", detail: connectorDiagnostics.linear?.error || "Linear connector is not ready." });
+  if (connectorDiagnostics.model?.status !== "ready") risks.push({ type: "model_unavailable", severity: "low", title: "Model connector is not ready", detail: "Using deterministic executive brief fallback." });
+  for (const issue of linearContext.issues || []) {
+    if (issue.dueDate && issue.dueDate <= dateKey) risks.push({ type: "linear_due", severity: "high", title: `${issue.identifier} is due ${issue.dueDate}`, entityId: issue.id, url: issue.url });
+    if (toDateMs(issue.updatedAt) && Date.now() - toDateMs(issue.updatedAt) > 7 * 86400000) risks.push({ type: "linear_stale", severity: "medium", title: `${issue.identifier} has not moved in over a week`, entityId: issue.id, url: issue.url });
+  }
+  for (const commitment of local.commitments || []) {
+    if (commitment.dueAt && sameLocalDate(commitment.dueAt, dateKey, timezone) && commitment.status !== "done") risks.push({ type: "commitment_due", severity: "high", title: `Commitment due today: ${commitment.title}`, entityId: commitment.id });
+    if (commitment.waitingOn) risks.push({ type: "waiting_on", severity: "medium", title: `${commitment.title} is waiting on ${commitment.waitingOn}`, entityId: commitment.id });
+  }
+  return risks.slice(0, 24);
+}
+
+function buildCoverageNotes({ connectorDiagnostics = {}, sourceCount = 0 }) {
+  const notes = [];
+  if (connectorDiagnostics.googleCalendar?.succeeded) notes.push(`Calendar connected: ${connectorDiagnostics.googleCalendar.eventCount || 0} event${connectorDiagnostics.googleCalendar.eventCount === 1 ? "" : "s"} read for today.`);
+  else notes.push(`Calendar degraded: ${connectorDiagnostics.googleCalendar?.error || "not connected"}`);
+  if (connectorDiagnostics.linear?.succeeded) notes.push(`Linear connected: ${connectorDiagnostics.linear.issueCount || 0} assigned open issue${connectorDiagnostics.linear.issueCount === 1 ? "" : "s"} read.`);
+  else notes.push(`Linear degraded: ${connectorDiagnostics.linear?.error || "not connected"}`);
+  notes.push(connectorDiagnostics.model?.status === "ready" ? `Model ready: ${connectorDiagnostics.model.provider}/${connectorDiagnostics.model.model}.` : "Model degraded: deterministic fallback rendered; no LLM prose was required.");
+  if (!sourceCount) notes.push("No active intelligence sources are required for this executive day brief.");
+  return notes;
+}
+
+function deterministicExecutiveDayBrief({ dateKey, calendarAgenda, linearContext, local, todaysThree, risks, connectorDiagnostics, coverageNotes }) {
+  const nextEvent = calendarAgenda.find((event) => toDateMs(event.end || event.start) >= Date.now());
+  const highRisk = risks.filter((risk) => risk.severity === "high");
+  const topMove = todaysThree[0];
+  return {
+    mode: "deterministic",
+    headline: `Here is the day as it actually looks: ${dateKey}`,
+    coachingOpen: [
+      nextEvent ? `Your next calendar anchor is ${nextEvent.time} ${nextEvent.title}. Treat the space around it as contested, not free-floating.` : "No remaining calendar anchor is doing the organizing for you, which means the first protected block matters more.",
+      topMove ? `The highest-leverage move is ${topMove.title}. It matters because ${topMove.reason || "it is the clearest commitment signal in the connected systems"}.` : "The connected systems did not produce a clear top move, so the first job is choosing one instead of letting the day choose for you.",
+    ],
+    executiveRead: [
+      nextEvent ? `Next calendar anchor: ${nextEvent.time} ${nextEvent.title}.` : "No remaining calendar anchors were found for today.",
+      todaysThree.length ? `Protect Today's Three: ${todaysThree.map((item) => item.title).join("; ")}.` : "Choose Today's Three before the day gets noisy.",
+      highRisk.length ? `${highRisk.length} high-priority risk${highRisk.length === 1 ? "" : "s"} need attention.` : "No high-priority schedule or commitment risk was detected from connected systems.",
+    ],
+    leverageRead: todaysThree.length ? todaysThree.map((item) => `${item.title}: high leverage because ${item.reason || item.source || "it is near the top of the ranked day candidates"}.`) : ["Pick one concrete compounding move before doing reactive work."],
+    tensionRelief: topMove ? [`Doing ${topMove.title} relieves the tension between what is visible in Linear/calendar and the temptation to spend the day on easier urgency.`] : ["The tension to resolve is ambiguity: without a named move, urgency will substitute itself for priority."],
+    avoidanceCheck: highRisk.length ? highRisk.map((risk) => `Do not route around this: ${risk.title}`) : ["Watch for polished procrastination: planning, researching, or messaging that avoids the hard next action."],
+    hardQuestion: "What is the useful, undramatic thing you are most tempted to postpone today?",
+    calendarRead: calendarAgenda.length ? calendarAgenda.map((event) => `${event.time}: ${event.title}${event.location ? ` (${event.location})` : ""}`) : ["No calendar events available from connected calendars."],
+    linearRead: (linearContext.groups || []).length ? linearContext.groups.map((group) => `${group.name}: ${group.issues.length} open assigned issue${group.issues.length === 1 ? "" : "s"}`) : ["No assigned Linear issues were available, or Linear is not connected."],
+    commitmentRead: (local.commitments || []).length ? local.commitments.slice(0, 8).map((item) => `${item.title}${item.dueAt ? ` due ${item.dueAt}` : ""}`) : ["No canonical commitments are currently stored."],
+    approvalRead: (local.approvals || []).filter((item) => item.status === "pending").slice(0, 8).map((item) => item.title),
+    coverageNotes,
+    connectorDiagnostics,
+  };
+}
+
+async function synthesizeExecutiveDayBrief(context) {
+  const fallback = deterministicExecutiveDayBrief(context);
+  if (modelSettings().status !== "ready") return fallback;
+  try {
+    const config = briefConfig();
+    const ownerName = config.ownerName && config.ownerName !== "You" ? config.ownerName : "the brief owner";
+    const selfStatement = context.local?.preferences?.operatingManual || DEFAULT_EXECUTIVE_SELF_STATEMENT;
+    const system = [
+      "You are Pillar Time, a private executive operating system.",
+      "Produce a concise executive coaching session grounded only in the provided JSON.",
+      `Speak directly to ${ownerName} in second person. This is not a news report and not a formal memo.`,
+      DEFAULT_EXECUTIVE_COACHING_VOICE,
+      "Separate verified facts, inferred risks, suggested actions, pending approvals, and missing information.",
+      "Do not write a news report. Do not introduce external news unless explicitly present in the input.",
+      "For each top recommendation, explain why it is highest leverage and what tension it relieves.",
+      "Name avoidance patterns plainly when the data supports it, but do not invent motives.",
+      "End with one uncomfortable question the owner is least likely to ask today.",
+      "Return only valid JSON.",
+    ].join(" ");
+    const prompt = JSON.stringify({
+      task: "Generate an executive day coaching brief.",
+      ownerName,
+      communicationContract: {
+        selfStatement,
+        voiceRules: config.voiceRules || DEFAULT_EXECUTIVE_COACHING_VOICE,
+      },
+      requiredJsonShape: {
+        headline: "string",
+        coachingOpen: ["string"],
+        executiveRead: ["string"],
+        calendarRead: ["string"],
+        todaysThreeRead: ["string"],
+        highestLeverageRead: ["string"],
+        leverageRead: ["string"],
+        tensionRelief: ["string"],
+        avoidanceCheck: ["string"],
+        hardQuestion: "string",
+        linearRead: ["string"],
+        commitmentRead: ["string"],
+        approvalRead: ["string"],
+        scheduleProtection: ["string"],
+        missingInfo: ["string"],
+        coverageNotes: ["string"],
+      },
+      context,
+    });
+    const parsed = JSON.parse(await callTextModel({ system, prompt }));
+    return { ...fallback, ...parsed, mode: "model" };
+  } catch (error) {
+    return { ...fallback, mode: "deterministic", modelError: error.message || "Model synthesis failed; deterministic fallback rendered." };
+  }
+}
+
+function renderExecutiveDayBrief(artifact = {}) {
+  const brief = artifact.executiveDayBrief || {};
+  const lines = [
+    `# ${artifact.title || brief.headline || "Executive Day Brief"}`,
+    `Generated: ${artifact.generatedAt ? new Date(artifact.generatedAt).toLocaleString() : new Date().toLocaleString()}`,
+  ];
+  const addList = (heading, items, empty = "No items.") => {
+    lines.push("", `## ${heading}`);
+    const list = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (!list.length) lines.push(`- ${empty}`);
+    else list.forEach((item) => lines.push(`- ${typeof item === "string" ? item : JSON.stringify(item)}`));
+  };
+  addList("Straight Read", brief.coachingOpen || brief.executiveRead);
+  addList("Why This Is Highest Leverage", brief.leverageRead || brief.highestLeverageRead || (artifact.rankedDayCandidates || []).slice(0, 5).map((item) => `${item.title} - ${item.reason || item.source || ""}`));
+  addList("The Tension This Relieves", brief.tensionRelief, "No specific tension identified from connected systems.");
+  addList("Avoidance Check", brief.avoidanceCheck, "No obvious avoidance pattern detected. Stay honest anyway.");
+  if (brief.hardQuestion) lines.push("", "## The Question", `- ${brief.hardQuestion}`);
+  addList("Today's Calendar & Prep", brief.calendarRead || (artifact.calendarAgenda || []).map((event) => `${event.time}: ${event.title}`));
+  addList("Today's Three", brief.todaysThreeRead || (artifact.todaysThree || []).map((item) => `${item.title} - ${item.reason || item.source || "selected"}`), "No top-three commitments selected yet.");
+  addList("Proposed Calendar", (artifact.proposedCalendarSchedule?.blocks || []).map((block) => `${new Date(block.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}-${new Date(block.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${block.summary}`), "No calendar fill blocks proposed.");
+  addList("Linear Focus", brief.linearRead);
+  addList("Commitments & Follow-ups", brief.commitmentRead);
+  addList("Approval Queue", brief.approvalRead || (artifact.approvalItems || []).map((item) => item.title), "No approval-gated actions are pending from this run.");
+  addList("Schedule Protection", brief.scheduleProtection || (artifact.risks || []).filter((risk) => risk.type?.includes("calendar") || risk.type === "meeting_load").map((risk) => risk.title), "No schedule protection warnings detected.");
+  addList("Missing Info / Watchouts", brief.missingInfo || (artifact.risks || []).map((risk) => risk.title));
+  addList("Coverage Notes", brief.coverageNotes || artifact.coverageNotes);
+  return lines.join("\n");
+}
+
+function proposedLinearActionsFromContext({ rankedDayCandidates = [], linearContext = {} }) {
+  const issuesById = new Map((linearContext.issues || []).map((issue) => [issue.id, issue]));
+  return rankedDayCandidates
+    .filter((candidate) => candidate.linearIssueId && issuesById.has(candidate.linearIssueId))
+    .filter((candidate) => /stale|due|unblock|blocked|waiting/i.test(`${candidate.reason || ""} ${candidate.status || ""} ${candidate.leverageCategory || ""}`))
+    .slice(0, 3)
+    .map((candidate) => {
+      const issue = issuesById.get(candidate.linearIssueId);
+      return {
+        title: `Ask for Linear status on ${issue.identifier}`,
+        kind: "linear_action",
+        risk: "low",
+        entityType: "linear_issue",
+        entityId: issue.id,
+        payload: {
+          operation: "addComment",
+          issueId: issue.id,
+          body: `Pillar Time suggested check-in: this issue surfaced in today's executive brief as "${candidate.reason}". What is the next unblock or decision needed?`,
+          verification: { refetchIssue: true, identifier: issue.identifier, url: issue.url },
+        },
+      };
+    });
+}
+
+function localDateTime(dateKey, hhmm = "09:00") {
+  const match = String(hhmm || "09:00").match(/^(\d{1,2}):(\d{2})/);
+  const hours = match ? Math.max(0, Math.min(23, Number(match[1]))) : 9;
+  const minutes = match ? Math.max(0, Math.min(59, Number(match[2]))) : 0;
+  return new Date(`${dateKey}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`);
+}
+
+function calendarBusyIntervals({ calendarAgenda = [], dateKey, timezone = "America/Denver", bufferMinutes = 0 }) {
+  return calendarAgenda
+    .map((event) => ({ start: toDateMs(event.start), end: toDateMs(event.end), title: event.title || "" }))
+    .filter((event) => event.start && event.end && sameLocalDate(event.start, dateKey, timezone))
+    .map((event) => ({ ...event, start: event.start - bufferMinutes * 60000, end: event.end + bufferMinutes * 60000 }))
+    .sort((a, b) => a.start - b.start);
+}
+
+function calendarFreeWindows({ calendarAgenda = [], dateKey, timezone = "America/Denver", preferences = {} }) {
+  const workHours = preferences.workHours || { start: "09:00", end: "17:00", weekdays: [1, 2, 3, 4, 5] };
+  const day = localDateTime(dateKey, "12:00").getDay();
+  if (Array.isArray(workHours.weekdays) && workHours.weekdays.length && !workHours.weekdays.includes(day)) return [];
+  const workStart = localDateTime(dateKey, workHours.start || "09:00").getTime();
+  const workEnd = localDateTime(dateKey, workHours.end || "17:00").getTime();
+  if (!workStart || !workEnd || workEnd <= workStart) return [];
+  const bufferMinutes = Math.max(0, Number(preferences.meetingBufferMinutes || 0));
+  const busy = calendarBusyIntervals({ calendarAgenda, dateKey, timezone, bufferMinutes });
+  const windows = [];
+  let cursor = workStart;
+  for (const interval of busy) {
+    if (interval.end <= workStart || interval.start >= workEnd) continue;
+    const start = Math.max(workStart, interval.start);
+    const end = Math.min(workEnd, interval.end);
+    if (start > cursor) windows.push({ start: cursor, end: start });
+    cursor = Math.max(cursor, end);
+  }
+  if (cursor < workEnd) windows.push({ start: cursor, end: workEnd });
+  return windows.filter((window) => window.end - window.start >= 15 * 60000);
+}
+
+function categoryForCandidate(candidate, categoriesByKey) {
+  const text = `${candidate.source || ""} ${candidate.leverageCategory || ""} ${candidate.title || ""}`.toLowerCase();
+  if (candidate.source === "calendar" || /prep|meeting|call|huddle|checkpoint/.test(text)) return categoriesByKey.get("meeting-prep") || categoriesByKey.get("leadership");
+  if (/waiting|follow|unblock|status|comment|reply/.test(text)) return categoriesByKey.get("follow-up") || categoriesByKey.get("leadership");
+  if (/admin|inbox|reminder|important_date|form|cleanup/.test(text)) return categoriesByKey.get("admin");
+  if (/health|recovery|lunch|movement/.test(text)) return categoriesByKey.get("health");
+  if (/learning|research|read|study/.test(text)) return categoriesByKey.get("learning") || categoriesByKey.get("deep-work");
+  return categoriesByKey.get("deep-work") || [...categoriesByKey.values()][0];
+}
+
+function proposedCalendarScheduleFromContext(context = {}) {
+  const categories = calendarPlanningCategories().filter((category) => category.enabled);
+  if (!categories.length) return { blocks: [], windows: [], categories: [], note: "No enabled calendar planning categories." };
+  const categoriesByKey = new Map();
+  for (const category of categories) {
+    const key = category.id.replace(/^schedule-category-/, "");
+    categoriesByKey.set(key, category);
+    if (!categoriesByKey.has(category.leverageCategory)) categoriesByKey.set(category.leverageCategory, category);
+  }
+  const windows = calendarFreeWindows({
+    calendarAgenda: context.calendarAgenda || [],
+    dateKey: context.dateKey,
+    timezone: context.timezone,
+    preferences: context.local?.preferences || {},
+  });
+  const calendarId = googleCalendarWriteCalendarId();
+  const blocks = [];
+  let windowIndex = 0;
+  let cursor = windows[0]?.start || 0;
+  const usedCandidates = new Set();
+  const candidates = (context.rankedDayCandidates || []).filter((candidate) => candidate?.title && !/calendar_conflict/i.test(candidate.id || ""));
+  for (const candidate of candidates) {
+    if (blocks.length >= 8 || !windows[windowIndex]) break;
+    if (usedCandidates.has(candidate.id)) continue;
+    const category = categoryForCandidate(candidate, categoriesByKey);
+    if (!category) continue;
+    const requestedMinutes = Math.max(category.minMinutes, Math.min(Number(candidate.estimateMinutes || category.defaultMinutes), category.maxMinutes));
+    let durationMs = requestedMinutes * 60000;
+    while (windows[windowIndex] && cursor + Math.max(category.minMinutes * 60000, 15 * 60000) > windows[windowIndex].end) {
+      windowIndex += 1;
+      cursor = windows[windowIndex]?.start || 0;
+    }
+    const window = windows[windowIndex];
+    if (!window) break;
+    const remainingMs = window.end - cursor;
+    if (remainingMs < category.minMinutes * 60000) continue;
+    durationMs = Math.min(durationMs, remainingMs);
+    if (durationMs < category.minMinutes * 60000) continue;
+    const start = new Date(cursor);
+    const end = new Date(cursor + durationMs);
+    const blockId = id("cal-block");
+    const summary = `Pillar Time: ${category.calendarTitlePrefix || category.name} - ${candidate.title}`.slice(0, 180);
+    blocks.push({
+      id: blockId,
+      calendarId,
+      categoryId: category.id,
+      categoryName: category.name,
+      sourceCandidateId: candidate.id,
+      source: candidate.source || "",
+      title: candidate.title,
+      summary,
+      description: [
+        "Created from a Pillar Time approved schedule proposal.",
+        candidate.reason ? `Why this surfaced: ${candidate.reason}` : "",
+        candidate.notes ? `Context: ${candidate.notes}` : "",
+      ].filter(Boolean).join("\n"),
+      start: start.toISOString(),
+      end: end.toISOString(),
+      timezone: context.timezone || "America/Denver",
+      minutes: Math.round(durationMs / 60000),
+    });
+    usedCandidates.add(candidate.id);
+    cursor = end.getTime() + 5 * 60000;
+  }
+  return {
+    dateKey: context.dateKey,
+    timezone: context.timezone || "America/Denver",
+    calendarId,
+    categories,
+    windows: windows.map((window) => ({ start: new Date(window.start).toISOString(), end: new Date(window.end).toISOString(), minutes: Math.round((window.end - window.start) / 60000) })),
+    blocks,
+  };
+}
+
+function createApprovalItemsForRun(runId, proposedActions = []) {
+  const created = [];
+  for (const action of proposedActions) {
+    const approvalId = id("approval");
+    run(`INSERT INTO approval_items (id, title, kind, risk, status, run_id, entity_type, entity_id, payload_json, created_at)
+         VALUES ($id, $title, $kind, $risk, 'pending', $runId, $entityType, $entityId, $payload, $t)`, {
+      $id: approvalId,
+      $title: action.title,
+      $kind: action.kind,
+      $risk: action.risk || "low",
+      $runId: runId,
+      $entityType: action.entityType || "",
+      $entityId: action.entityId || "",
+      $payload: json(action.payload || {}),
+      $t: now(),
+    });
+    created.push({ id: approvalId, ...action, status: "pending", runId });
+  }
+  return created;
+}
+
+async function buildExecutiveDayContext({ dateKey, timezone } = {}) {
+  const prefs = timePreferences();
+  const effectiveTimezone = timezone || prefs.timezone || "America/Denver";
+  const effectiveDateKey = dateKey || localDateKey(new Date(), effectiveTimezone);
+  const [calendar, linearContext] = await Promise.all([fetchExecutiveCalendarAgenda({ timezone: effectiveTimezone }), fetchExecutiveLinearContext()]);
+  const model = modelSettings();
+  const sourceCount = sources().filter((source) => source.status === "active" && source.type !== "Calendar").length;
+  const local = {
+    preferences: prefs,
+    tasks: timeTasks(),
+    commitments: commitmentRowsForExecutiveDay({ dateKey: effectiveDateKey }),
+    dailyCommitments: dailyCommitments(effectiveDateKey),
+    canonicalCommitments: commitments(),
+    reminders: reminders(),
+    reviews: reviewTemplates(),
+    importantDates: importantDates(),
+    meetings: meetingRecords(),
+    approvals: approvals(),
+    trustedContextEnvelope: createTrustedContextEnvelope({
+      mode: "internal_administrative_action",
+      task: "executive day planning and commitment management",
+      requestedActionType: "analysis",
+      requestedHorizon: "today",
+    }, { persist: true }),
+  };
+  const connectorDiagnostics = {
+    googleCalendar: calendar.diagnostics,
+    linear: linearContext.diagnostics,
+    model: { provider: model.provider, model: model.model, status: model.status, credentialStatus: model.credentialStatus },
+    intelligenceSources: { active: sourceCount, status: sourceCount ? "available_for_intelligence_mode" : "not_required_for_executive_day" },
+  };
+  const rankedDayCandidates = buildExecutiveCandidates({ calendarAgenda: calendar.agenda, linearContext, local, dateKey: effectiveDateKey, timezone: effectiveTimezone });
+  const todaysThree = rankedDayCandidates.slice(0, 3);
+  const risks = detectExecutiveRisks({ calendarAgenda: calendar.agenda, linearContext, local, connectorDiagnostics, dateKey: effectiveDateKey, timezone: effectiveTimezone });
+  const coverageNotes = buildCoverageNotes({ connectorDiagnostics, sourceCount });
+  return { dateKey: effectiveDateKey, timezone: effectiveTimezone, calendarAgenda: calendar.agenda, linearContext, local, commitments: local.commitments, rankedDayCandidates, todaysThree, risks, connectorDiagnostics, coverageNotes };
+}
+
+async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
+  const runId = options.runId || id("run");
+  const started = now();
+  const configAtStart = briefConfig();
+  const completedKeys = new Set();
+  const stepOutputs = {};
+  const progressDelay = (ms = 220) => new Promise((resolve) => setTimeout(resolve, ms));
+  const writeProgress = (activeKey) => {
+    run("UPDATE workflow_runs SET steps_json=$steps, artifact_json=$artifact WHERE id=$id", {
+      $id: runId,
+      $steps: json(workflowProgressSteps({ activeKey, completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "executive_day" })),
+      $artifact: json({ progressUpdatedAt: now(), activeStep: activeKey, runType: "executive_day" }),
+    });
+  };
+  const finishProgress = (key, output = "Done", detail = "") => {
+    completedKeys.add(key);
+    stepOutputs[key] = { output, detail };
+  };
+  run(`INSERT INTO workflow_runs (id, label, trigger, run_type, status, started_at, completed_at, steps_json, artifact_json)
+       VALUES ($id, $label, $trigger, 'executive_day', 'running', $started, NULL, $steps, '{}')`, {
+    $id: runId,
+    $label: "Generating executive day brief",
+    $trigger: trigger,
+    $started: started,
+    $steps: json(workflowProgressSteps({ activeKey: "context", completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "executive_day" })),
+  });
+  audit("run.started", "workflow_run", runId, `Trigger: ${trigger}`, { runType: "executive_day" }, "system");
+  try {
+    writeProgress("context");
+    await progressDelay();
+    const context = await buildExecutiveDayContext(options);
+    finishProgress("context", "Executive context loaded", `${context.timezone} · ${context.dateKey}`);
+    writeProgress("calendar");
+    await progressDelay();
+    finishProgress("calendar", `${context.calendarAgenda.length} calendar event${context.calendarAgenda.length === 1 ? "" : "s"} read`, context.connectorDiagnostics.googleCalendar?.error || "Calendar context ready.");
+    writeProgress("linear");
+    await progressDelay();
+    finishProgress("linear", `${context.linearContext.issues.length} Linear issue${context.linearContext.issues.length === 1 ? "" : "s"} read`, context.connectorDiagnostics.linear?.error || "Linear context ready.");
+    writeProgress("commitments");
+    await progressDelay();
+    finishProgress("commitments", `${context.commitments.length} commitment candidate${context.commitments.length === 1 ? "" : "s"} normalized`);
+    writeProgress("risks");
+    await progressDelay();
+    finishProgress("risks", `${context.risks.length} risk/watchout${context.risks.length === 1 ? "" : "s"} detected`);
+    writeProgress("rank");
+    await progressDelay();
+    finishProgress("rank", `${context.rankedDayCandidates.length} day candidate${context.rankedDayCandidates.length === 1 ? "" : "s"} ranked`);
+    const proposedCalendarSchedule = proposedCalendarScheduleFromContext(context);
+    writeProgress("synthesize");
+    await progressDelay();
+    const executiveDayBrief = await synthesizeExecutiveDayBrief({ ...context, proposedCalendarSchedule });
+    finishProgress("synthesize", executiveDayBrief.mode === "model" ? "Executive day brief synthesized" : "Deterministic executive brief rendered", executiveDayBrief.modelError || "");
+    writeProgress("approvals");
+    await progressDelay();
+    const proposedActions = [
+      ...proposedLinearActionsFromContext(context),
+      ...(proposedCalendarSchedule.blocks?.length ? [{
+        title: `Fill ${proposedCalendarSchedule.blocks.length} Pillar Time calendar block${proposedCalendarSchedule.blocks.length === 1 ? "" : "s"} for ${context.dateKey}`,
+        kind: "calendar_schedule",
+        risk: "medium",
+        entityType: "calendar",
+        entityId: proposedCalendarSchedule.calendarId || "primary",
+        payload: {
+          operation: "createScheduleBlocks",
+          dateKey: context.dateKey,
+          timezone: context.timezone,
+          calendarId: proposedCalendarSchedule.calendarId || "primary",
+          blocks: proposedCalendarSchedule.blocks,
+        },
+      }] : []),
+    ];
+    const approvalItems = createApprovalItemsForRun(runId, proposedActions);
+    finishProgress("approvals", `${approvalItems.length} approval-gated action${approvalItems.length === 1 ? "" : "s"} created`, "Generated connector writes require explicit approval.");
+    writeProgress("deliver");
+    await progressDelay();
+    const generatedAt = now();
+    const artifact = {
+      title: executiveDayBrief.headline || `Executive day brief for ${context.dateKey}`,
+      generatedAt,
+      runType: "executive_day",
+      dateKey: context.dateKey,
+      timezone: context.timezone,
+      calendarAgenda: context.calendarAgenda,
+      linearContext: context.linearContext,
+      commitments: context.commitments,
+      rankedDayCandidates: context.rankedDayCandidates,
+      todaysThree: context.todaysThree,
+      risks: context.risks,
+      proposedActions,
+      proposedCalendarSchedule,
+      approvalItems,
+      connectorDiagnostics: context.connectorDiagnostics,
+      coverageNotes: context.coverageNotes,
+      trustedContextEnvelope: context.local.trustedContextEnvelope,
+      executiveDayBrief,
+    };
+    artifact.renderedBrief = renderExecutiveDayBrief(artifact);
+    artifact.onePageBrief = artifact.renderedBrief;
+    artifact.briefDocumentId = saveBriefDocument({ runId, artifact });
+    let telegramDelivery;
+    try {
+      telegramDelivery = await deliverBriefToTelegram({ runId, artifact });
+    } catch (error) {
+      telegramDelivery = { ok: false, error: error.message || "Telegram delivery failed", failedAt: now() };
+      run("UPDATE telegram_settings SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE id=1", { $t: now(), $err: telegramDelivery.error });
+      audit("telegram.delivery_failed", "workflow_run", runId, telegramDelivery.error, {}, "system");
+    }
+    artifact.telegramDelivery = telegramDelivery;
+    finishProgress("deliver", artifact.briefDocumentId ? "Executive artifact and document saved" : "Executive artifact saved", telegramDelivery?.ok ? "Telegram delivered." : telegramDelivery?.reason || telegramDelivery?.error || "Telegram skipped.");
+    const steps = workflowTemplate(configAtStart, "executive_day").map(([key, name, group], index) => ({ n: index + 1, key, name, group, status: "done", ms: 25 + index * 7, output: stepOutputs[key]?.output || "Done", detail: stepOutputs[key]?.detail || "" }));
+    const completed = now();
+    run(`INSERT INTO workflow_runs (id, label, trigger, run_type, status, started_at, completed_at, steps_json, artifact_json)
+         VALUES ($id, $label, $trigger, 'executive_day', 'completed', $started, $completed, $steps, $artifact)
+         ON CONFLICT(id) DO UPDATE SET label=excluded.label, run_type='executive_day', status='completed', completed_at=excluded.completed_at, steps_json=excluded.steps_json, artifact_json=excluded.artifact_json`, {
+      $id: runId, $trigger: trigger, $started: started, $completed: completed, $steps: json(steps), $artifact: json(artifact), $label: artifact.title,
+    });
+    audit("artifact.saved", "workflow_run", runId, "Executive day artifact persisted", { runType: "executive_day" }, "system");
+    return workflowRuns().find((r) => r.id === runId);
+  } catch (error) {
+    const completed = now();
+    const failedSteps = workflowProgressSteps({ activeKey: "", completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "executive_day" });
+    const failedIndex = Math.max(0, failedSteps.findIndex((step) => step.status !== "done"));
+    failedSteps[failedIndex] = { ...failedSteps[failedIndex], status: "error", output: error.message || "Workflow failed", detail: "Executive day generation stopped before saving or delivering a brief." };
+    run(`UPDATE workflow_runs
+         SET status='failed', completed_at=$completed, error=$error, steps_json=$steps, artifact_json=$artifact
+         WHERE id=$id`, {
+      $id: runId,
+      $completed: completed,
+      $error: error.message || "Workflow failed",
+      $steps: json(failedSteps),
+      $artifact: json({ error: error.message || "Workflow failed", failedAt: completed, runType: "executive_day" }),
+    });
+    throw error;
+  }
+}
+
 async function executeWorkflow(trigger = "Manual", options = {}) {
   const runId = options.runId || id("run");
   const started = now();
@@ -5421,21 +6315,21 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
   const writeProgress = (activeKey) => {
     run("UPDATE workflow_runs SET steps_json=$steps, artifact_json=$artifact WHERE id=$id", {
       $id: runId,
-      $steps: json(workflowProgressSteps({ activeKey, completed: completedKeys, outputs: stepOutputs, config: configAtStart })),
-      $artifact: json({ progressUpdatedAt: now(), activeStep: activeKey }),
+      $steps: json(workflowProgressSteps({ activeKey, completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "intelligence" })),
+      $artifact: json({ progressUpdatedAt: now(), activeStep: activeKey, runType: "intelligence" }),
     });
   };
   const finishProgress = (key, output = "Done", detail = "") => {
     completedKeys.add(key);
     stepOutputs[key] = { output, detail };
   };
-  run(`INSERT INTO workflow_runs (id, label, trigger, status, started_at, completed_at, steps_json, artifact_json)
-       VALUES ($id, $label, $trigger, 'running', $started, NULL, $steps, '{}')`, {
+  run(`INSERT INTO workflow_runs (id, label, trigger, run_type, status, started_at, completed_at, steps_json, artifact_json)
+       VALUES ($id, $label, $trigger, 'intelligence', 'running', $started, NULL, $steps, '{}')`, {
     $id: runId,
     $label: "Generating brief",
     $trigger: trigger,
     $started: started,
-    $steps: json(workflowProgressSteps({ activeKey: "fetch", completed: completedKeys, outputs: stepOutputs, config: configAtStart })),
+    $steps: json(workflowProgressSteps({ activeKey: "fetch", completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "intelligence" })),
   });
   audit("run.started", "workflow_run", runId, `Trigger: ${trigger}`, {}, "system");
   try {
@@ -5547,7 +6441,7 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
     : telegramDelivery?.skipped
       ? telegramDelivery.reason
       : telegramDelivery?.error || "Telegram delivery failed");
-  const steps = workflowTemplate().map(([key, name, group], index) => {
+  const steps = workflowTemplate(configAtStart, "intelligence").map(([key, name, group], index) => {
     let output = "Completed with no external mutation";
     let detail = "Deterministic step completed and persisted.";
     if (key === "fetch") {
@@ -5593,9 +6487,9 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
   });
   markItemsUsedInBrief(selectedIssues);
   const completed = now();
-  run(`INSERT INTO workflow_runs (id, label, trigger, status, started_at, completed_at, steps_json, artifact_json)
-       VALUES ($id, $label, $trigger, 'completed', $started, $completed, $steps, $artifact)
-       ON CONFLICT(id) DO UPDATE SET label=excluded.label, status='completed', completed_at=excluded.completed_at, steps_json=excluded.steps_json, artifact_json=excluded.artifact_json`, {
+  run(`INSERT INTO workflow_runs (id, label, trigger, run_type, status, started_at, completed_at, steps_json, artifact_json)
+       VALUES ($id, $label, $trigger, 'intelligence', 'completed', $started, $completed, $steps, $artifact)
+       ON CONFLICT(id) DO UPDATE SET label=excluded.label, run_type='intelligence', status='completed', completed_at=excluded.completed_at, steps_json=excluded.steps_json, artifact_json=excluded.artifact_json`, {
     $id: runId, $trigger: trigger, $started: started, $completed: completed, $steps: json(steps), $artifact: json(artifact),
     $label: artifact.title,
   });
@@ -5603,7 +6497,7 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
   return workflowRuns().find((r) => r.id === runId);
   } catch (error) {
     const completed = now();
-    const failedSteps = workflowProgressSteps({ activeKey: "", completed: completedKeys, outputs: stepOutputs, config: configAtStart });
+    const failedSteps = workflowProgressSteps({ activeKey: "", completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "intelligence" });
     const failedIndex = Math.max(0, failedSteps.findIndex((step) => step.status !== "done"));
     failedSteps[failedIndex] = {
       ...failedSteps[failedIndex],
@@ -5618,7 +6512,7 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
       $completed: completed,
       $error: error.message || "Workflow failed",
       $steps: json(failedSteps),
-      $artifact: json({ error: error.message || "Workflow failed", failedAt: completed }),
+      $artifact: json({ error: error.message || "Workflow failed", failedAt: completed, runType: "intelligence" }),
     });
     throw error;
   }
@@ -6465,9 +7359,10 @@ app.patch("/api/documents/:id", (req, res) => {
 
 app.post("/api/workflow-runs", async (req, res) => {
   const trigger = req.body?.trigger || "Manual";
+  const runType = req.body?.runType === "intelligence" ? "intelligence" : "executive_day";
   const runId = id("run");
   try {
-    const promise = executeWorkflow(trigger, { runId });
+    const promise = runType === "intelligence" ? executeWorkflow(trigger, { runId }) : executeExecutiveDayWorkflow(trigger, { runId });
     if (req.body?.wait === true) {
       const run = await promise;
       return res.json({ state: state(), run });
@@ -6479,6 +7374,30 @@ app.post("/api/workflow-runs", async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message || "Workflow failed", state: state() });
   }
+});
+
+app.post("/api/day-briefs", async (req, res) => {
+  const trigger = req.body?.trigger || "Manual · Executive day brief";
+  const runId = id("run");
+  try {
+    const promise = executeExecutiveDayWorkflow(trigger, { runId, dateKey: req.body?.dateKey, timezone: req.body?.timezone });
+    if (req.body?.wait === true) {
+      const run = await promise;
+      return res.json({ state: state(), run });
+    }
+    promise.catch((error) => {
+      audit("run.failed", "workflow_run", runId, error.message || "Executive day workflow failed", {}, "system");
+    });
+    res.status(202).json({ state: state(), run: workflowRuns().find((r) => r.id === runId) });
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Executive day workflow failed", state: state() });
+  }
+});
+
+app.get("/api/day-briefs/:id", (req, res) => {
+  const run = workflowRuns().find((item) => item.id === req.params.id && item.runType === "executive_day");
+  if (!run) return res.status(404).json({ error: "Executive day brief not found", state: state() });
+  res.json({ state: state(), run });
 });
 
 app.get("/api/workflow-runs/:id", (req, res) => {
@@ -6514,6 +7433,82 @@ app.patch("/api/approvals/:id", (req, res) => {
   });
   audit(`approval.${status}`, "approval", req.params.id, req.body?.note || status);
   res.json(state());
+});
+
+async function executeApprovalItem(current, { by = "operator" } = {}) {
+  if (!current) throw new Error("Approval not found");
+  if (current.status !== "approved") throw new Error("Approve this action before executing it.");
+  const payload = parse(current.payload_json, {});
+  if (current.kind === "calendar_schedule") {
+    if (payload.operation !== "createScheduleBlocks") throw new Error(`Unsupported calendar approval operation: ${payload.operation || "missing"}`);
+    const blocks = Array.isArray(payload.blocks) ? payload.blocks : [];
+    if (!blocks.length) throw new Error("Calendar schedule approval has no blocks to create.");
+    const result = { operation: payload.operation, createdEvents: [] };
+    for (const block of blocks) {
+      const event = await createGoogleCalendarEvent({
+        calendarId: block.calendarId || payload.calendarId || "primary",
+        summary: block.summary || block.title,
+        description: block.description || "",
+        start: block.start,
+        end: block.end,
+        timezone: block.timezone || payload.timezone || "America/Denver",
+        extendedProperties: {
+          pillarTimeApprovalId: current.id,
+          pillarTimeBlockId: block.id || "",
+          pillarTimeCategoryId: block.categoryId || "",
+        },
+      });
+      result.createdEvents.push({ id: event.id, htmlLink: event.htmlLink, summary: event.summary, start: event.start, end: event.end });
+    }
+    run("UPDATE approval_items SET status='executed', resolved_by=$by, resolved_at=$t, resolution_note=$note WHERE id=$id", {
+      $id: current.id,
+      $by: by,
+      $t: now(),
+      $note: `Created ${result.createdEvents.length} Google Calendar event${result.createdEvents.length === 1 ? "" : "s"}.`,
+    });
+    audit("approval.executed", "approval", current.id, "Executed Google Calendar schedule approval", result, by);
+    return result;
+  }
+  if (current.kind !== "linear_action") throw new Error(`Unsupported approval kind: ${current.kind}`);
+  let result;
+  if (payload.operation === "addComment") {
+    if (!payload.issueId || !String(payload.body || "").trim()) throw new Error("Linear comment action is missing issueId or body.");
+    const comment = await linearClient().addComment(payload.issueId, String(payload.body));
+    const issue = payload.verification?.refetchIssue ? await linearClient().issue(payload.issueId) : null;
+    result = { operation: payload.operation, comment, issue };
+  } else if (payload.operation === "updateIssue") {
+    if (!payload.issueId || !payload.input) throw new Error("Linear update action is missing issueId or input.");
+    const issue = await linearClient().updateIssue(payload.issueId, payload.input);
+    result = { operation: payload.operation, issue };
+  } else if (payload.operation === "createIssue") {
+    if (!payload.input?.teamId || !payload.input?.title) throw new Error("Linear create action is missing teamId or title.");
+    const issue = await linearClient().createIssue(payload.input);
+    result = { operation: payload.operation, issue };
+  } else {
+    throw new Error(`Unsupported Linear approval operation: ${payload.operation || "missing"}`);
+  }
+  run("UPDATE approval_items SET status='executed', resolved_by=$by, resolved_at=$t, resolution_note=$note WHERE id=$id", {
+    $id: current.id,
+    $by: by,
+    $t: now(),
+    $note: `Executed ${payload.operation} and verified with Linear.`,
+  });
+  audit("approval.executed", "approval", current.id, `Executed Linear ${payload.operation}`, result, by);
+  return result;
+}
+
+app.post("/api/approvals/:id/execute", async (req, res) => {
+  const current = get("SELECT * FROM approval_items WHERE id=$id", { $id: req.params.id });
+  if (!current) return res.status(404).json({ error: "Approval not found", state: state() });
+  try {
+    const result = await executeApprovalItem(current, { by: req.body?.by || "operator" });
+    res.json({ result, state: state() });
+  } catch (error) {
+    const payload = parse(current.payload_json, {});
+    run("UPDATE approval_items SET resolution_note=$note WHERE id=$id", { $id: req.params.id, $note: error.message || "Linear approval execution failed" });
+    audit("approval.execute_failed", "approval", req.params.id, error.message || "Approval execution failed", { payload, kind: current.kind }, req.body?.by || "operator");
+    res.status(400).json({ error: error.message || "Approval execution failed", state: state() });
+  }
 });
 
 app.patch("/api/telegram", (req, res) => {
@@ -7137,7 +8132,37 @@ app.post("/api/telegram/commands", async (req, res) => {
       result = runId ? formatDeliberation(await deliberateWorkflowRun(runId)) : "No briefs have been generated yet.";
     }
     if (command.startsWith("/analyze")) result = `Ad-hoc analysis requires configured model credentials. Request recorded: ${command}`;
-    if (command.startsWith("/approve") || command.startsWith("/reject") || command.startsWith("/add_source") || command.startsWith("/add_lens")) result = "State-changing Telegram commands are adapter-backed and require authenticated Telegram user context.";
+    if (command.startsWith("/approve")) {
+      const [, requestedApprovalId] = command.split(/\s+/);
+      const current = requestedApprovalId
+        ? get("SELECT * FROM approval_items WHERE id=$id", { $id: requestedApprovalId })
+        : get("SELECT * FROM approval_items WHERE status='pending' ORDER BY created_at ASC LIMIT 1");
+      if (!current) result = "No pending approval found.";
+      else {
+        run("UPDATE approval_items SET status='approved', resolved_by='telegram', resolved_at=$t, resolution_note='Approved from Telegram command.' WHERE id=$id", { $id: current.id, $t: now() });
+        audit("approval.approved", "approval", current.id, "Approved from Telegram command.", {}, "telegram");
+        const approved = get("SELECT * FROM approval_items WHERE id=$id", { $id: current.id });
+        if (approved.kind === "calendar_schedule") {
+          const executed = await executeApprovalItem(approved, { by: "telegram" });
+          result = `Approved and filled calendar: ${executed.createdEvents?.length || 0} event(s) created.`;
+        } else {
+          result = `Approved ${approved.title}. Execute it from Pillar Time when ready.`;
+        }
+      }
+    }
+    if (command.startsWith("/reject")) {
+      const [, requestedApprovalId] = command.split(/\s+/);
+      const current = requestedApprovalId
+        ? get("SELECT * FROM approval_items WHERE id=$id", { $id: requestedApprovalId })
+        : get("SELECT * FROM approval_items WHERE status='pending' ORDER BY created_at ASC LIMIT 1");
+      if (!current) result = "No pending approval found.";
+      else {
+        run("UPDATE approval_items SET status='rejected', resolved_by='telegram', resolved_at=$t, resolution_note='Rejected from Telegram command.' WHERE id=$id", { $id: current.id, $t: now() });
+        audit("approval.rejected", "approval", current.id, "Rejected from Telegram command.", {}, "telegram");
+        result = `Rejected ${current.title}.`;
+      }
+    }
+    if (command.startsWith("/add_source") || command.startsWith("/add_lens")) result = "That Telegram command is not available yet.";
     const next = [{ command, result, ts: now() }, ...recent].slice(0, 20);
     run("UPDATE telegram_settings SET recent_commands=$recent, last_checked_at=$t WHERE id=1", { $recent: json(next), $t: now() });
     audit("telegram.command", "telegram_settings", "1", command, { result });

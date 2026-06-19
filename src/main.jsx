@@ -46,7 +46,7 @@ import "./styles.css";
 
 const nav = [
   ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
-  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"]]],
+  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["linear", "Linear"], ["approvals", "Approvals"], ["trustedContext", "Trusted Context"]]],
   ["Configure", [["briefSetup", "Brief Setup"], ["lenses", "Perspective Lenses"]]],
   ["System", [["settings", "Settings"]]],
 ];
@@ -122,7 +122,7 @@ const sourceDefinitions = {
     },
   },
   Calendar: {
-    credential: "Requires Google Calendar OAuth. Pillar Time uses read-only access to include today's agenda in your brief.",
+    credential: "Requires Google Calendar OAuth. Pillar Time reads your agenda and can create approved schedule blocks around existing events.",
     modes: {
       google: { label: "Selected Google calendars", fields: [] },
     },
@@ -315,6 +315,7 @@ function Icon({ name }) {
     councils: Users,
     telegram: Send,
     audit: ShieldCheck,
+    approvals: Check,
     settings: SettingsIcon,
     plus: Plus,
     run: Sparkles,
@@ -908,7 +909,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     if (!capture.trim()) return;
     mutate("/api/time/tasks", { title: capture.trim(), source: "quick-capture" }).then(() => setCapture(""));
   };
-  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, and the intelligence brief." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate Intelligence</Button>}>
+  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, and executive day planning." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Brief</Button>}>
     <div className="metric-grid">
       <Metric label="Today" value={time.todayKey || "-"} sub={time.preferences?.timezone || "local"} />
       <Metric label="Today’s Three" value={activeCommitments.filter((item) => item.status === "active").length} sub="accepted commitments" />
@@ -1783,8 +1784,30 @@ function Workflow({ state, runWorkflow }) {
 }
 
 function Approvals({ state, mutate }) {
+  const [busyId, setBusyId] = React.useState("");
+  const approveAndExecute = async (approval) => {
+    setBusyId(approval.id);
+    try {
+      await api(`/api/approvals/${approval.id}`, { method: "PATCH", body: JSON.stringify({ status: "approved" }) });
+      await mutate(`/api/approvals/${approval.id}/execute`, { by: "operator" });
+    } catch (error) {
+      alert(error.message || "Approval execution failed");
+    } finally {
+      setBusyId("");
+    }
+  };
+  const executeApproved = async (approval) => {
+    setBusyId(approval.id);
+    try {
+      await mutate(`/api/approvals/${approval.id}/execute`, { by: "operator" });
+    } catch (error) {
+      alert(error.message || "Approval execution failed");
+    } finally {
+      setBusyId("");
+    }
+  };
   return <Page title="Approvals" desc="Human review is the center of the console. No public posting or document mutation happens automatically." wide>
-    <div className="card table-card">{state.approvals.length ? <table><thead><tr><th>Item</th><th>Risk</th><th>Status</th><th>Run</th><th></th></tr></thead><tbody>{state.approvals.map((a) => <tr key={a.id}><td><strong>{a.title}</strong><small>{a.kind}</small></td><td><Badge tone={a.risk === "high" ? "err" : a.risk === "medium" ? "warn" : "muted"}>{a.risk}</Badge></td><td><Badge tone={a.status === "approved" ? "ok" : a.status === "rejected" ? "err" : "warn"}>{a.status}</Badge></td><td className="mono">{a.runId || "manual"}</td><td>{a.status === "pending" && <div className="row"><Button icon="check" onClick={() => mutate(`/api/approvals/${a.id}`, { status: "approved" }, "PATCH")}>Approve</Button><Button icon="x" onClick={() => mutate(`/api/approvals/${a.id}`, { status: "rejected" }, "PATCH")}>Reject</Button></div>}</td></tr>)}</tbody></table> : <Empty icon="approvals" title="No approvals yet" body="Run the workflow or submit state-changing Telegram requests to create reviewable items." />}</div>
+    <div className="card table-card">{state.approvals.length ? <table><thead><tr><th>Item</th><th>Risk</th><th>Status</th><th>Run</th><th></th></tr></thead><tbody>{state.approvals.map((a) => <tr key={a.id}><td><strong>{a.title}</strong><small>{a.kind}</small></td><td><Badge tone={a.risk === "high" ? "err" : a.risk === "medium" ? "warn" : "muted"}>{a.risk}</Badge></td><td><Badge tone={a.status === "approved" ? "ok" : a.status === "rejected" ? "err" : a.status === "executed" ? "ok" : "warn"}>{a.status}</Badge></td><td className="mono">{a.runId || "manual"}</td><td>{a.status === "pending" && <div className="row">{a.kind === "calendar_schedule" ? <Button icon="calendar" kind="primary" disabled={busyId === a.id} onClick={() => approveAndExecute(a)}>{busyId === a.id ? "Filling..." : "Approve & Fill"}</Button> : <Button icon="check" disabled={busyId === a.id} onClick={() => mutate(`/api/approvals/${a.id}`, { status: "approved" }, "PATCH")}>Approve</Button>}<Button icon="x" disabled={busyId === a.id} onClick={() => mutate(`/api/approvals/${a.id}`, { status: "rejected" }, "PATCH")}>Reject</Button></div>}{a.status === "approved" && <Button icon={a.kind === "calendar_schedule" ? "calendar" : "check"} disabled={busyId === a.id} onClick={() => executeApproved(a)}>{busyId === a.id ? "Executing..." : "Execute"}</Button>}</td></tr>)}</tbody></table> : <Empty icon="approvals" title="No approvals yet" body="Run the workflow or submit state-changing Telegram requests to create reviewable items." />}</div>
   </Page>;
 }
 
@@ -3897,7 +3920,7 @@ function App() {
       return nextStatus;
     };
     try {
-      const result = await api("/api/workflow-runs", { method: "POST", body: JSON.stringify({ trigger: "Manual · Generate and deliver brief" }) });
+      const result = await api("/api/workflow-runs", { method: "POST", body: JSON.stringify({ trigger: "Manual · Generate executive day brief", runType: "executive_day" }) });
       let run = result.run;
       let nextStatus = applyRunState(run);
       while (run?.id && nextStatus === "running") {
@@ -3930,6 +3953,7 @@ function App() {
     briefSetup: <BriefSetup state={state} mutate={mutate} />,
     sources: <Sources state={state} mutate={mutate} />,
     linear: <Linear state={state} refresh={refresh} />,
+    approvals: <Approvals state={state} mutate={mutate} />,
     trustedContext: <TrustedContext state={state} mutate={mutate} />,
     lenses: <Lenses state={state} mutate={mutate} />,
     telegram: <Telegram state={state} mutate={mutate} refresh={refresh} />,
