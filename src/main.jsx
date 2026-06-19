@@ -1833,6 +1833,47 @@ function BriefGenerationProgress({ run }) {
   </div>;
 }
 
+function ProposedCalendarStrip({ artifact = {}, refresh }) {
+  const [busy, setBusy] = React.useState(false);
+  const [message, setMessage] = React.useState("");
+  const blocks = artifact.proposedCalendarSchedule?.blocks || [];
+  const approval = (artifact.approvalItems || []).find((item) => item.kind === "calendar_schedule");
+  if (!blocks.length) return null;
+  const approveCalendar = async () => {
+    if (!approval?.id) {
+      setMessage("No calendar approval item was saved for this schedule.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      await api(`/api/approvals/${approval.id}`, { method: "PATCH", body: JSON.stringify({ status: "approved" }) });
+      await api(`/api/approvals/${approval.id}/execute`, { method: "POST", body: JSON.stringify({ by: "operator" }) });
+      await refresh?.();
+      setMessage("Calendar filled.");
+    } catch (error) {
+      setMessage(error.message || "Could not fill the calendar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const fmt = (value) => value ? new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+  return <section className="proposed-calendar-strip" aria-label="Proposed calendar">
+    <div className="proposed-calendar-head">
+      <div><strong>Proposed calendar</strong><span>{blocks.length} protected block{blocks.length === 1 ? "" : "s"} ready to place around your real events.</span></div>
+      <Button icon="calendar" kind="primary" onClick={approveCalendar} disabled={busy || approval?.status === "executed"}>{busy ? "Filling..." : approval?.status === "executed" ? "Filled" : "Approve Calendar"}</Button>
+    </div>
+    <div className="calendar-tile-row">
+      {blocks.map((block) => <div className="calendar-tile" key={block.id || `${block.start}-${block.summary}`}>
+        <small>{fmt(block.start)}-{fmt(block.end)}</small>
+        <strong>{block.categoryName || "Focus block"}</strong>
+        <span>{block.title || block.summary}</span>
+      </div>)}
+    </div>
+    {message && <p className={message.includes("filled") ? "ok-text" : "warn-text"}>{message}</p>}
+  </section>;
+}
+
 function Briefs({ state, runWorkflow, refresh }) {
   const [selectedId, setSelectedId] = React.useState(state.workflowRuns[0]?.id || "");
   const [query, setQuery] = React.useState("");
@@ -1842,6 +1883,11 @@ function Briefs({ state, runWorkflow, refresh }) {
   const [audioPlaying, setAudioPlaying] = React.useState(false);
   const [deliberationBusy, setDeliberationBusy] = React.useState(false);
   const [deliberationMessage, setDeliberationMessage] = React.useState("");
+  const [contextOpen, setContextOpen] = React.useState(false);
+  const [contextText, setContextText] = React.useState("");
+  const [contextBusy, setContextBusy] = React.useState(false);
+  const [contextMessage, setContextMessage] = React.useState("");
+  const [voiceBusy, setVoiceBusy] = React.useState(false);
   const audioRef = React.useRef(null);
   React.useEffect(() => {
     if (!selectedId && state.workflowRuns[0]) setSelectedId(state.workflowRuns[0].id);
@@ -1855,6 +1901,7 @@ function Briefs({ state, runWorkflow, refresh }) {
     setAudioMessage("");
     setAudioPlaying(false);
     setDeliberationMessage("");
+    setContextMessage("");
   }, [selected?.id, selected?.artifact?.audio?.url]);
   React.useEffect(() => () => audioRef.current?.pause(), []);
   const playAudioUrl = async (url) => {
@@ -1911,6 +1958,56 @@ function Briefs({ state, runWorkflow, refresh }) {
       setDeliberationBusy(false);
     }
   };
+  const captureVoiceContext = () => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setContextMessage("Voice dictation is not available in this browser. Type the missing context instead.");
+      return;
+    }
+    const recognition = new Recognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.onstart = () => setVoiceBusy(true);
+    recognition.onerror = (event) => {
+      setVoiceBusy(false);
+      setContextMessage(event.error ? `Voice note failed: ${event.error}` : "Voice note failed.");
+    };
+    recognition.onend = () => setVoiceBusy(false);
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results || []).map((result) => result[0]?.transcript || "").join(" ").trim();
+      if (transcript) setContextText((current) => [current.trim(), transcript].filter(Boolean).join("\n"));
+    };
+    recognition.start();
+  };
+  const regenerateWithContext = async () => {
+    if (!selected || !contextText.trim()) {
+      setContextMessage("Add the missing context first.");
+      return;
+    }
+    setContextBusy(true);
+    setContextMessage("");
+    try {
+      const result = await api("/api/workflow-runs", {
+        method: "POST",
+        body: JSON.stringify({
+          trigger: "Manual · Regenerate executive day brief with added context",
+          runType: "executive_day",
+          wait: true,
+          additionalContext: contextText.trim(),
+          basedOnRunId: selected.id,
+        }),
+      });
+      await refresh?.();
+      if (result.run?.id) setSelectedId(result.run.id);
+      setContextText("");
+      setContextOpen(false);
+      setContextMessage("Brief regenerated with the added context.");
+    } catch (error) {
+      setContextMessage(error.message || "Could not regenerate the brief.");
+    } finally {
+      setContextBusy(false);
+    }
+  };
   const avgSignals = state.workflowRuns.length
     ? Math.round(state.workflowRuns.reduce((sum, run) => sum + (run.artifact?.selectedIssues?.length || 0), 0) / state.workflowRuns.length)
     : 0;
@@ -1938,10 +2035,21 @@ function Briefs({ state, runWorkflow, refresh }) {
             <Button icon="volume" onClick={playBriefAudio} disabled={audioBusy || state.tts?.status !== "ready"}>{audioBusy ? "Generating..." : audioPlaying ? "Pause" : audioUrl ? "Play audio" : "Generate audio"}</Button>
             {audioUrl && <Button icon="restart" onClick={restartBriefAudio} disabled={audioBusy || state.tts?.status !== "ready"}>Restart</Button>}
             <Button icon="lenses" onClick={() => deliberateBrief(false)} disabled={deliberationBusy || !(state.briefConfig?.perspectiveLenses || []).some((lens) => lens.enabled !== false)}>{deliberationBusy ? "Deliberating..." : selected.artifact?.deliberation ? "Show deliberation" : "Deliberate brief"}</Button>
+            <Button icon="pencil" onClick={() => setContextOpen((open) => !open)}>Add context & regenerate</Button>
             {state.tts?.status !== "ready" && <span>Set up ElevenLabs in Settings to play briefs aloud.</span>}
           </div>
           {audioMessage && <p className={audioMessage.includes("generated") ? "ok-text" : "warn-text"}>{audioMessage}</p>}
           {deliberationMessage && <p className={deliberationMessage.includes("saved") || deliberationMessage.includes("regenerated") ? "ok-text" : "warn-text"}>{deliberationMessage}</p>}
+          {contextOpen && <div className="context-regenerate-panel">
+            <label>Missing context</label>
+            <textarea value={contextText} onChange={(event) => setContextText(event.target.value)} rows={4} placeholder="Tell Pillar Time what it missed, then regenerate the day plan." />
+            <div className="row">
+              <Button icon="mic" onClick={captureVoiceContext} disabled={voiceBusy}>{voiceBusy ? "Listening..." : "Voice note"}</Button>
+              <Button icon="restart" kind="primary" onClick={regenerateWithContext} disabled={contextBusy}>{contextBusy ? "Regenerating..." : "Regenerate"}</Button>
+            </div>
+          </div>}
+          {contextMessage && <p className={contextMessage.includes("regenerated") ? "ok-text" : "warn-text"}>{contextMessage}</p>}
+          <ProposedCalendarStrip artifact={selected.artifact || {}} refresh={refresh} />
           <Markdown text={selected.artifact?.onePageBrief || ""} />
           {selected.artifact?.deliberation && <DeliberationPanel deliberation={selected.artifact.deliberation} onRegenerate={() => deliberateBrief(true)} busy={deliberationBusy} />}
         </> : <Empty icon="briefs" title="No brief selected" body="Choose a brief from the list." />}

@@ -1172,6 +1172,56 @@ span.section-target-select {
   background: rgba(255,255,255,.46);
 }
 .brief-note span, .muted-copy { color: var(--muted); }
+.proposed-calendar-strip {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  margin: 0 0 18px;
+  background: rgba(255,255,255,.62);
+}
+.proposed-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.proposed-calendar-head div {
+  display: grid;
+  gap: 3px;
+}
+.proposed-calendar-head span {
+  color: var(--muted);
+  font-size: 14px;
+}
+.calendar-tile-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.calendar-tile {
+  display: grid;
+  gap: 5px;
+  min-height: 112px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fffaf6;
+}
+.calendar-tile small {
+  color: var(--muted);
+  font: 800 11px var(--sans);
+  text-transform: uppercase;
+}
+.calendar-tile strong {
+  font: 700 16px/1.15 var(--serif);
+}
+.calendar-tile span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
 .issue-list {
   display: grid;
   gap: 12px;
@@ -2628,6 +2678,26 @@ span.section-target-select {
   color: var(--muted);
   font-size: 14px;
 }
+.context-regenerate-panel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  margin: 0 0 16px;
+  background: rgba(255,255,255,.58);
+}
+.context-regenerate-panel label {
+  font: 800 12px var(--sans);
+  letter-spacing: .06em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.context-regenerate-panel textarea {
+  width: 100%;
+  min-height: 104px;
+  resize: vertical;
+}
 .telegram-pairing {
   display: grid;
   gap: 16px;
@@ -2744,7 +2814,7 @@ span.section-target-select {
   }
   .brand-sub { display: none; }
   .hero { min-height: 360px; padding: 40px 32px; }
-  .home-grid, .split, .two, .wf-layout, .metric-grid, .time-layout, .briefs-layout, .setup-layout, .brief-stat-bar, .sources-workspace, .lens-workspace, .council-workspace, .analyzer-card, .perspective-prompt-row { grid-template-columns: 1fr; }
+  .home-grid, .split, .two, .wf-layout, .metric-grid, .time-layout, .briefs-layout, .setup-layout, .brief-stat-bar, .sources-workspace, .lens-workspace, .council-workspace, .analyzer-card, .perspective-prompt-row, .calendar-tile-row { grid-template-columns: 1fr; }
   .analyzer-card .field:nth-of-type(n+3), .analyzer-card .btn { grid-column: 1; }
   .brief-stat-bar .metric { border-right: 0; border-bottom: 1px solid var(--line); }
   .brief-stat-bar .metric:last-child { border-bottom: 0; }

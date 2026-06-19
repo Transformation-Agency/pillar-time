@@ -65,6 +65,7 @@ const audioDir = path.join(dataDir, "audio");
 fs.mkdirSync(audioDir, { recursive: true });
 const modelsDir = path.join(dataDir, "models");
 fs.mkdirSync(modelsDir, { recursive: true });
+const PRIMARY_CALENDAR_IDS = new Set(["primary", "pjacooper@gmail.com", "paul@transformationagency.com"]);
 
 function backupDatabaseBeforePillarTimeMigration() {
   const legacyPath = path.join(dataDir, "pillar-brief.sqlite");
@@ -2339,6 +2340,24 @@ function eventDisplayTime(event = {}) {
   return endText ? `${startText}-${endText}` : startText;
 }
 
+function calendarRoleForId(calendarId = "") {
+  return PRIMARY_CALENDAR_IDS.has(String(calendarId || "").toLowerCase()) ? "primary" : "context";
+}
+
+function isAllDayCalendarEvent(event = {}) {
+  if (event.allDay) return true;
+  if (event.start?.date && !event.start?.dateTime) return true;
+  const start = String(event.start || "");
+  const end = String(event.end || "");
+  return /^\d{4}-\d{2}-\d{2}$/.test(start) || /^\d{4}-\d{2}-\d{2}$/.test(end);
+}
+
+function isPrimaryBlockingCalendarEvent(event = {}) {
+  if (isAllDayCalendarEvent(event)) return false;
+  if (!event.calendarId) return true;
+  return event.calendarRole === "primary" || PRIMARY_CALENDAR_IDS.has(String(event.calendarId || "").toLowerCase());
+}
+
 function formatCalendarEventBody(event = {}, source = {}, config = {}) {
   const parts = [
     `Time: ${eventDisplayTime(event)}`,
@@ -2357,19 +2376,24 @@ function formatCalendarEventBody(event = {}, source = {}, config = {}) {
 }
 
 function calendarAgendaFromEvents(events = [], source = {}, config = {}) {
-  return events.map((event) => ({
-    id: event.id,
-    title: event.summary || "Untitled event",
-    calendar: source.name,
-    calendarId: config.calendarId || "primary",
-    start: eventDateTimeValue(event.start),
-    end: eventDateTimeValue(event.end),
-    time: eventDisplayTime(event),
-    location: event.location || "",
-    attendees: config.includeAttendees === false ? [] : (event.attendees || []).slice(0, 12).map((attendee) => attendee.displayName || attendee.email).filter(Boolean),
-    description: config.includeDescriptions ? stripHtml(event.description || "").slice(0, 1000) : "",
-    htmlLink: event.htmlLink || "",
-  }));
+  return events.map((event) => {
+    const calendarId = event.pillarCalendarId || config.calendarId || "primary";
+    return {
+      id: event.id,
+      title: event.summary || "Untitled event",
+      calendar: source.name,
+      calendarId,
+      calendarRole: calendarRoleForId(calendarId),
+      allDay: isAllDayCalendarEvent(event),
+      start: eventDateTimeValue(event.start),
+      end: eventDateTimeValue(event.end),
+      time: eventDisplayTime(event),
+      location: event.location || "",
+      attendees: config.includeAttendees === false ? [] : (event.attendees || []).slice(0, 12).map((attendee) => attendee.displayName || attendee.email).filter(Boolean),
+      description: config.includeDescriptions ? stripHtml(event.description || "").slice(0, 1000) : "",
+      htmlLink: event.htmlLink || "",
+    };
+  });
 }
 
 async function fetchGoogleCalendarEventsForCalendar({ source, calendarId, accessToken, config }) {
@@ -5659,6 +5683,8 @@ async function fetchExecutiveCalendarAgenda({ timezone = "America/Denver" } = {}
     diagnostics.succeeded = true;
     diagnostics.eventCount = events.length;
     diagnostics.calendarIds = selectedCalendarIds;
+    diagnostics.primaryCalendarIds = selectedCalendarIds.filter((calendarId) => calendarRoleForId(calendarId) === "primary");
+    diagnostics.contextCalendarIds = selectedCalendarIds.filter((calendarId) => calendarRoleForId(calendarId) !== "primary");
     run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now() });
     return { agenda: dedupeCalendarAgenda(calendarAgendaFromEvents(events, source, config)), diagnostics };
   } catch (error) {
@@ -5744,6 +5770,7 @@ function buildExecutiveCandidates({ calendarAgenda = [], linearContext = {}, loc
     });
   }
   for (const event of calendarAgenda) {
+    if (!isPrimaryBlockingCalendarEvent(event)) continue;
     if (/meet|call|huddle|checkpoint|review|planning|interview|sync|standup/i.test(event.title || "")) {
       candidates.push({
         id: `calendar:${event.id || event.htmlLink || event.title}`,
@@ -5819,7 +5846,7 @@ function buildExecutiveCandidates({ calendarAgenda = [], linearContext = {}, loc
 
 function detectExecutiveRisks({ calendarAgenda = [], linearContext = {}, local = {}, connectorDiagnostics = {}, dateKey, timezone }) {
   const risks = [];
-  const sortedEvents = [...calendarAgenda].filter((event) => event.start && event.end).sort((a, b) => toDateMs(a.start) - toDateMs(b.start));
+  const sortedEvents = [...calendarAgenda].filter((event) => event.start && event.end && isPrimaryBlockingCalendarEvent(event)).sort((a, b) => toDateMs(a.start) - toDateMs(b.start));
   let meetingMinutes = 0;
   for (let i = 0; i < sortedEvents.length; i += 1) {
     const current = sortedEvents[i];
@@ -5895,6 +5922,7 @@ async function synthesizeExecutiveDayBrief(context) {
       "Produce a concise executive coaching session grounded only in the provided JSON.",
       `Speak directly to ${ownerName} in second person. This is not a news report and not a formal memo.`,
       DEFAULT_EXECUTIVE_COACHING_VOICE,
+      "If additionalContext is present, treat it as the owner's live correction for this run and adjust the plan accordingly.",
       "Separate verified facts, inferred risks, suggested actions, pending approvals, and missing information.",
       "Do not write a news report. Do not introduce external news unless explicitly present in the input.",
       "For each top recommendation, explain why it is highest leverage and what tension it relieves.",
@@ -5909,6 +5937,7 @@ async function synthesizeExecutiveDayBrief(context) {
         selfStatement,
         voiceRules: config.voiceRules || DEFAULT_EXECUTIVE_COACHING_VOICE,
       },
+      additionalContext: context.additionalContext || context.local?.additionalContext || "",
       requiredJsonShape: {
         headline: "string",
         coachingOpen: ["string"],
@@ -5998,6 +6027,7 @@ function localDateTime(dateKey, hhmm = "09:00") {
 
 function calendarBusyIntervals({ calendarAgenda = [], dateKey, timezone = "America/Denver", bufferMinutes = 0 }) {
   return calendarAgenda
+    .filter((event) => isPrimaryBlockingCalendarEvent(event))
     .map((event) => ({ start: toDateMs(event.start), end: toDateMs(event.end), title: event.title || "" }))
     .filter((event) => event.start && event.end && sameLocalDate(event.start, dateKey, timezone))
     .map((event) => ({ ...event, start: event.start - bufferMinutes * 60000, end: event.end + bufferMinutes * 60000 }))
@@ -6131,7 +6161,7 @@ function createApprovalItemsForRun(runId, proposedActions = []) {
   return created;
 }
 
-async function buildExecutiveDayContext({ dateKey, timezone } = {}) {
+async function buildExecutiveDayContext({ dateKey, timezone, additionalContext = "", basedOnRunId = "" } = {}) {
   const prefs = timePreferences();
   const effectiveTimezone = timezone || prefs.timezone || "America/Denver";
   const effectiveDateKey = dateKey || localDateKey(new Date(), effectiveTimezone);
@@ -6140,6 +6170,8 @@ async function buildExecutiveDayContext({ dateKey, timezone } = {}) {
   const sourceCount = sources().filter((source) => source.status === "active" && source.type !== "Calendar").length;
   const local = {
     preferences: prefs,
+    additionalContext: String(additionalContext || "").trim(),
+    basedOnRunId: String(basedOnRunId || "").trim(),
     tasks: timeTasks(),
     commitments: commitmentRowsForExecutiveDay({ dateKey: effectiveDateKey }),
     dailyCommitments: dailyCommitments(effectiveDateKey),
@@ -6166,7 +6198,7 @@ async function buildExecutiveDayContext({ dateKey, timezone } = {}) {
   const todaysThree = rankedDayCandidates.slice(0, 3);
   const risks = detectExecutiveRisks({ calendarAgenda: calendar.agenda, linearContext, local, connectorDiagnostics, dateKey: effectiveDateKey, timezone: effectiveTimezone });
   const coverageNotes = buildCoverageNotes({ connectorDiagnostics, sourceCount });
-  return { dateKey: effectiveDateKey, timezone: effectiveTimezone, calendarAgenda: calendar.agenda, linearContext, local, commitments: local.commitments, rankedDayCandidates, todaysThree, risks, connectorDiagnostics, coverageNotes };
+  return { dateKey: effectiveDateKey, timezone: effectiveTimezone, additionalContext: local.additionalContext, basedOnRunId: local.basedOnRunId, calendarAgenda: calendar.agenda, linearContext, local, commitments: local.commitments, rankedDayCandidates, todaysThree, risks, connectorDiagnostics, coverageNotes };
 }
 
 async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
@@ -6251,6 +6283,8 @@ async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
       runType: "executive_day",
       dateKey: context.dateKey,
       timezone: context.timezone,
+      additionalContext: context.additionalContext,
+      basedOnRunId: context.basedOnRunId,
       calendarAgenda: context.calendarAgenda,
       linearContext: context.linearContext,
       commitments: context.commitments,
@@ -7361,8 +7395,15 @@ app.post("/api/workflow-runs", async (req, res) => {
   const trigger = req.body?.trigger || "Manual";
   const runType = req.body?.runType === "intelligence" ? "intelligence" : "executive_day";
   const runId = id("run");
+  const executiveOptions = {
+    runId,
+    dateKey: req.body?.dateKey,
+    timezone: req.body?.timezone,
+    additionalContext: req.body?.additionalContext,
+    basedOnRunId: req.body?.basedOnRunId,
+  };
   try {
-    const promise = runType === "intelligence" ? executeWorkflow(trigger, { runId }) : executeExecutiveDayWorkflow(trigger, { runId });
+    const promise = runType === "intelligence" ? executeWorkflow(trigger, { runId }) : executeExecutiveDayWorkflow(trigger, executiveOptions);
     if (req.body?.wait === true) {
       const run = await promise;
       return res.json({ state: state(), run });
@@ -7380,7 +7421,7 @@ app.post("/api/day-briefs", async (req, res) => {
   const trigger = req.body?.trigger || "Manual · Executive day brief";
   const runId = id("run");
   try {
-    const promise = executeExecutiveDayWorkflow(trigger, { runId, dateKey: req.body?.dateKey, timezone: req.body?.timezone });
+    const promise = executeExecutiveDayWorkflow(trigger, { runId, dateKey: req.body?.dateKey, timezone: req.body?.timezone, additionalContext: req.body?.additionalContext, basedOnRunId: req.body?.basedOnRunId });
     if (req.body?.wait === true) {
       const run = await promise;
       return res.json({ state: state(), run });
