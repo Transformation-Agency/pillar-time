@@ -56,6 +56,11 @@ import {
   validateContextRequest,
   visibilityLevels,
 } from "./trustedContext.js";
+import {
+  parseTelegramCommand,
+  recentTelegramCommands,
+  telegramCommandAvailability,
+} from "./telegramCommands.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -7767,26 +7772,26 @@ app.post("/api/tts/preview", async (req, res) => {
 });
 
 app.post("/api/telegram/commands", async (req, res) => {
-  const command = String(req.body?.command || "").trim();
+  const parsedCommand = parseTelegramCommand(req.body?.command);
+  const command = parsedCommand.raw;
   const tg = get("SELECT * FROM telegram_settings WHERE id=1");
   const recent = parse(tg.recent_commands, []);
   let result = "Unsupported command";
   try {
-    if (command === "/brief") result = workflowRuns()[0]?.id ? `Latest run: ${workflowRuns()[0].id}` : "No briefs have been generated yet.";
-    if (command === "/sources") result = `${sources().length} configured source(s).`;
-    if (command === "/lenses") result = `${briefConfig().perspectiveLenses.filter((l) => l.enabled !== false).length} perspective lens(es) configured.`;
-    if (command === "/councils") result = "Councils have been replaced by Brief Setup analyzers and optional perspective deliberation.";
-    if (command === "/review") result = `${approvals().filter((a) => a.status === "pending").length} pending approval(s).`;
-    if (command.startsWith("/deliberate")) {
-      const [, requestedRunId] = command.split(/\s+/);
+    if (parsedCommand.command === "/brief") result = workflowRuns()[0]?.id ? `Latest run: ${workflowRuns()[0].id}` : "No briefs have been generated yet.";
+    if (parsedCommand.command === "/sources") result = `${sources().length} configured source(s).`;
+    if (parsedCommand.command === "/lenses") result = `${briefConfig().perspectiveLenses.filter((l) => l.enabled !== false).length} perspective lens(es) configured.`;
+    if (parsedCommand.command === "/councils") result = "Councils have been replaced by Brief Setup analyzers and optional perspective deliberation.";
+    if (parsedCommand.command === "/review") result = `${approvals().filter((a) => a.status === "pending").length} pending approval(s).`;
+    if (parsedCommand.command === "/deliberate") {
+      const [requestedRunId] = parsedCommand.args;
       const runId = requestedRunId || workflowRuns()[0]?.id;
       result = runId ? formatDeliberation(await deliberateWorkflowRun(runId)) : "No briefs have been generated yet.";
     }
-    if (command.startsWith("/analyze")) result = `Ad-hoc analysis requires configured model credentials. Request recorded: ${command}`;
-    if (command.startsWith("/approve")) {
-      const [, requestedApprovalId] = command.split(/\s+/);
-      const current = requestedApprovalId
-        ? get("SELECT * FROM approval_items WHERE id=$id", { $id: requestedApprovalId })
+    if (parsedCommand.command === "/analyze") result = `Ad-hoc analysis requires configured model credentials. Request recorded: ${command}`;
+    if (parsedCommand.command === "/approve") {
+      const current = parsedCommand.requestedId
+        ? get("SELECT * FROM approval_items WHERE id=$id AND status='pending'", { $id: parsedCommand.requestedId })
         : get("SELECT * FROM approval_items WHERE status='pending' ORDER BY created_at ASC LIMIT 1");
       if (!current) result = "No pending approval found.";
       else {
@@ -7801,10 +7806,9 @@ app.post("/api/telegram/commands", async (req, res) => {
         }
       }
     }
-    if (command.startsWith("/reject")) {
-      const [, requestedApprovalId] = command.split(/\s+/);
-      const current = requestedApprovalId
-        ? get("SELECT * FROM approval_items WHERE id=$id", { $id: requestedApprovalId })
+    if (parsedCommand.command === "/reject") {
+      const current = parsedCommand.requestedId
+        ? get("SELECT * FROM approval_items WHERE id=$id AND status='pending'", { $id: parsedCommand.requestedId })
         : get("SELECT * FROM approval_items WHERE status='pending' ORDER BY created_at ASC LIMIT 1");
       if (!current) result = "No pending approval found.";
       else {
@@ -7813,8 +7817,8 @@ app.post("/api/telegram/commands", async (req, res) => {
         result = `Rejected ${current.title}.`;
       }
     }
-    if (command.startsWith("/add_source") || command.startsWith("/add_lens")) result = "That Telegram command is not available yet.";
-    const next = [{ command, result, ts: now() }, ...recent].slice(0, 20);
+    if (telegramCommandAvailability(parsedCommand) === "unavailable") result = "That Telegram command is not available yet.";
+    const next = recentTelegramCommands(recent, { command, result, ts: now() });
     run("UPDATE telegram_settings SET recent_commands=$recent, last_checked_at=$t WHERE id=1", { $recent: json(next), $t: now() });
     audit("telegram.command", "telegram_settings", "1", command, { result });
     res.json({ result, state: state() });
