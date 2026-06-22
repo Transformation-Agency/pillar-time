@@ -8,12 +8,9 @@ const root = path.resolve(__dirname, "..");
 const tauriDir = path.join(root, "src-tauri");
 const resourcesDir = path.join(tauriDir, "resources");
 const backendDir = path.join(resourcesDir, "backend");
-const whisperResourcesDir = path.join(resourcesDir, "whisper");
-const whisperVendorDir = process.env.PILLAR_WHISPER_VENDOR_DIR || path.join(root, "vendor", "whisper");
 const binariesDir = path.join(tauriDir, "binaries");
 const sidecarName = "pillar-time-backend";
 const legacySidecarName = "jack-daily-brief-backend";
-const whisperSidecarName = "whisper-cli";
 const backendRuntimeDependencies = ["express"];
 
 function rmrf(target) {
@@ -103,53 +100,8 @@ function copyNodeSidecar(filePath) {
   fs.chmodSync(filePath, 0o755);
 }
 
-function normalizeWhisperArtifacts(dir) {
-  if (!fs.existsSync(dir)) return;
-  for (const entry of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile()) continue;
-    const filePath = path.join(entry.parentPath || dir, entry.name);
-    if (/\.(dylib|so)$/.test(entry.name) || entry.name === "whisper-cli") {
-      fs.chmodSync(filePath, 0o755);
-    }
-    if (process.platform === "darwin") {
-      try {
-        execFileSync("xattr", ["-c", filePath], { stdio: "ignore" });
-      } catch {
-        // Best effort: copied Homebrew artifacts can carry local xattrs that confuse bundling.
-      }
-      try {
-        execFileSync("xattr", ["-d", "com.apple.provenance", filePath], { stdio: "ignore" });
-      } catch {
-        // This attribute is not always present or removable on every macOS version.
-      }
-    }
-  }
-}
-
-function addDevRpath(binaryPath, rpath) {
-  if (process.platform !== "darwin" || !fs.existsSync(binaryPath) || !fs.existsSync(rpath)) return;
-  try {
-    const output = execFileSync("otool", ["-l", binaryPath], { encoding: "utf8" });
-    if (output.includes(`path ${rpath} `)) return;
-    execFileSync("install_name_tool", ["-add_rpath", rpath, binaryPath], { stdio: "ignore" });
-  } catch {
-    // Best effort for local dev packaging. Production should use a static whisper.cpp build.
-  }
-}
-
-function adHocSign(binaryPath) {
-  if (process.platform !== "darwin" || !fs.existsSync(binaryPath)) return;
-  try {
-    execFileSync("codesign", ["--force", "--sign", "-", binaryPath], { stdio: "ignore" });
-  } catch {
-    // Best effort for local dev packaging; release signing will replace this signature.
-  }
-}
-
 rmrf(backendDir);
-rmrf(whisperResourcesDir);
 fs.mkdirSync(backendDir, { recursive: true });
-fs.mkdirSync(whisperResourcesDir, { recursive: true });
 fs.mkdirSync(binariesDir, { recursive: true });
 
 copy(path.join(root, "server"), path.join(backendDir, "server"));
@@ -171,47 +123,19 @@ fs.writeFileSync(path.join(backendDir, "package.json"), `${JSON.stringify({
 
 const hostTriple = targetTriple();
 
-if (fs.existsSync(whisperVendorDir)) {
-  const vendorModelDir = path.join(whisperVendorDir, "models");
-  if (fs.existsSync(vendorModelDir)) {
-    copyBundleAsset(vendorModelDir, path.join(whisperResourcesDir, "models"));
-  }
-  normalizeWhisperArtifacts(whisperResourcesDir);
-  const vendorWhisperBinary = process.env.PILLAR_WHISPER_CLI_PATH || path.join(whisperVendorDir, "bin", "whisper-cli");
-  if (fs.existsSync(vendorWhisperBinary)) {
-    copyBundleAsset(vendorWhisperBinary, path.join(binariesDir, `${whisperSidecarName}-${hostTriple}${exeSuffix}`));
-    fs.chmodSync(path.join(binariesDir, `${whisperSidecarName}-${hostTriple}${exeSuffix}`), 0o755);
-    rmrf(path.join(whisperResourcesDir, "bin"));
-  }
-}
-
 for (const file of fs.readdirSync(binariesDir)) {
   if (
     file.startsWith(`${sidecarName}-`) ||
     file.startsWith(`${legacySidecarName}-`) ||
-    file.startsWith(`${whisperSidecarName}-`)
+    file.startsWith("whisper-cli-")
   ) rmrf(path.join(binariesDir, file));
 }
 
 copyNodeSidecar(path.join(binariesDir, `${sidecarName}-${hostTriple}${exeSuffix}`));
-if (fs.existsSync(whisperVendorDir)) {
-  const vendorWhisperBinary = process.env.PILLAR_WHISPER_CLI_PATH || path.join(whisperVendorDir, "bin", "whisper-cli");
-  if (fs.existsSync(vendorWhisperBinary)) {
-    const whisperSidecarPath = path.join(binariesDir, `${whisperSidecarName}-${hostTriple}${exeSuffix}`);
-    copyBundleAsset(vendorWhisperBinary, whisperSidecarPath);
-    fs.chmodSync(whisperSidecarPath, 0o755);
-    addDevRpath(whisperSidecarPath, "/opt/homebrew/lib");
-    addDevRpath(whisperSidecarPath, "/usr/local/lib");
-    adHocSign(whisperSidecarPath);
-  }
-}
 
-console.log(`Prepared Tauri Node sidecar resources for ${hostTriple}${fs.existsSync(whisperVendorDir) ? " with whisper.cpp assets" : ""}`);
+console.log(`Prepared Tauri Node sidecar resources for ${hostTriple}. Local Whisper is optional and configured after install.`);
 
 const debugResourcesDir = path.join(tauriDir, "target", "debug", "resources");
 if (fs.existsSync(debugResourcesDir)) {
   copyBundleAsset(backendDir, path.join(debugResourcesDir, "backend"));
-  if (fs.existsSync(whisperResourcesDir)) {
-    copyBundleAsset(whisperResourcesDir, path.join(debugResourcesDir, "whisper"));
-  }
 }

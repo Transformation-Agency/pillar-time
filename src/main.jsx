@@ -3279,7 +3279,7 @@ function Onboarding({ state, mutate, refresh }) {
             <p className={ffmpegStatus?.available ? "ok-text" : "warn-text"}>{ffmpegMessage || ffmpegStatus?.message || "FFmpeg has not been checked yet."}</p>
           </div>}
           {pendingPrereqKeys.includes("transcriptionModel") && <div className="setup-subcard">
-            <div><strong>Set up speech-to-text</strong><span>Use local Whisper STT when bundled/configured, or add an OpenAI/custom transcription endpoint. You can also skip podcast transcription sources.</span></div>
+            <div><strong>Set up speech-to-text</strong><span>Local Whisper is optional and no longer bundled. Install whisper.cpp later for private local STT, or add an OpenAI/custom transcription endpoint. You can also skip podcast transcription sources.</span></div>
             <div className="setup-link-row">
               <Button type="button" icon="run" onClick={checkStt} disabled={sttBusy}>{sttBusy ? "Checking..." : "Check local Whisper"}</Button>
               {sttStatus?.binaryAvailable && !sttStatus?.modelAvailable && <Button type="button" icon="download" kind="primary" onClick={installSttModel} disabled={sttBusy}>{sttBusy ? "Downloading..." : "Download Whisper model"}</Button>}
@@ -3816,8 +3816,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <Badge tone={ffmpegStatus?.available && sttStatus?.available ? "ok" : "warn"}>{ffmpegStatus?.available && sttStatus?.available ? "Ready" : "Needs setup"}</Badge>
         </div>
         <div className="connector-row dependency-row">
-          <div className="connector-name"><span className="source-icon-box"><Icon name="mic" /></span><div><strong>Whisper speech-to-text</strong><small>Local STT for voice input and podcast transcription.</small></div></div>
-          <span>Bundled binary + model</span>
+          <div className="connector-name"><span className="source-icon-box"><Icon name="mic" /></span><div><strong>Whisper speech-to-text</strong><small>Optional local STT for voice input and podcast transcription.</small></div></div>
+          <span>Optional local install</span>
           <Badge tone={sttStatus?.available ? "ok" : "warn"}>{sttStatus?.available ? "Ready" : "Unavailable"}</Badge>
           <span>{sttStatus?.modelName || "tiny.en"}</span>
           <div className="row tight-row">
@@ -3828,7 +3828,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <div className={`notice ${sttStatus?.available ? "" : "notice-warn"}`}>
           <strong>{sttStatus?.available ? "Local speech-to-text is enabled" : "Local speech-to-text is disabled"}</strong>
           <span>{sttMessage || sttStatus?.message || "Checking local Whisper availability..."}</span>
-          {!sttStatus?.binaryAvailable && <span>For self-hosted installs, set WHISPER_CPP_PATH. For desktop releases, bundle whisper-cli in vendor/whisper/bin before building.</span>}
+          {!sttStatus?.binaryAvailable && <span>Install whisper.cpp separately and set WHISPER_CPP_PATH when you want local speech-to-text. The desktop app does not bundle Whisper.</span>}
         </div>
         <div className="connector-row dependency-row">
           <div className="connector-name"><span className="source-icon-box"><Icon name="Podcast" /></span><div><strong>FFmpeg</strong><small>Required for local podcast transcription.</small></div></div>

@@ -790,7 +790,7 @@ async function localSttStatus() {
     message: binaryInstalled.ok && modelInstalled
       ? `Local speech-to-text is ready with whisper.cpp ${defaultWhisperModel}.`
       : !binaryInstalled.ok
-        ? "Local speech-to-text needs a whisper.cpp binary. Set WHISPER_CPP_PATH or bundle whisper-cli in vendor/whisper/bin."
+        ? "Local Whisper is optional. Install whisper.cpp and set WHISPER_CPP_PATH to enable local speech-to-text, or use an OpenAI-compatible transcription endpoint."
         : `Local speech-to-text needs the ${whisperModelFile} model. Download it in Settings or set WHISPER_MODEL_PATH.`,
   };
 }

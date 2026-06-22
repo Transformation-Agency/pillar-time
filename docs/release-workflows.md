@@ -57,7 +57,7 @@ The GitHub release body is read from
 `docs/release-notes/<tag>.md`, for example
 `docs/release-notes/v0.1.3.md`.
 
-Both macOS jobs run on Apple Silicon GitHub runners. The Intel job cross-compiles the Rust app, downloads the official darwin-x64 Node sidecar, builds a static x86_64 `whisper-cli`, and bundles the tiny English model from `vendor/whisper/models/ggml-tiny.en.bin`.
+Both macOS jobs run on Apple Silicon GitHub runners. The Intel job cross-compiles the Rust app and downloads the official darwin-x64 Node sidecar. Local Whisper is no longer bundled in release artifacts; users can install whisper.cpp separately and point Pillar Time at it with `WHISPER_CPP_PATH` and `WHISPER_MODEL_PATH`.
 
 ## Windows Secrets
 
