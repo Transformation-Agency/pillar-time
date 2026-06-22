@@ -16,6 +16,7 @@ import {
   googleCalendarWriteCalendarId as selectGoogleCalendarWriteCalendarId,
 } from "./googleCalendarWrite.js";
 import { executeApprovalAction } from "./approvalExecutor.js";
+import { approvalStatusUpdate, approvalView } from "./approvalQueue.js";
 import {
   buildExecutiveCandidates as buildExecutiveCandidatesPure,
   calendarBusyIntervals as buildCalendarBusyIntervals,
@@ -4288,11 +4289,7 @@ function workflowRuns() {
   }));
 }
 function approvals() {
-  return all("SELECT * FROM approval_items ORDER BY created_at DESC").map((r) => ({
-    id: r.id, title: r.title, kind: r.kind, risk: r.risk, status: r.status, runId: r.run_id,
-    entityType: r.entity_type, entityId: r.entity_id, payload: parse(r.payload_json, {}),
-    createdAt: r.created_at, resolvedBy: r.resolved_by, resolvedAt: r.resolved_at, resolutionNote: r.resolution_note,
-  }));
+  return all("SELECT * FROM approval_items ORDER BY created_at DESC").map((r) => approvalView(r, parse));
 }
 function audits() {
   return all("SELECT * FROM audit_logs ORDER BY ts DESC LIMIT 250").map((r) => ({
@@ -7203,12 +7200,16 @@ app.post("/api/workflow-runs/:id/audio", async (req, res) => {
 app.patch("/api/approvals/:id", (req, res) => {
   const current = get("SELECT * FROM approval_items WHERE id=$id", { $id: req.params.id });
   if (!current) return res.status(404).json({ error: "Approval not found" });
-  const status = req.body?.status;
-  if (!["approved", "rejected"].includes(status)) return res.status(400).json({ error: "Invalid status" });
+  let update;
+  try {
+    update = approvalStatusUpdate({ id: req.params.id, status: req.body?.status, by: req.body?.by || "operator", note: req.body?.note || "", resolvedAt: now() });
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Invalid status" });
+  }
   run("UPDATE approval_items SET status=$status, resolved_by=$by, resolved_at=$t, resolution_note=$note WHERE id=$id", {
-    $id: req.params.id, $status: status, $by: req.body?.by || "operator", $t: now(), $note: req.body?.note || "",
+    $id: update.id, $status: update.status, $by: update.resolvedBy, $t: update.resolvedAt, $note: update.resolutionNote,
   });
-  audit(`approval.${status}`, "approval", req.params.id, req.body?.note || status);
+  audit(update.auditAction, "approval", update.id, update.auditNote);
   res.json(state());
 });
 
