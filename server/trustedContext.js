@@ -184,3 +184,69 @@ export function proposeProfileUpdate({ observation = "", fieldKey = "", resource
     trustLevel: "observation",
   };
 }
+
+export function profileFactInput(input = {}, { now = new Date(), idFactory = () => "fact" } = {}) {
+  const fieldKey = String(input.fieldKey || "").trim();
+  if (!fieldKey) throw new Error("fieldKey is required");
+  const resourceType = String(input.resourceType || "profile.fact").trim();
+  const partition = partitions.includes(input.partition) ? input.partition : "professional";
+  const visibility = visibilityLevels.includes(input.visibility) ? input.visibility : "assistant";
+  const trustLevel = Object.prototype.hasOwnProperty.call(trustLevels, input.trustLevel) ? input.trustLevel : "imported_unverified";
+  const verificationStatus = String(input.verificationStatus || (trustLevel === "verified_canonical_profile" ? "verified" : "unverified"));
+  const status = ["active", "proposed", "disputed", "superseded", "expired"].includes(input.status) ? input.status : "active";
+  const meta = {
+    allowedAudiences: Array.isArray(input.allowedAudiences) ? input.allowedAudiences.map(String).filter(Boolean) : undefined,
+    fieldAuthorityRank: Number.isFinite(Number(input.fieldAuthorityRank)) ? Number(input.fieldAuthorityRank) : undefined,
+  };
+  return {
+    id: input.id || idFactory(),
+    resourceType,
+    fieldKey,
+    value: String(input.value || ""),
+    valueJson: meta,
+    partition,
+    visibility,
+    trustLevel,
+    verificationStatus,
+    status,
+    validFrom: input.validFrom || null,
+    validTo: input.validTo || null,
+    learnedAt: input.learnedAt || now.toISOString(),
+    provenanceId: input.provenanceId || null,
+    sourceLabel: String(input.sourceLabel || "Manual entry"),
+    confidence: Math.max(0, Math.min(1, Number(input.confidence ?? 0.75))),
+    createdBy: String(input.createdBy || "local-user"),
+    updatedAt: now.toISOString(),
+  };
+}
+
+export function profileFactFromRow(row = {}, parseJson = JSON.parse) {
+  let valueMeta = {};
+  try {
+    valueMeta = typeof row.value_json === "string" ? parseJson(row.value_json || "{}") : (row.value_json || {});
+  } catch {
+    valueMeta = {};
+  }
+  return {
+    id: row.id,
+    resourceType: row.resource_type,
+    fieldKey: row.field_key,
+    value: row.value,
+    partition: row.partition,
+    visibility: row.visibility,
+    trustLevel: row.trust_level,
+    verificationStatus: row.verification_status,
+    status: row.status,
+    validFrom: row.valid_from,
+    validTo: row.valid_to,
+    learnedAt: row.learned_at,
+    provenanceId: row.provenance_id,
+    sourceLabel: row.source_label,
+    confidence: row.confidence,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    allowedAudiences: valueMeta.allowedAudiences,
+    fieldAuthorityRank: valueMeta.fieldAuthorityRank,
+  };
+}

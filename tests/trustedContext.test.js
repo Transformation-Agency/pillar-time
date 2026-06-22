@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import {
   buildContextEnvelope,
   classifyFreshness,
+  profileFactFromRow,
+  profileFactInput,
   proposeProfileUpdate,
   sortByTrust,
   validateContextRequest,
@@ -300,4 +302,77 @@ test("context quality warns when the envelope lacks verified identity facts", ()
   assert.equal(envelope.ok, true);
   assert.equal(envelope.quality.ok, false);
   assert.ok(envelope.quality.warnings.some((warning) => /no verified identity facts/i.test(warning)));
+});
+
+test("profileFactInput validates fieldKey and applies safe Trusted Context defaults", () => {
+  assert.throws(() => profileFactInput({ value: "missing key" }), /fieldKey is required/);
+
+  const input = profileFactInput({
+    id: "fact-1",
+    resourceType: "identity.profile",
+    fieldKey: "preferredName",
+    value: "Paul",
+    partition: "bad-partition",
+    visibility: "bad-visibility",
+    trustLevel: "bad-trust",
+    confidence: 2,
+    allowedAudiences: ["self", "", 123],
+    fieldAuthorityRank: "5",
+  }, { now, idFactory: () => "generated" });
+
+  assert.equal(input.id, "fact-1");
+  assert.equal(input.partition, "professional");
+  assert.equal(input.visibility, "assistant");
+  assert.equal(input.trustLevel, "imported_unverified");
+  assert.equal(input.verificationStatus, "unverified");
+  assert.equal(input.status, "active");
+  assert.equal(input.sourceLabel, "Manual entry");
+  assert.equal(input.confidence, 1);
+  assert.deepEqual(input.valueJson, { allowedAudiences: ["self", "123"], fieldAuthorityRank: 5 });
+  assert.equal(input.learnedAt, now.toISOString());
+});
+
+test("verified canonical profile facts default to verified and profile rows hydrate metadata safely", () => {
+  const verified = profileFactInput({
+    fieldKey: "primaryTimezone",
+    value: "America/Denver",
+    trustLevel: "verified_canonical_profile",
+    visibility: "workspace",
+    confidence: -1,
+  }, { now, idFactory: () => "fact-generated" });
+
+  assert.equal(verified.id, "fact-generated");
+  assert.equal(verified.verificationStatus, "verified");
+  assert.equal(verified.confidence, 0);
+
+  const row = {
+    id: verified.id,
+    resource_type: "identity.profile",
+    field_key: "primaryTimezone",
+    value: "America/Denver",
+    value_json: JSON.stringify({ allowedAudiences: ["self"], fieldAuthorityRank: 5 }),
+    partition: "professional",
+    visibility: "workspace",
+    trust_level: "verified_canonical_profile",
+    verification_status: "verified",
+    status: "active",
+    valid_from: null,
+    valid_to: null,
+    learned_at: now.toISOString(),
+    provenance_id: null,
+    source_label: "Manual entry",
+    confidence: 0.9,
+    created_by: "local-user",
+    created_at: now.toISOString(),
+    updated_at: now.toISOString(),
+  };
+
+  const hydrated = profileFactFromRow(row);
+  assert.equal(hydrated.fieldKey, "primaryTimezone");
+  assert.deepEqual(hydrated.allowedAudiences, ["self"]);
+  assert.equal(hydrated.fieldAuthorityRank, 5);
+
+  const malformed = profileFactFromRow({ ...row, value_json: "{" });
+  assert.equal(malformed.allowedAudiences, undefined);
+  assert.equal(malformed.fieldAuthorityRank, undefined);
 });

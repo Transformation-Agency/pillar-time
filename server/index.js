@@ -50,6 +50,8 @@ import {
   interactionModes,
   partitions,
   proposeProfileUpdate,
+  profileFactFromRow as trustedProfileFactFromRow,
+  profileFactInput,
   trustLevels,
   validateContextRequest,
   visibilityLevels,
@@ -4118,29 +4120,7 @@ function trustedContextConstitution() {
 }
 
 function profileFactFromRow(r) {
-  return {
-    id: r.id,
-    resourceType: r.resource_type,
-    fieldKey: r.field_key,
-    value: r.value,
-    valueJson: parse(r.value_json, {}),
-    partition: r.partition,
-    visibility: r.visibility,
-    trustLevel: r.trust_level,
-    verificationStatus: r.verification_status,
-    status: r.status,
-    validFrom: r.valid_from,
-    validTo: r.valid_to,
-    learnedAt: r.learned_at,
-    provenanceId: r.provenance_id,
-    sourceLabel: r.source_label,
-    confidence: Number(r.confidence || 0),
-    createdBy: r.created_by,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    allowedAudiences: parse(r.value_json, {})?.allowedAudiences,
-    fieldAuthorityRank: parse(r.value_json, {})?.fieldAuthorityRank,
-  };
+  return trustedProfileFactFromRow(r, parse);
 }
 
 function profileFacts({ includeInactive = false } = {}) {
@@ -6474,20 +6454,13 @@ app.post("/api/trusted-context/constitution", (req, res) => {
 });
 
 app.post("/api/trusted-context/facts", (req, res) => {
-  const b = req.body || {};
-  const resourceType = String(b.resourceType || "profile.fact").trim();
-  const fieldKey = String(b.fieldKey || "").trim();
-  if (!fieldKey) return res.status(400).json({ error: "fieldKey is required", state: state() });
-  const partition = partitions.includes(b.partition) ? b.partition : "professional";
-  const visibility = visibilityLevels.includes(b.visibility) ? b.visibility : "assistant";
-  const trustLevel = Object.prototype.hasOwnProperty.call(trustLevels, b.trustLevel) ? b.trustLevel : "imported_unverified";
-  const verificationStatus = String(b.verificationStatus || (trustLevel === "verified_canonical_profile" ? "verified" : "unverified"));
   const t = now();
-  const factId = b.id || id("fact");
-  const meta = {
-    allowedAudiences: Array.isArray(b.allowedAudiences) ? b.allowedAudiences.map(String).filter(Boolean) : undefined,
-    fieldAuthorityRank: Number.isFinite(Number(b.fieldAuthorityRank)) ? Number(b.fieldAuthorityRank) : undefined,
-  };
+  let fact;
+  try {
+    fact = profileFactInput(req.body || {}, { now: new Date(t), idFactory: () => id("fact") });
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Profile fact is invalid", state: state() });
+  }
   run(`INSERT INTO profile_facts (id, resource_type, field_key, value, value_json, partition, visibility, trust_level,
          verification_status, status, valid_from, valid_to, learned_at, provenance_id, source_label, confidence, created_by, created_at, updated_at)
        VALUES ($id, $resourceType, $fieldKey, $value, $valueJson, $partition, $visibility, $trustLevel,
@@ -6496,26 +6469,26 @@ app.post("/api/trusted-context/facts", (req, res) => {
          partition=$partition, visibility=$visibility, trust_level=$trustLevel, verification_status=$verificationStatus,
          status=$status, valid_from=$validFrom, valid_to=$validTo, learned_at=$learnedAt, provenance_id=$provenanceId,
          source_label=$sourceLabel, confidence=$confidence, updated_at=$t`, {
-    $id: factId,
-    $resourceType: resourceType,
-    $fieldKey: fieldKey,
-    $value: String(b.value || ""),
-    $valueJson: json(meta),
-    $partition: partition,
-    $visibility: visibility,
-    $trustLevel: trustLevel,
-    $verificationStatus: verificationStatus,
-    $status: ["active", "proposed", "disputed", "superseded", "expired"].includes(b.status) ? b.status : "active",
-    $validFrom: b.validFrom || null,
-    $validTo: b.validTo || null,
-    $learnedAt: b.learnedAt || t,
-    $provenanceId: b.provenanceId || null,
-    $sourceLabel: String(b.sourceLabel || "Manual entry"),
-    $confidence: Math.max(0, Math.min(1, Number(b.confidence ?? 0.75))),
-    $createdBy: String(b.createdBy || "local-user"),
+    $id: fact.id,
+    $resourceType: fact.resourceType,
+    $fieldKey: fact.fieldKey,
+    $value: fact.value,
+    $valueJson: json(fact.valueJson),
+    $partition: fact.partition,
+    $visibility: fact.visibility,
+    $trustLevel: fact.trustLevel,
+    $verificationStatus: fact.verificationStatus,
+    $status: fact.status,
+    $validFrom: fact.validFrom,
+    $validTo: fact.validTo,
+    $learnedAt: fact.learnedAt,
+    $provenanceId: fact.provenanceId,
+    $sourceLabel: fact.sourceLabel,
+    $confidence: fact.confidence,
+    $createdBy: fact.createdBy,
     $t: t,
   });
-  audit("trusted_context.fact_saved", "profile_fact", factId, `${resourceType}.${fieldKey}`, {}, "local-user");
+  audit("trusted_context.fact_saved", "profile_fact", fact.id, `${fact.resourceType}.${fact.fieldKey}`, {}, "local-user");
   res.json({ trustedContext: trustedContextState(), state: state() });
 });
 
