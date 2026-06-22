@@ -29,6 +29,10 @@ import {
   providerCredentialStatus as modelCredentialStatus,
 } from "./modelConfig.js";
 import {
+  reminderSchedulerDecision,
+  shouldDeliverLocalOccurrence as shouldDeliverLocalOccurrencePure,
+} from "./reminderScheduler.js";
+import {
   buildExecutiveCandidates as buildExecutiveCandidatesPure,
   calendarBusyIntervals as buildCalendarBusyIntervals,
   calendarFreeWindows as buildCalendarFreeWindows,
@@ -4024,28 +4028,18 @@ async function runTimeReminderSchedulerTick(trigger = "tick") {
   timeSchedulerState.running = true;
   timeSchedulerState.lastTickAt = now();
   try {
-    if (!prefs.reminderMasterEnabled) return;
     for (const reminder of reminders()) {
-      if (!reminder.enabled) continue;
-      if (reminder.type === "regular" && !prefs.regularRemindersEnabled) continue;
-      if (reminder.type === "sporadic" && !prefs.sporadicRemindersEnabled) continue;
-      if (reminder.pausedUntil && new Date(reminder.pausedUntil) > new Date()) continue;
-      const next = reminder.nextOccurrence;
-      if (!next) continue;
-      const dueKey = next.dedupeKey;
-      if (reminder.skippedDedupeKey === dueKey) continue;
-      const occurrenceId = `occ-${createHash("sha1").update(dueKey).digest("hex").slice(0, 16)}`;
+      const decision = reminderSchedulerDecision({ reminder, prefs });
+      if (decision.action !== "schedule") continue;
+      const next = decision.occurrence;
+      const occurrenceId = decision.occurrenceId;
       const dueAt = new Date().toISOString();
       run(`INSERT INTO reminder_occurrences (id, reminder_id, intended_local_date, intended_local_time, dedupe_key, status, due_at, created_at)
            VALUES ($id, $reminderId, $date, $time, $dedupe, 'scheduled', $dueAt, $t)
-           ON CONFLICT(dedupe_key) DO NOTHING`, { $id: occurrenceId, $reminderId: reminder.id, $date: next.dateKey, $time: next.localTime, $dedupe: dueKey, $dueAt: dueAt, $t: now() });
-      if (!shouldDeliverLocalOccurrence(next, reminder.timezone)) continue;
-      const channels = reminder.channels || {};
-      if (channels.telegramText && prefs.channels.telegramText) {
-        await deliverTimeReminder({ reminder, occurrenceId, channel: "telegram", mode: "text" });
-      }
-      if (channels.desktopText && prefs.channels.desktopText) {
-        recordReminderAttempt({ occurrenceId, channel: "desktop", mode: "text", status: "skipped", error: "Desktop notification adapter pending Tauri notification permission wiring." });
+           ON CONFLICT(dedupe_key) DO NOTHING`, { $id: occurrenceId, $reminderId: reminder.id, $date: next.dateKey, $time: next.localTime, $dedupe: decision.dedupeKey, $dueAt: dueAt, $t: now() });
+      for (const delivery of decision.deliveries) {
+        if (delivery.status === "send") await deliverTimeReminder({ reminder, occurrenceId, channel: delivery.channel, mode: delivery.mode });
+        else recordReminderAttempt({ occurrenceId, channel: delivery.channel, mode: delivery.mode, status: delivery.status, error: delivery.error || "" });
       }
     }
     timeSchedulerState.lastError = "";
@@ -4061,11 +4055,7 @@ function startTimeReminderScheduler() {
 }
 
 function shouldDeliverLocalOccurrence(occurrence, timezone = "America/Denver") {
-  const nowDate = new Date();
-  const dateKey = localDateKey(nowDate, timezone);
-  if (occurrence.dateKey !== dateKey) return false;
-  const currentTime = nowDate.toLocaleTimeString("en-US", { timeZone: timezone, hour12: false, hour: "2-digit", minute: "2-digit" });
-  return occurrence.localTime <= currentTime;
+  return shouldDeliverLocalOccurrencePure(occurrence, timezone);
 }
 
 function recordReminderAttempt({ occurrenceId, channel, mode = "text", status = "pending", error = "", response = {} }) {
