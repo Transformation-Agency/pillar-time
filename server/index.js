@@ -10,14 +10,14 @@ import { DatabaseSync } from "node:sqlite";
 import { localDateKey, nextOccurrence, rankActions, sporadicTimes } from "./timeEngine.js";
 import { groupIssuesByProject, LinearClient } from "./linearClient.js";
 import {
+  buildExecutiveCandidates as buildExecutiveCandidatesPure,
   calendarBusyIntervals as buildCalendarBusyIntervals,
   calendarFreeWindows as buildCalendarFreeWindows,
   calendarRoleForId,
+  detectExecutiveRisks as detectExecutiveRisksPure,
   isAllDayCalendarEvent,
   isPrimaryBlockingCalendarEvent,
-  localDateTime,
   proposedCalendarScheduleFromContext as buildProposedCalendarScheduleFromContext,
-  sameLocalDate,
   toDateMs,
 } from "./executivePlanning.js";
 import {
@@ -5716,138 +5716,12 @@ function commitmentRowsForExecutiveDay({ dateKey }) {
 }
 
 function buildExecutiveCandidates({ calendarAgenda = [], linearContext = {}, local = {}, dateKey, timezone }) {
-  const candidates = [];
-  for (const commitment of local.commitments || []) {
-    candidates.push({
-      id: `commitment:${commitment.id}`,
-      title: commitment.nextAction || commitment.title,
-      notes: commitment.description || commitment.notes || "",
-      leverageCategory: commitment.leverageCategory || (commitment.priority === "high" ? "leadership" : "admin"),
-      reason: commitment.waitingOn ? `Waiting on ${commitment.waitingOn}; moving this may unblock the commitment.` : "Active commitment in the executive record.",
-      source: commitment.source || "commitment",
-      dueAt: commitment.dueAt,
-      estimateMinutes: commitment.estimateMinutes || 30,
-      status: commitment.status,
-      waitingOn: commitment.waitingOn,
-      feedbackKey: commitment.id,
-      evidence: commitment.evidence || [],
-    });
-  }
-  for (const task of local.tasks || []) {
-    candidates.push({
-      id: `task:${task.id}`,
-      taskId: task.id,
-      title: task.title,
-      notes: task.notes,
-      leverageCategory: task.leverageCategory,
-      reason: task.waitingOn ? `Waiting on ${task.waitingOn}; moving this may unblock someone.` : "Open task from Pillar Time.",
-      source: "task",
-      dueAt: task.dueAt,
-      estimateMinutes: task.estimateMinutes,
-      status: task.status,
-      waitingOn: task.waitingOn,
-      feedbackKey: task.id,
-    });
-  }
-  for (const event of calendarAgenda) {
-    if (!isPrimaryBlockingCalendarEvent(event)) continue;
-    if (/meet|call|huddle|checkpoint|review|planning|interview|sync|standup/i.test(event.title || "")) {
-      candidates.push({
-        id: `calendar:${event.id || event.htmlLink || event.title}`,
-        title: `Prepare for ${event.title || "calendar event"}`,
-        notes: [event.time, event.attendees?.length ? `Attendees: ${event.attendees.join(", ")}` : ""].filter(Boolean).join(" · "),
-        leverageCategory: "leadership",
-        reason: "Calendar event may need prep, decisions, sequencing, or follow-up.",
-        source: "calendar",
-        dueAt: event.start,
-        estimateMinutes: local.preferences?.meetingBufferMinutes || 10,
-        feedbackKey: `calendar:${event.id || event.title}`,
-      });
-    }
-  }
-  for (const issue of linearContext.issues || []) {
-    const title = `${issue.identifier || "Linear"} ${issue.title || ""}`.trim();
-    const dueAt = issue.dueDate ? `${issue.dueDate}T17:00:00` : "";
-    const state = String(issue.state?.type || issue.state?.name || "").toLowerCase();
-    const priority = Number(issue.priority || 0);
-    const stale = toDateMs(issue.updatedAt) && Date.now() - toDateMs(issue.updatedAt) > 7 * 86400000;
-    const leverageCategory = state.includes("started") ? "unblock" : priority > 2 ? "deadline" : issue.project ? "deepWork" : "admin";
-    candidates.push({
-      id: `linear:${issue.id}`,
-      linearIssueId: issue.id,
-      title,
-      notes: [issue.project?.name, issue.state?.name, issue.url].filter(Boolean).join(" · "),
-      leverageCategory,
-      reason: stale ? "Linear issue has not moved recently and may need a decision or status update." : "Assigned open Linear issue.",
-      source: "linear",
-      dueAt,
-      estimateMinutes: 30,
-      status: state.includes("started") ? "started" : "open",
-      priority: issue.priorityLabel || priority,
-      feedbackKey: issue.id,
-      evidence: [{ type: "linear_issue", id: issue.id, identifier: issue.identifier, url: issue.url }],
-    });
-  }
-  for (const reminder of local.reminders || []) {
-    if (reminder.enabled && reminder.nextOccurrence?.dateKey === dateKey) {
-      candidates.push({
-        id: `reminder:${reminder.id}`,
-        title: reminder.title,
-        notes: reminder.body,
-        leverageCategory: "admin",
-        reason: `Reminder due today at ${reminder.nextOccurrence.localTime}.`,
-        source: "reminder",
-        dueAt: `${dateKey}T${reminder.nextOccurrence.localTime}:00`,
-        estimateMinutes: 5,
-        feedbackKey: reminder.id,
-      });
-    }
-  }
-  for (const date of local.importantDates || []) {
-    if (!date.enabled) continue;
-    const days = daysUntilLocalDate(date.date, timezone);
-    if (days >= 0 && days <= 14) {
-      candidates.push({
-        id: `important-date:${date.id}`,
-        title: `${date.title}${days === 0 ? " is today" : ` in ${days} day${days === 1 ? "" : "s"}`}`,
-        notes: date.notes,
-        leverageCategory: days <= 3 ? "deadline" : "admin",
-        reason: "Important date is inside the planning horizon.",
-        source: "important_date",
-        dueAt: `${date.date}T09:00:00`,
-        estimateMinutes: 15,
-        feedbackKey: date.id,
-      });
-    }
-  }
   const feedback = all("SELECT feedback_key AS key, feedback FROM suggestion_feedback");
-  return rankActions(candidates, feedback).map((candidate, index) => ({ ...candidate, rank: index + 1 }));
+  return buildExecutiveCandidatesPure({ calendarAgenda, linearContext, local, dateKey, timezone, feedback });
 }
 
 function detectExecutiveRisks({ calendarAgenda = [], linearContext = {}, local = {}, connectorDiagnostics = {}, dateKey, timezone }) {
-  const risks = [];
-  const sortedEvents = [...calendarAgenda].filter((event) => event.start && event.end && isPrimaryBlockingCalendarEvent(event)).sort((a, b) => toDateMs(a.start) - toDateMs(b.start));
-  let meetingMinutes = 0;
-  for (let i = 0; i < sortedEvents.length; i += 1) {
-    const current = sortedEvents[i];
-    const duration = Math.max(0, Math.round((toDateMs(current.end) - toDateMs(current.start)) / 60000));
-    meetingMinutes += duration;
-    const next = sortedEvents[i + 1];
-    if (next && toDateMs(current.end) > toDateMs(next.start)) risks.push({ type: "calendar_conflict", severity: "high", title: `Calendar overlap: ${current.title} and ${next.title}`, evidence: [current.id, next.id].filter(Boolean) });
-  }
-  if (meetingMinutes >= 240) risks.push({ type: "meeting_load", severity: "medium", title: `${Math.round(meetingMinutes / 60)} hours of meetings today`, evidence: { meetingMinutes } });
-  if (!connectorDiagnostics.googleCalendar?.succeeded) risks.push({ type: "calendar_unavailable", severity: "medium", title: "Calendar coverage is unavailable", detail: connectorDiagnostics.googleCalendar?.error || "Calendar connector is not ready." });
-  if (!connectorDiagnostics.linear?.succeeded) risks.push({ type: "linear_unavailable", severity: "medium", title: "Linear work coverage is unavailable", detail: connectorDiagnostics.linear?.error || "Linear connector is not ready." });
-  if (connectorDiagnostics.model?.status !== "ready") risks.push({ type: "model_unavailable", severity: "low", title: "Model connector is not ready", detail: "Using deterministic executive brief fallback." });
-  for (const issue of linearContext.issues || []) {
-    if (issue.dueDate && issue.dueDate <= dateKey) risks.push({ type: "linear_due", severity: "high", title: `${issue.identifier} is due ${issue.dueDate}`, entityId: issue.id, url: issue.url });
-    if (toDateMs(issue.updatedAt) && Date.now() - toDateMs(issue.updatedAt) > 7 * 86400000) risks.push({ type: "linear_stale", severity: "medium", title: `${issue.identifier} has not moved in over a week`, entityId: issue.id, url: issue.url });
-  }
-  for (const commitment of local.commitments || []) {
-    if (commitment.dueAt && sameLocalDate(commitment.dueAt, dateKey, timezone) && commitment.status !== "done") risks.push({ type: "commitment_due", severity: "high", title: `Commitment due today: ${commitment.title}`, entityId: commitment.id });
-    if (commitment.waitingOn) risks.push({ type: "waiting_on", severity: "medium", title: `${commitment.title} is waiting on ${commitment.waitingOn}`, entityId: commitment.id });
-  }
-  return risks.slice(0, 24);
+  return detectExecutiveRisksPure({ calendarAgenda, linearContext, local, connectorDiagnostics, dateKey, timezone });
 }
 
 function buildCoverageNotes({ connectorDiagnostics = {}, sourceCount = 0 }) {
