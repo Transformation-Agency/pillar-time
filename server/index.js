@@ -15,6 +15,12 @@ import {
   googleCalendarEventRequest,
   googleCalendarWriteCalendarId as selectGoogleCalendarWriteCalendarId,
 } from "./googleCalendarWrite.js";
+import {
+  googleCalendarConnectedData,
+  googleCalendarListData,
+  googleCalendarOAuthStartPlan,
+  googleCalendarSelectedCalendarIds,
+} from "./googleCalendarOAuth.js";
 import { executeApprovalAction } from "./approvalExecutor.js";
 import { approvalStatusUpdate, approvalView } from "./approvalQueue.js";
 import {
@@ -7329,42 +7335,32 @@ app.post("/api/model/models", async (req, res) => {
 
 app.post("/api/google-calendar/oauth/start", (req, res) => {
   const b = req.body || {};
-  const clientId = String(b.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID).trim();
-  const clientSecret = String(b.clientSecret || GOOGLE_CALENDAR_CLIENT_SECRET || "").trim();
-  if (!clientId) return res.status(400).json({ error: "Google Calendar OAuth client ID is not configured.", state: state() });
   const redirectUri = googleCalendarRedirectUri(req);
   const stateToken = id("gcal");
   const pkce = googleCalendarPkcePair();
-  const data = {
-    ...googleCalendarCredential().data,
-    clientId,
-    clientSecret: clientSecret || "",
-    redirectUri,
-    oauthState: stateToken,
-    codeVerifier: pkce.verifier,
-    scope: GOOGLE_CALENDAR_SCOPE,
-    calendarId: "selected",
-    selectedCalendarIds: googleCalendarCredential().data.selectedCalendarIds || ["primary"],
-  };
-  saveGoogleCalendarCredential(data, { enabled: !!data.refreshToken });
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    scope: GOOGLE_CALENDAR_SCOPE,
-    access_type: "offline",
-    prompt: "consent",
-    state: stateToken,
-    code_challenge: pkce.challenge,
-    code_challenge_method: "S256",
-  })}`;
+  let plan;
+  try {
+    plan = googleCalendarOAuthStartPlan({
+      body: b,
+      currentData: googleCalendarCredential().data,
+      defaultClientId: GOOGLE_CALENDAR_DESKTOP_CLIENT_ID,
+      defaultClientSecret: GOOGLE_CALENDAR_CLIENT_SECRET,
+      redirectUri,
+      stateToken,
+      pkce,
+      scope: GOOGLE_CALENDAR_SCOPE,
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Google Calendar OAuth failed", state: state() });
+  }
+  saveGoogleCalendarCredential(plan.data, { enabled: !!plan.data.refreshToken });
   audit("google_calendar.oauth_started", "connector", GOOGLE_CALENDAR_PROVIDER, "Started Google Calendar OAuth consent", { redirectUri }, "system");
   if (isDesktop && process.platform === "darwin") {
-    execFile("/usr/bin/open", ["-a", "Google Chrome", authUrl], (error) => {
+    execFile("/usr/bin/open", ["-a", "Google Chrome", plan.authUrl], (error) => {
       if (error) console.error("Failed to open Google Calendar OAuth in Chrome:", error.message || error);
     });
   }
-  res.json({ authUrl, redirectUri, state: state() });
+  res.json({ authUrl: plan.authUrl, redirectUri, state: state() });
 });
 
 app.get("/api/google-calendar/oauth/callback", async (req, res) => {
@@ -7390,16 +7386,7 @@ app.get("/api/google-calendar/oauth/callback", async (req, res) => {
       redirectUri: data.redirectUri,
       codeVerifier: data.codeVerifier,
     });
-    const nextData = {
-      ...data,
-      refreshToken: token.refresh_token || data.refreshToken || "",
-      accessToken: token.access_token || "",
-      expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000,
-      tokenType: token.token_type || "Bearer",
-      oauthState: "",
-      codeVerifier: "",
-    };
-    if (!nextData.refreshToken) throw new Error("Google did not return a refresh token. Try connecting again and approve offline access.");
+    const nextData = googleCalendarConnectedData({ currentData: data, token });
     saveGoogleCalendarCredential(nextData, { enabled: true });
     ensureGoogleCalendarBriefSetup();
     run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now() });
@@ -7442,15 +7429,7 @@ app.post("/api/google-calendar/calendars", async (req, res) => {
   try {
     const calendars = await fetchGoogleCalendarList();
     const credential = googleCalendarCredential();
-    const currentSelected = Array.isArray(credential.data.selectedCalendarIds) && credential.data.selectedCalendarIds.length
-      ? credential.data.selectedCalendarIds
-      : calendars.filter((calendar) => calendar.primary || calendar.selected).map((calendar) => calendar.id);
-    const nextData = {
-      ...credential.data,
-      calendars,
-      selectedCalendarIds: currentSelected.length ? currentSelected : ["primary"],
-      calendarId: "selected",
-    };
+    const nextData = googleCalendarListData({ credentialData: credential.data, calendars });
     saveGoogleCalendarCredential(nextData, { enabled: true });
     ensureGoogleCalendarBriefSetup();
     run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now() });
@@ -7464,10 +7443,12 @@ app.post("/api/google-calendar/calendars", async (req, res) => {
 app.patch("/api/google-calendar/calendars", (req, res) => {
   const credential = googleCalendarCredential();
   if (!credential.enabled || !credential.data.refreshToken) return res.status(400).json({ error: "Connect Google Calendar before choosing calendars.", state: state() });
-  const selectedCalendarIds = Array.from(new Set((Array.isArray(req.body?.selectedCalendarIds) ? req.body.selectedCalendarIds : [])
-    .map((item) => String(item || "").trim())
-    .filter(Boolean)));
-  if (!selectedCalendarIds.length) return res.status(400).json({ error: "Choose at least one calendar.", state: state() });
+  let selectedCalendarIds;
+  try {
+    selectedCalendarIds = googleCalendarSelectedCalendarIds(req.body?.selectedCalendarIds);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Choose at least one calendar.", state: state() });
+  }
   const nextData = { ...credential.data, selectedCalendarIds, calendarId: "selected" };
   saveGoogleCalendarCredential(nextData, { enabled: true });
   audit("google_calendar.calendars_updated", "connector", GOOGLE_CALENDAR_PROVIDER, `Selected ${selectedCalendarIds.length} calendar${selectedCalendarIds.length === 1 ? "" : "s"}`, {}, "system");
