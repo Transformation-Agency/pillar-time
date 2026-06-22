@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { desktopRuntime } from "./desktopRuntime.js";
+import { generationProgressViewModel } from "./progressViewModel.js";
 import {
   BookOpen,
   Bot,
@@ -2079,29 +2080,23 @@ function DeliberationPanel({ deliberation, onRegenerate, busy }) {
 }
 
 function GeneratingBrief({ runState }) {
-  const status = runState?.status || "running";
-  const steps = runState?.steps?.length ? runState.steps : [{ key: "run", name: "Generating brief" }];
   const [slowStep, setSlowStep] = React.useState(false);
-  const activeIndex = steps.findIndex((step) => step.status === "active");
-  const doneCount = steps.filter((step) => step.status === "done").length;
-  const currentIndex = Math.max(0, Math.min(steps.length - 1, activeIndex >= 0 ? activeIndex : status === "done" ? steps.length - 1 : runState?.stepIndex ?? doneCount));
-  const current = steps[currentIndex];
-  const progress = status === "done" ? 100 : Math.round(((currentIndex + 0.35) / steps.length) * 100);
+  const view = generationProgressViewModel(runState, { slowStep, labels: workflowLabels });
   React.useEffect(() => {
     setSlowStep(false);
-    if (status !== "running") return undefined;
+    if (view.status !== "running") return undefined;
     const timer = setTimeout(() => setSlowStep(true), 2000);
     return () => clearTimeout(timer);
-  }, [currentIndex, status]);
+  }, [view.currentIndex, view.status]);
   return <div className="generating-screen">
     <div className="generating-panel">
-      <Badge tone={status === "error" ? "warn" : status === "done" ? "ok" : "muted"}>{status === "error" ? "Needs attention" : status === "done" ? "Delivered" : "Generating"}</Badge>
-      <h1>{status === "error" ? "Brief generation stopped." : status === "done" ? "Brief delivered." : current.name}</h1>
-      <p>{status === "error" ? runState?.error || "Something went wrong while generating the brief." : status === "done" ? "The new brief was saved and sent to Telegram." : `Step ${currentIndex + 1} of ${steps.length}: ${current.output || (workflowLabels[current.key] || current.name || "working").toLowerCase()}.`}</p>
-      {status === "running" && current.detail && <p className="generating-detail">{current.detail}</p>}
-      <div className={`main-progress ${slowStep ? "working" : ""}`} aria-label="Brief generation progress"><span style={{ width: `${progress}%` }} /></div>
+      <Badge tone={view.badgeTone}>{view.badgeLabel}</Badge>
+      <h1>{view.title}</h1>
+      <p>{view.message}</p>
+      {view.detail && <p className="generating-detail">{view.detail}</p>}
+      <div className={view.progressClassName} aria-label="Brief generation progress"><span style={{ width: `${view.progress}%` }} /></div>
       <div className="generation-step-list">
-        {steps.map((step, index) => <div key={step.key} className={step.status === "done" || status === "done" ? "done" : step.status === "active" && status !== "error" ? "active" : step.status === "error" ? "error" : ""}>
+        {view.steps.map((step, index) => <div key={step.key} className={view.stepClasses[index]}>
           <b>{String(index + 1).padStart(2, "0")}</b>
           <span>{step.name}</span>
         </div>)}
