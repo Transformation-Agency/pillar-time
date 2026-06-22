@@ -8,6 +8,13 @@ import {
 import { desktopRuntime } from "./desktopRuntime.js";
 import { generationProgressViewModel } from "./progressViewModel.js";
 import {
+  connectorMessageTone,
+  connectorModalTarget,
+  connectorRequest,
+  settingsResearchRows,
+  toggleCalendarSelection,
+} from "./settingsConnectors.js";
+import {
   BookOpen,
   Bot,
   Box,
@@ -3472,13 +3479,15 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   };
   const saveXConnector = (e) => {
     e.preventDefault();
-    mutate("/api/connectors/x", { ...xConnector, enabled: true }, "PATCH").then(() => setXModal(false));
+    const request = connectorRequest("saveX", xConnector);
+    mutate(request.url, request.body, request.method).then(() => setXModal(false));
   };
   const saveRedditConnector = async (e) => {
     e.preventDefault();
     setRedditMessage("");
     try {
-      await mutate("/api/connectors/reddit", { ...redditConnector, enabled: true }, "PATCH");
+      const request = connectorRequest("saveReddit", redditConnector);
+      await mutate(request.url, request.body, request.method);
       setRedditConnector({ ...redditConnector, clientId: "", clientSecret: "" });
       setRedditMessage("Reddit OAuth settings saved.");
       setRedditModal(false);
@@ -3489,7 +3498,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const testRedditConnector = async () => {
     setRedditMessage("");
     try {
-      await api("/api/reddit/test", { method: "POST", body: JSON.stringify(redditConnector) });
+      const request = connectorRequest("testReddit", redditConnector);
+      await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setRedditConnector({ ...redditConnector, clientId: "", clientSecret: "" });
       setRedditMessage("Reddit OAuth API is ready.");
       await refresh();
@@ -3501,7 +3511,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const enableLinearConnector = async () => {
     setLinearMessage("");
     try {
-      await mutate("/api/connectors/linear", { enabled: true }, "PATCH");
+      const request = connectorRequest("enableLinear");
+      await mutate(request.url, request.body, request.method);
       setLinearMessage("Linear connector enabled.");
     } catch (error) {
       setLinearMessage(error.message || "Could not enable Linear.");
@@ -3510,7 +3521,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const disableLinearConnector = async () => {
     setLinearMessage("");
     try {
-      await mutate("/api/connectors/linear", { enabled: false }, "PATCH");
+      const request = connectorRequest("disableLinear");
+      await mutate(request.url, request.body, request.method);
       setLinearMessage("Linear connector disabled.");
     } catch (error) {
       setLinearMessage(error.message || "Could not disable Linear.");
@@ -3519,7 +3531,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const testLinearConnector = async () => {
     setLinearMessage("");
     try {
-      const result = await api("/api/linear/test", { method: "POST", body: JSON.stringify({}) });
+      const request = connectorRequest("testLinear");
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setLinearMessage(`Linear is ready${result.viewer?.displayName || result.viewer?.name ? ` for ${result.viewer.displayName || result.viewer.name}` : ""}.`);
       await refresh();
     } catch (error) {
@@ -3531,7 +3544,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     e.preventDefault();
     setGoogleCalendarMessage("");
     try {
-      const result = await api("/api/google-calendar/oauth/start", { method: "POST", body: JSON.stringify({}) });
+      const request = connectorRequest("startGoogleCalendar");
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       await refresh();
       setGoogleCalendarMessage("Google consent opened. Complete it, then return here and refresh calendars.");
       await openExternalUrl(result.authUrl);
@@ -3542,7 +3556,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const testGoogleCalendar = async () => {
     setGoogleCalendarMessage("");
     try {
-      await api("/api/google-calendar/test", { method: "POST", body: JSON.stringify({}) });
+      const request = connectorRequest("testGoogleCalendar");
+      await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setGoogleCalendarMessage("Google Calendar is connected and ready.");
       await refresh();
     } catch (error) {
@@ -3553,7 +3568,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const refreshGoogleCalendars = async () => {
     setGoogleCalendarMessage("");
     try {
-      const result = await api("/api/google-calendar/calendars", { method: "POST", body: JSON.stringify({}) });
+      const request = connectorRequest("refreshGoogleCalendars");
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setGoogleCalendarSelection(result.selectedCalendarIds || ["primary"]);
       setGoogleCalendarSelectionDirty(false);
       setGoogleCalendarMessage("Calendar list refreshed.");
@@ -3566,7 +3582,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const saveGoogleCalendarSelection = async () => {
     setGoogleCalendarMessage("");
     try {
-      await mutate("/api/google-calendar/calendars", { selectedCalendarIds: googleCalendarSelection }, "PATCH");
+      const request = connectorRequest("saveGoogleCalendars", { selectedCalendarIds: googleCalendarSelection });
+      await mutate(request.url, request.body, request.method);
       setGoogleCalendarSelectionDirty(false);
       setGoogleCalendarMessage("Calendar selection saved.");
     } catch (error) {
@@ -3575,13 +3592,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   };
   const toggleGoogleCalendar = (calendarId) => {
     setGoogleCalendarSelectionDirty(true);
-    setGoogleCalendarSelection((current) => {
-      if (current.includes(calendarId)) {
-        const next = current.filter((item) => item !== calendarId);
-        return next.length ? next : current;
-      }
-      return [...current, calendarId];
-    });
+    setGoogleCalendarSelection((current) => toggleCalendarSelection(current, calendarId));
   };
   const closeGoogleCalendarModal = () => {
     setGoogleCalendarSelection(state.connectors?.googleCalendar?.selectedCalendarIds || ["primary"]);
@@ -3590,7 +3601,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   };
   const disconnectGoogleCalendar = async () => {
     setGoogleCalendarMessage("");
-    await mutate("/api/google-calendar/disconnect", {}, "POST");
+    const request = connectorRequest("disconnectGoogleCalendar");
+    await mutate(request.url, request.body, request.method);
     setGoogleCalendarSelection(["primary"]);
     setGoogleCalendarSelectionDirty(false);
     setGoogleCalendarMessage("Google Calendar disconnected.");
@@ -3638,20 +3650,12 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     return () => clearTimeout(timer);
   }, [editingProvider, model.apiKey, detectModels, state.model.credentialStatus, state.model.provider, state.model.providerCredentials]);
   const modelConnected = state.model.status === "ready";
-  const xConnected = state.connectors?.x?.status === "ready";
   const redditConnected = state.connectors?.reddit?.status === "ready";
   const linearConnected = state.connectors?.linear?.status === "ready";
   const googleCalendarConnected = state.connectors?.googleCalendar?.status === "ready";
   const telegramConnected = state.telegram?.enabled && state.telegram?.chatId && state.telegram?.botToken;
   const providerRows = modelProviderRows;
-  const researchRows = [
-    { service: "X (Twitter)", sub: "Search and monitor posts", type: "Social", logo: "X", status: xConnected ? "Connected" : "Needs token", connected: xConnected, action: "x" },
-    { service: "Google Calendar", sub: "Add today's agenda to briefs", type: "Calendar", logo: "Calendar", status: googleCalendarConnected ? "Connected" : state.connectors?.googleCalendar?.status === "needs consent" ? "Needs consent" : "Needs OAuth", connected: googleCalendarConnected, action: "googleCalendar" },
-    { service: "Reddit", sub: "Monitor subreddits and posts", type: "Social", logo: "Reddit", status: redditConnected ? "Connected" : "Needs OAuth", connected: redditConnected, action: "reddit" },
-    { service: "Linear", sub: "Read and update TRA issues", type: "Project", logo: "Linear", status: linearConnected ? "Connected" : state.connectors?.linear?.credentialStatus === "missing" ? "Needs env key" : "Disabled", connected: linearConnected, action: "linear" },
-    { service: "Web Search", sub: "General web search", type: "Search", logo: "Web", status: "Available", connected: true },
-    { service: "YouTube", sub: "Channels, uploads, and transcripts", type: "Video", logo: "YouTube", status: "Available", connected: true },
-  ];
+  const researchRows = settingsResearchRows(state);
   const visibleModelOptions = modelOptionsProvider === (editingProvider || model.provider) ? modelOptions : [];
   const openProvider = (provider) => {
     setModel({ enabled: true, provider, model: provider === state.model.provider ? state.model.model || defaultModelForProvider(provider) : defaultModelForProvider(provider), apiKey: "", baseUrl: provider === state.model.provider ? state.model.baseUrl || "" : "" });
@@ -3795,7 +3799,13 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
             <span>{row.type}</span>
             <Badge tone={row.connected ? "ok" : "muted"}>{row.status}</Badge>
             <span>{row.connected ? "Ready" : "-"}</span>
-            <Button type="button" icon="pencil" onClick={() => row.action === "x" ? setXModal(true) : row.action === "googleCalendar" ? setGoogleCalendarModal(true) : row.action === "reddit" ? setRedditModal(true) : row.action === "linear" ? setLinearModal(true) : null}>{row.action === "x" || row.action === "googleCalendar" || row.action === "reddit" || row.action === "linear" ? "Edit" : "View"}</Button>
+            <Button type="button" icon="pencil" onClick={() => {
+              const target = connectorModalTarget(row.action);
+              if (target === "x") setXModal(true);
+              if (target === "googleCalendar") setGoogleCalendarModal(true);
+              if (target === "reddit") setRedditModal(true);
+              if (target === "linear") setLinearModal(true);
+            }}>{connectorModalTarget(row.action) ? "Edit" : "View"}</Button>
           </div>)}
         </div>
       </section>
@@ -3911,7 +3921,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <Field label="Client ID" value={redditConnector.clientId} onChange={(clientId) => setRedditConnector({ ...redditConnector, clientId })} placeholder={state.connectors?.reddit?.apiKeySaved ? "Saved. Paste a new client ID to replace it." : "Paste Reddit app client ID"} />
         <Field label="Client secret" type="password" value={redditConnector.clientSecret} onChange={(clientSecret) => setRedditConnector({ ...redditConnector, clientSecret })} placeholder={state.connectors?.reddit?.apiKeySaved ? "Saved if configured. Paste to replace it." : "Required for script/web app; blank for installed app"} />
         {redditConnector.grantType === "installed_client" && <Field label="Device ID" value={redditConnector.deviceId} onChange={(deviceId) => setRedditConnector({ ...redditConnector, deviceId })} placeholder="DO_NOT_TRACK_THIS_DEVICE" />}
-        {redditMessage && <p className={redditMessage.includes("ready") || redditMessage.includes("saved") ? "ok-text" : "warn-text"}>{redditMessage}</p>}
+        {redditMessage && <p className={connectorMessageTone(redditMessage)}>{redditMessage}</p>}
         <div className="modal-actions"><Button type="button" onClick={() => setRedditModal(false)}>Cancel</Button><Button type="button" icon="run" onClick={testRedditConnector}>Test</Button><Button icon="save" kind="primary">Save Reddit OAuth</Button></div>
       </form>
     </div>}
@@ -3923,7 +3933,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <span>{state.connectors?.linear?.lastError || linearMessage || "Set LINEAR_API_KEY in the environment that launches Pillar Time, restart the app, then test the connector."}</span>
         </div>
         <p className="hint">The Linear personal API key is env-only. Pillar Time does not store it in SQLite or ask you to paste it into this screen.</p>
-        {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("enabled") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
+        {linearMessage && <p className={connectorMessageTone(linearMessage)}>{linearMessage}</p>}
         <div className="modal-actions">
           <Button type="button" onClick={() => setLinearModal(false)}>Cancel</Button>
           <Button type="button" icon="run" onClick={testLinearConnector}>Test</Button>
@@ -3951,7 +3961,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
             {calendar.summary || calendar.id}{calendar.primary ? " (primary)" : ""}
           </label>) : <p className="hint">Refresh calendars to load your available Google calendars.</p>}
         </div>}
-        {googleCalendarMessage && <p className={googleCalendarMessage.includes("ready") || googleCalendarMessage.includes("opened") || googleCalendarMessage.includes("disconnected") ? "ok-text" : "warn-text"}>{googleCalendarMessage}</p>}
+        {googleCalendarMessage && <p className={connectorMessageTone(googleCalendarMessage)}>{googleCalendarMessage}</p>}
         <div className="modal-actions"><Button type="button" onClick={closeGoogleCalendarModal}>Cancel</Button>{googleCalendarConnected && <Button type="button" icon="run" onClick={refreshGoogleCalendars}>Refresh calendars</Button>}{googleCalendarConnected && <Button type="button" icon="save" onClick={saveGoogleCalendarSelection}>Save calendars</Button>}<Button type="button" icon="run" onClick={testGoogleCalendar}>Test</Button>{googleCalendarConnected && <Button type="button" icon="trash" onClick={disconnectGoogleCalendar}>Disconnect</Button>}<Button icon="save" kind="primary">{googleCalendarConnected ? "Reconnect Google" : "Connect Google"}</Button></div>
       </form>
     </div>}
