@@ -15,6 +15,7 @@ import {
   googleCalendarEventRequest,
   googleCalendarWriteCalendarId as selectGoogleCalendarWriteCalendarId,
 } from "./googleCalendarWrite.js";
+import { executeApprovalAction } from "./approvalExecutor.js";
 import {
   buildExecutiveCandidates as buildExecutiveCandidatesPure,
   calendarBusyIntervals as buildCalendarBusyIntervals,
@@ -7212,65 +7213,21 @@ app.patch("/api/approvals/:id", (req, res) => {
 });
 
 async function executeApprovalItem(current, { by = "operator" } = {}) {
-  if (!current) throw new Error("Approval not found");
-  if (current.status !== "approved") throw new Error("Approve this action before executing it.");
   const payload = parse(current.payload_json, {});
-  if (current.kind === "calendar_schedule") {
-    if (payload.operation !== "createScheduleBlocks") throw new Error(`Unsupported calendar approval operation: ${payload.operation || "missing"}`);
-    const blocks = Array.isArray(payload.blocks) ? payload.blocks : [];
-    if (!blocks.length) throw new Error("Calendar schedule approval has no blocks to create.");
-    const result = { operation: payload.operation, createdEvents: [] };
-    for (const block of blocks) {
-      const event = await createGoogleCalendarEvent({
-        calendarId: block.calendarId || payload.calendarId || "primary",
-        summary: block.summary || block.title,
-        description: block.description || "",
-        start: block.start,
-        end: block.end,
-        timezone: block.timezone || payload.timezone || "America/Denver",
-        extendedProperties: {
-          pillarTimeApprovalId: current.id,
-          pillarTimeBlockId: block.id || "",
-          pillarTimeCategoryId: block.categoryId || "",
-        },
-      });
-      result.createdEvents.push({ id: event.id, htmlLink: event.htmlLink, summary: event.summary, start: event.start, end: event.end });
-    }
-    run("UPDATE approval_items SET status='executed', resolved_by=$by, resolved_at=$t, resolution_note=$note WHERE id=$id", {
-      $id: current.id,
-      $by: by,
-      $t: now(),
-      $note: `Created ${result.createdEvents.length} Google Calendar event${result.createdEvents.length === 1 ? "" : "s"}.`,
-    });
-    audit("approval.executed", "approval", current.id, "Executed Google Calendar schedule approval", result, by);
-    return result;
-  }
-  if (current.kind !== "linear_action") throw new Error(`Unsupported approval kind: ${current.kind}`);
-  let result;
-  if (payload.operation === "addComment") {
-    if (!payload.issueId || !String(payload.body || "").trim()) throw new Error("Linear comment action is missing issueId or body.");
-    const comment = await linearClient().addComment(payload.issueId, String(payload.body));
-    const issue = payload.verification?.refetchIssue ? await linearClient().issue(payload.issueId) : null;
-    result = { operation: payload.operation, comment, issue };
-  } else if (payload.operation === "updateIssue") {
-    if (!payload.issueId || !payload.input) throw new Error("Linear update action is missing issueId or input.");
-    const issue = await linearClient().updateIssue(payload.issueId, payload.input);
-    result = { operation: payload.operation, issue };
-  } else if (payload.operation === "createIssue") {
-    if (!payload.input?.teamId || !payload.input?.title) throw new Error("Linear create action is missing teamId or title.");
-    const issue = await linearClient().createIssue(payload.input);
-    result = { operation: payload.operation, issue };
-  } else {
-    throw new Error(`Unsupported Linear approval operation: ${payload.operation || "missing"}`);
-  }
+  const executed = await executeApprovalAction(current, {
+    payload,
+    by,
+    createGoogleCalendarEvent,
+    linearClient,
+  });
   run("UPDATE approval_items SET status='executed', resolved_by=$by, resolved_at=$t, resolution_note=$note WHERE id=$id", {
     $id: current.id,
     $by: by,
     $t: now(),
-    $note: `Executed ${payload.operation} and verified with Linear.`,
+    $note: executed.resolutionNote,
   });
-  audit("approval.executed", "approval", current.id, `Executed Linear ${payload.operation}`, result, by);
-  return result;
+  audit(executed.auditEvent, "approval", current.id, executed.auditSummary, executed.auditPayload, by);
+  return executed.result;
 }
 
 app.post("/api/approvals/:id/execute", async (req, res) => {
