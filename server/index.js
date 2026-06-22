@@ -10,6 +10,12 @@ import { DatabaseSync } from "node:sqlite";
 import { localDateKey, nextOccurrence, rankActions, sporadicTimes } from "./timeEngine.js";
 import { groupIssuesByProject, LinearClient } from "./linearClient.js";
 import {
+  GOOGLE_CALENDAR_WRITE_SCOPE,
+  assertGoogleCalendarWriteCredential,
+  googleCalendarEventRequest,
+  googleCalendarWriteCalendarId as selectGoogleCalendarWriteCalendarId,
+} from "./googleCalendarWrite.js";
+import {
   buildExecutiveCandidates as buildExecutiveCandidatesPure,
   calendarBusyIntervals as buildCalendarBusyIntervals,
   calendarFreeWindows as buildCalendarFreeWindows,
@@ -2628,7 +2634,6 @@ const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ];
 const GOOGLE_CALENDAR_SCOPE = GOOGLE_CALENDAR_SCOPES.join(" ");
-const GOOGLE_CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
 function googleCalendarCredential() {
   const row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER });
@@ -2765,36 +2770,17 @@ async function fetchGoogleCalendarList() {
 }
 
 function assertGoogleCalendarWriteReady() {
-  const connector = googleCalendarCredential();
-  const grantedScope = String(connector.data?.scope || "");
-  if (!connector.enabled || !connector.data?.refreshToken) throw new Error("Google Calendar is not connected.");
-  if (!grantedScope.split(/\s+/).includes(GOOGLE_CALENDAR_WRITE_SCOPE)) {
-    throw new Error("Reconnect Google Calendar to grant calendar event write access before filling your calendar.");
-  }
-  return connector;
+  return assertGoogleCalendarWriteCredential(googleCalendarCredential(), GOOGLE_CALENDAR_WRITE_SCOPE);
 }
 
 function googleCalendarWriteCalendarId(data = googleCalendarCredential().data || {}) {
-  if (data.calendarId && data.calendarId !== "selected") return data.calendarId;
-  const calendars = Array.isArray(data.calendars) ? data.calendars : [];
-  return calendars.find((calendar) => calendar.primary && /owner|writer/i.test(calendar.accessRole || ""))?.id
-    || calendars.find((calendar) => /owner|writer/i.test(calendar.accessRole || ""))?.id
-    || "primary";
+  return selectGoogleCalendarWriteCalendarId(data);
 }
 
 async function createGoogleCalendarEvent({ calendarId = "primary", summary, description = "", start, end, timezone = "America/Denver", extendedProperties = {} }) {
-  assertGoogleCalendarWriteReady();
-  if (!String(summary || "").trim()) throw new Error("Calendar event summary is required.");
-  if (!start || !end) throw new Error("Calendar event start and end are required.");
+  const connector = assertGoogleCalendarWriteReady();
   const accessToken = await refreshGoogleCalendarAccessToken();
-  const body = {
-    summary: String(summary).trim(),
-    description: String(description || ""),
-    start: { dateTime: new Date(start).toISOString(), timeZone: timezone },
-    end: { dateTime: new Date(end).toISOString(), timeZone: timezone },
-    extendedProperties: { private: extendedProperties },
-  };
-  const targetCalendarId = calendarId === "selected" ? googleCalendarWriteCalendarId() : calendarId || "primary";
+  const { targetCalendarId, body } = googleCalendarEventRequest({ calendarId, credentialData: connector.data, summary, description, start, end, timezone, extendedProperties });
   const response = await fetchWithTimeout(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCalendarId)}/events`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
