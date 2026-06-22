@@ -1,5 +1,10 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import {
+  calendarSetupMessageTone,
+  refreshCalendarStatusFlow,
+  startCalendarOAuthFlow,
+} from "./calendarOnboarding.js";
 import { desktopRuntime } from "./desktopRuntime.js";
 import { generationProgressViewModel } from "./progressViewModel.js";
 import {
@@ -3022,10 +3027,7 @@ function Onboarding({ state, mutate, refresh }) {
   const startCalendarOAuth = async () => {
     setCalendarMessage("");
     try {
-      const result = await api("/api/google-calendar/oauth/start", { method: "POST", body: JSON.stringify({}) });
-      await refresh();
-      setCalendarMessage("Google consent opened. When it says connected, return here and refresh status.");
-      await openExternalUrl(result.authUrl);
+      setCalendarMessage(await startCalendarOAuthFlow({ api, refresh, openExternalUrl }));
     } catch (error) {
       setCalendarMessage(error.message || "Could not start Google Calendar connection.");
     }
@@ -3033,14 +3035,7 @@ function Onboarding({ state, mutate, refresh }) {
   const refreshCalendarStatus = async () => {
     setCalendarMessage("");
     try {
-      if (googleCalendarConnected) {
-        await api("/api/google-calendar/calendars", { method: "POST", body: JSON.stringify({}) });
-        setCalendarMessage("Google Calendar is connected. Brief Setup includes Today's Calendar at the top.");
-      } else {
-        await api("/api/google-calendar/test", { method: "POST", body: JSON.stringify({}) });
-        setCalendarMessage("Google Calendar is connected. Brief Setup includes Today's Calendar at the top.");
-      }
-      await refresh();
+      setCalendarMessage(await refreshCalendarStatusFlow({ api, refresh, googleCalendarConnected }));
     } catch (error) {
       setCalendarMessage(error.message || "Google Calendar is not connected yet.");
       await refresh();
@@ -3306,7 +3301,7 @@ function Onboarding({ state, mutate, refresh }) {
             <Button type="button" icon="external" onClick={startCalendarOAuth}>{googleCalendarConnected ? "Reconnect Google Calendar" : "Connect Google Calendar"}</Button>
             <Button type="button" icon="run" onClick={refreshCalendarStatus}>Refresh status</Button>
           </div>
-          {calendarMessage && <p className={calendarMessage.includes("connected") || calendarMessage.includes("opened") ? "ok-text" : "warn-text"}>{calendarMessage}</p>}
+          {calendarMessage && <p className={calendarSetupMessageTone(calendarMessage)}>{calendarMessage}</p>}
         </div>
         <div className="row"><Button onClick={() => go("sources")}>Back</Button><Button onClick={() => go("audio")}>Skip calendar</Button><Button kind="primary" onClick={() => go("audio")}>Continue</Button></div>
       </section>}
