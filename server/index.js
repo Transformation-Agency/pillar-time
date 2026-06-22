@@ -18,6 +18,17 @@ import {
 import { executeApprovalAction } from "./approvalExecutor.js";
 import { approvalStatusUpdate, approvalView } from "./approvalQueue.js";
 import {
+  defaultModelForProvider,
+  modelBaseUrl,
+  modelProviderCredentialKey,
+  modelProviders,
+  modelSavePlan,
+  modelSettingsView,
+  normalizeModelProvider,
+  parseProviderModelList,
+  providerCredentialStatus as modelCredentialStatus,
+} from "./modelConfig.js";
+import {
   buildExecutiveCandidates as buildExecutiveCandidatesPure,
   calendarBusyIntervals as buildCalendarBusyIntervals,
   calendarFreeWindows as buildCalendarFreeWindows,
@@ -618,8 +629,7 @@ function migrate() {
 }
 
 const now = () => new Date().toISOString();
-const defaultOpenAiModel = "gpt-4.1";
-const modelProviders = ["openai", "anthropic", "openrouter", "gemini", "xai", "custom"];
+const defaultOpenAiModel = defaultModelForProvider("openai");
 const id = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const json = (value) => JSON.stringify(value ?? null);
 const parse = (value, fallback) => {
@@ -905,19 +915,8 @@ function providerEnvKey(provider) {
   return "";
 }
 
-function defaultModelForProvider(provider) {
-  if (provider === "openai") return defaultOpenAiModel;
-  if (provider === "xai") return "grok-4.3";
-  return "";
-}
-
 function providerCredentialStatus(provider, savedApiKey = "") {
-  if (savedApiKey) return "saved";
-  return providerEnvKey(provider) ? "env" : "missing";
-}
-
-function modelProviderCredentialKey(provider) {
-  return `model:${provider}`;
+  return modelCredentialStatus({ savedApiKey, envApiKey: providerEnvKey(provider) });
 }
 
 function savedModelProviderKey(provider, current = get("SELECT * FROM model_settings WHERE id=1")) {
@@ -938,8 +937,7 @@ function saveModelProviderKey(provider, apiKey) {
 }
 
 async function fetchProviderModels({ provider, apiKey, savedApiKey, baseUrl }) {
-  const resolvedProvider = modelProviders.includes(provider) ? provider : "openai";
-  provider = resolvedProvider;
+  provider = normalizeModelProvider(provider);
   const envKey = providerEnvKey(provider);
   const runtimeKey = apiKey || savedApiKey || envKey;
   const source = apiKey ? "input" : savedApiKey ? "saved" : envKey ? "env" : "none";
@@ -979,13 +977,7 @@ async function fetchProviderModels({ provider, apiKey, savedApiKey, baseUrl }) {
       return { provider, models: [], credentialSource: source, error: `Model discovery failed: ${response.status} ${response.statusText}` };
     }
     const payload = await response.json();
-    const data = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.models) ? payload.models : [];
-    const models = data
-      .filter((item) => provider !== "gemini" || (item.supportedGenerationMethods || []).includes("generateContent"))
-      .map((item) => item.id || item.name || item.model)
-      .map((name) => String(name).replace(/^models\//, ""))
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b));
+    const models = parseProviderModelList(provider, payload);
     return { provider, models, credentialSource: source, error: "" };
   } catch (error) {
     return { provider, models: [], credentialSource: source, error: error.message || "Model discovery failed" };
@@ -994,17 +986,7 @@ async function fetchProviderModels({ provider, apiKey, savedApiKey, baseUrl }) {
 
 function modelRuntime(modelRow) {
   const apiKey = modelRow.api_key || savedModelProviderKey(modelRow.provider, modelRow) || providerEnvKey(modelRow.provider);
-  const baseUrl = modelRow.provider === "custom"
-    ? modelRow.base_url.replace(/\/+$/, "")
-    : modelRow.provider === "openrouter"
-      ? "https://openrouter.ai/api/v1"
-    : modelRow.provider === "anthropic"
-      ? "https://api.anthropic.com/v1"
-      : modelRow.provider === "gemini"
-        ? "https://generativelanguage.googleapis.com/v1beta"
-        : modelRow.provider === "xai"
-          ? "https://api.x.ai/v1"
-        : "https://api.openai.com/v1";
+  const baseUrl = modelBaseUrl({ provider: modelRow.provider, baseUrl: modelRow.base_url });
   return { apiKey, baseUrl };
 }
 
@@ -4311,8 +4293,6 @@ function telegramSettings() {
 function modelSettings() {
   const r = get("SELECT * FROM model_settings WHERE id = 1");
   const activeProviderKey = savedModelProviderKey(r.provider, r);
-  const credentialStatus = providerCredentialStatus(r.provider, activeProviderKey);
-  const customReady = r.provider !== "custom" || !!r.base_url;
   const providerCredentials = Object.fromEntries(modelProviders.map((provider) => {
     const savedKey = savedModelProviderKey(provider, r);
     return [provider, {
@@ -4320,19 +4300,7 @@ function modelSettings() {
       credentialStatus: providerCredentialStatus(provider, savedKey),
     }];
   }));
-  return {
-    provider: r.provider,
-    model: r.model,
-    apiKeySaved: !!activeProviderKey,
-    baseUrl: r.provider === "custom" ? r.base_url : "",
-    enabled: !!r.enabled,
-    credentialStatus,
-    status: r.enabled && r.model && customReady && credentialStatus !== "missing" ? "ready" : "pending credentials",
-    providerCredentials,
-    lastCheckedAt: r.last_checked_at,
-    lastError: r.last_error,
-    updatedAt: r.updated_at,
-  };
+  return modelSettingsView({ row: r, activeProviderKey, providerCredentials });
 }
 function connectorSettings() {
   const rows = all("SELECT * FROM connector_credentials ORDER BY provider");
@@ -7396,20 +7364,25 @@ app.post("/api/telegram/test", async (req, res) => {
 app.patch("/api/model", (req, res) => {
   const b = req.body || {};
   const current = get("SELECT * FROM model_settings WHERE id=1");
-  const provider = modelProviders.includes(b.provider) ? b.provider : "openai";
-  const baseUrl = provider === "custom" ? (b.baseUrl || "") : "";
+  const provider = normalizeModelProvider(b.provider);
   if (b.apiKey) saveModelProviderKey(provider, b.apiKey);
-  const apiKey = b.apiKey || savedModelProviderKey(provider, current);
-  const modelName = b.model || defaultModelForProvider(provider);
-  const missing = b.enabled && (!modelName || providerCredentialStatus(provider, apiKey) === "missing" || (provider === "custom" && !baseUrl));
+  const plan = modelSavePlan({
+    provider,
+    model: b.model || "",
+    apiKey: b.apiKey || "",
+    savedApiKey: savedModelProviderKey(provider, current),
+    envApiKey: providerEnvKey(provider),
+    enabled: !!b.enabled,
+    baseUrl: b.baseUrl || "",
+  });
   run(`UPDATE model_settings SET provider=$provider, model=$model, api_key=$apiKey, base_url=$baseUrl,
        enabled=$enabled, last_error=$err, updated_at=$t WHERE id=1`, {
-    $provider: provider,
-    $model: modelName,
-    $apiKey: apiKey,
-    $baseUrl: baseUrl,
-    $enabled: b.enabled ? 1 : 0,
-    $err: missing ? "Missing runtime provider key, model name, or custom Base URL" : "",
+    $provider: plan.provider,
+    $model: plan.model,
+    $apiKey: plan.apiKey,
+    $baseUrl: plan.baseUrl,
+    $enabled: plan.enabled ? 1 : 0,
+    $err: plan.lastError,
     $t: now(),
   });
   audit("model.settings_updated", "model_settings", "1", b.enabled ? "Model connector enabled/updated" : "Model connector disabled/updated");
@@ -7419,7 +7392,7 @@ app.patch("/api/model", (req, res) => {
 app.post("/api/model/models", async (req, res) => {
   const b = req.body || {};
   const current = get("SELECT * FROM model_settings WHERE id=1");
-  const provider = modelProviders.includes(b.provider) ? b.provider : "openai";
+  const provider = normalizeModelProvider(b.provider);
   const result = await fetchProviderModels({ provider, apiKey: b.apiKey || "", savedApiKey: savedModelProviderKey(provider, current), baseUrl: b.baseUrl || "" });
   run("UPDATE model_settings SET last_checked_at=$t, last_error=$err WHERE id=1", { $t: now(), $err: result.error || "" });
   res.json({ ...result, state: state() });
