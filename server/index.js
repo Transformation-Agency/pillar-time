@@ -46,6 +46,13 @@ import {
   toDateMs,
 } from "./executivePlanning.js";
 import {
+  googleCalendarPublicConnectorView,
+  linearPublicConnectorView,
+  redditPublicConnectorView,
+  storedApiKeyConnectorView,
+  telegramPublicSettingsView,
+} from "./credentialPosture.js";
+import {
   buildContextEnvelope,
   interactionModes,
   partitions,
@@ -2470,20 +2477,12 @@ function linearClient() {
 }
 
 function linearPublicConnector(row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: LINEAR_PROVIDER })) {
-  const hasEnvKey = !!linearApiKey();
-  return {
-    provider: LINEAR_PROVIDER,
-    enabled: !!row?.enabled && hasEnvKey,
-    apiKeySaved: false,
-    credentialStatus: hasEnvKey ? "env" : "missing",
-    status: hasEnvKey && row?.enabled ? "ready" : hasEnvKey ? "disabled" : "missing env",
+  return linearPublicConnectorView({
+    row,
+    hasEnvKey: !!linearApiKey(),
     teamKey: DEFAULT_LINEAR_TEAM_KEY,
     workspaceHint: "Transformation Agency",
-    writeEnabled: hasEnvKey && !!row?.enabled,
-    lastCheckedAt: row?.last_checked_at || null,
-    lastError: row?.last_error || "",
-    updatedAt: row?.updated_at || null,
-  };
+  });
 }
 
 function redditCredential() {
@@ -2505,21 +2504,12 @@ function redditCredential() {
 }
 
 function redditPublicConnector({ row, data, enabled } = {}) {
-  const source = data || parse(row?.api_key, {});
-  const hasClientId = !!(source.clientId || process.env.REDDIT_CLIENT_ID || process.env.PILLAR_REDDIT_CLIENT_ID);
-  const isEnabled = !!enabled || !!process.env.REDDIT_CLIENT_ID || !!process.env.PILLAR_REDDIT_CLIENT_ID;
-  return {
-    provider: REDDIT_PROVIDER,
-    enabled: isEnabled,
-    apiKeySaved: hasClientId,
-    credentialStatus: hasClientId ? "saved" : "missing",
-    status: isEnabled && hasClientId ? "ready" : "pending credentials",
-    grantType: source.grantType || (source.clientSecret ? "client_credentials" : "installed_client"),
-    tokenExpiresAt: source.expiresAt || null,
-    lastCheckedAt: row?.last_checked_at || null,
-    lastError: row?.last_error || null,
-    updatedAt: row?.updated_at || null,
-  };
+  return redditPublicConnectorView({
+    row,
+    data: data || parse(row?.api_key, {}),
+    enabled,
+    envClientId: process.env.REDDIT_CLIENT_ID || process.env.PILLAR_REDDIT_CLIENT_ID || "",
+  });
 }
 
 function saveRedditCredential(data = {}, { enabled = true, error = "" } = {}) {
@@ -2659,28 +2649,14 @@ function googleCalendarPkcePair() {
 
 function googleCalendarPublicConnector(connector = googleCalendarCredential()) {
   const { row, data, enabled } = connector;
-  const hasClient = !!(data.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID);
-  const hasRefreshToken = !!data.refreshToken;
-  const grantedScope = String(data.scope || "");
-  const writeReady = grantedScope.split(/\s+/).includes(GOOGLE_CALENDAR_WRITE_SCOPE);
-  return {
-    provider: "googleCalendar",
+  return googleCalendarPublicConnectorView({
+    row,
+    data,
     enabled,
-    apiKeySaved: hasRefreshToken,
-    clientConfigured: hasClient,
-    credentialStatus: hasRefreshToken ? "saved" : hasClient ? "client configured" : "missing",
-    status: enabled && hasRefreshToken ? "ready" : hasClient ? "needs consent" : "pending credentials",
-    writeReady,
-    needsReconnectForWrite: enabled && hasRefreshToken && !writeReady,
-    calendarId: data.calendarId || "primary",
-    selectedCalendarIds: Array.isArray(data.selectedCalendarIds) && data.selectedCalendarIds.length ? data.selectedCalendarIds : ["primary"],
-    calendars: Array.isArray(data.calendars) ? data.calendars : [],
-    scope: data.scope || GOOGLE_CALENDAR_SCOPE,
-    redirectUri: data.redirectUri || "",
-    lastCheckedAt: row?.last_checked_at || null,
-    lastError: row?.last_error || null,
-    updatedAt: row?.updated_at || null,
-  };
+    desktopClientId: GOOGLE_CALENDAR_DESKTOP_CLIENT_ID,
+    defaultScope: GOOGLE_CALENDAR_SCOPE,
+    writeScope: GOOGLE_CALENDAR_WRITE_SCOPE,
+  });
 }
 
 function saveGoogleCalendarCredential(data, { enabled = false, lastError = "" } = {}) {
@@ -4258,12 +4234,7 @@ function audits() {
 }
 function telegramSettings() {
   const r = get("SELECT * FROM telegram_settings WHERE id = 1");
-  return {
-    enabled: !!r.enabled, botToken: r.bot_token ? "configured" : "", chatId: r.chat_id,
-    allowedUsers: parse(r.allowed_users, []), lastCheckedAt: r.last_checked_at, lastError: r.last_error,
-    recentCommands: parse(r.recent_commands, []), updatedAt: r.updated_at,
-    commands: ["/brief", "/sources", "/lenses", "/deliberate", "/review", "/approve", "/reject", "/analyze"],
-  };
+  return telegramPublicSettingsView(r, parse);
 }
 function modelSettings() {
   const r = get("SELECT * FROM model_settings WHERE id = 1");
@@ -4283,17 +4254,7 @@ function connectorSettings() {
     if (r.provider === GOOGLE_CALENDAR_PROVIDER) return [r.provider, googleCalendarPublicConnector({ row: r, data: parse(r.api_key, {}), enabled: !!r.enabled })];
     if (r.provider === REDDIT_PROVIDER) return [r.provider, redditPublicConnector({ row: r, data: parse(r.api_key, {}), enabled: !!r.enabled })];
     if (r.provider === LINEAR_PROVIDER) return [r.provider, linearPublicConnector(r)];
-    const hasKey = !!r.api_key;
-    return [r.provider, {
-      provider: r.provider,
-      enabled: !!r.enabled,
-      apiKeySaved: hasKey,
-      credentialStatus: hasKey ? "saved" : "missing",
-      status: r.enabled && hasKey ? "ready" : "pending credentials",
-      lastCheckedAt: r.last_checked_at,
-      lastError: r.last_error,
-      updatedAt: r.updated_at,
-    }];
+    return [r.provider, storedApiKeyConnectorView(r)];
   }));
   return {
     x: connectors.x || {
