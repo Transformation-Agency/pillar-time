@@ -10,6 +10,17 @@ import { DatabaseSync } from "node:sqlite";
 import { localDateKey, nextOccurrence, rankActions, sporadicTimes } from "./timeEngine.js";
 import { groupIssuesByProject, LinearClient } from "./linearClient.js";
 import {
+  calendarBusyIntervals as buildCalendarBusyIntervals,
+  calendarFreeWindows as buildCalendarFreeWindows,
+  calendarRoleForId,
+  isAllDayCalendarEvent,
+  isPrimaryBlockingCalendarEvent,
+  localDateTime,
+  proposedCalendarScheduleFromContext as buildProposedCalendarScheduleFromContext,
+  sameLocalDate,
+  toDateMs,
+} from "./executivePlanning.js";
+import {
   buildContextEnvelope,
   interactionModes,
   partitions,
@@ -65,8 +76,6 @@ const audioDir = path.join(dataDir, "audio");
 fs.mkdirSync(audioDir, { recursive: true });
 const modelsDir = path.join(dataDir, "models");
 fs.mkdirSync(modelsDir, { recursive: true });
-const PRIMARY_CALENDAR_IDS = new Set(["primary", "pjacooper@gmail.com", "paul@transformationagency.com"]);
-
 function backupDatabaseBeforePillarTimeMigration() {
   const legacyPath = path.join(dataDir, "pillar-brief.sqlite");
   const marker = path.join(dataDir, ".pillar-time-migration-backup-created");
@@ -2338,24 +2347,6 @@ function eventDisplayTime(event = {}) {
   const startText = new Date(start).toLocaleTimeString([], opts);
   const endText = end ? new Date(end).toLocaleTimeString([], opts) : "";
   return endText ? `${startText}-${endText}` : startText;
-}
-
-function calendarRoleForId(calendarId = "") {
-  return PRIMARY_CALENDAR_IDS.has(String(calendarId || "").toLowerCase()) ? "primary" : "context";
-}
-
-function isAllDayCalendarEvent(event = {}) {
-  if (event.allDay) return true;
-  if (event.start?.date && !event.start?.dateTime) return true;
-  const start = String(event.start || "");
-  const end = String(event.end || "");
-  return /^\d{4}-\d{2}-\d{2}$/.test(start) || /^\d{4}-\d{2}-\d{2}$/.test(end);
-}
-
-function isPrimaryBlockingCalendarEvent(event = {}) {
-  if (isAllDayCalendarEvent(event)) return false;
-  if (!event.calendarId) return true;
-  return event.calendarRole === "primary" || PRIMARY_CALENDAR_IDS.has(String(event.calendarId || "").toLowerCase());
 }
 
 function formatCalendarEventBody(event = {}, source = {}, config = {}) {
@@ -5637,17 +5628,6 @@ function saveBriefDocument({ runId, artifact }) {
   return docId;
 }
 
-function toDateMs(value) {
-  const date = value ? new Date(value) : null;
-  return date && Number.isFinite(date.getTime()) ? date.getTime() : 0;
-}
-
-function sameLocalDate(value, dateKey, timezone = "America/Denver") {
-  if (!value) return false;
-  const date = new Date(value);
-  return Number.isFinite(date.getTime()) && localDateKey(date, timezone) === dateKey;
-}
-
 function daysUntilLocalDate(dateKey, timezone = "America/Denver") {
   const today = localDateKey(new Date(), timezone);
   return Math.round((new Date(`${dateKey}T12:00:00Z`).getTime() - new Date(`${today}T12:00:00Z`).getTime()) / 86400000);
@@ -6018,126 +5998,21 @@ function proposedLinearActionsFromContext({ rankedDayCandidates = [], linearCont
     });
 }
 
-function localDateTime(dateKey, hhmm = "09:00") {
-  const match = String(hhmm || "09:00").match(/^(\d{1,2}):(\d{2})/);
-  const hours = match ? Math.max(0, Math.min(23, Number(match[1]))) : 9;
-  const minutes = match ? Math.max(0, Math.min(59, Number(match[2]))) : 0;
-  return new Date(`${dateKey}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`);
-}
-
 function calendarBusyIntervals({ calendarAgenda = [], dateKey, timezone = "America/Denver", bufferMinutes = 0 }) {
-  return calendarAgenda
-    .filter((event) => isPrimaryBlockingCalendarEvent(event))
-    .map((event) => ({ start: toDateMs(event.start), end: toDateMs(event.end), title: event.title || "" }))
-    .filter((event) => event.start && event.end && sameLocalDate(event.start, dateKey, timezone))
-    .map((event) => ({ ...event, start: event.start - bufferMinutes * 60000, end: event.end + bufferMinutes * 60000 }))
-    .sort((a, b) => a.start - b.start);
+  return buildCalendarBusyIntervals({ calendarAgenda, dateKey, timezone, bufferMinutes });
 }
 
 function calendarFreeWindows({ calendarAgenda = [], dateKey, timezone = "America/Denver", preferences = {} }) {
-  const workHours = preferences.workHours || { start: "09:00", end: "17:00", weekdays: [1, 2, 3, 4, 5] };
-  const day = localDateTime(dateKey, "12:00").getDay();
-  if (Array.isArray(workHours.weekdays) && workHours.weekdays.length && !workHours.weekdays.includes(day)) return [];
-  const workStart = localDateTime(dateKey, workHours.start || "09:00").getTime();
-  const workEnd = localDateTime(dateKey, workHours.end || "17:00").getTime();
-  if (!workStart || !workEnd || workEnd <= workStart) return [];
-  const bufferMinutes = Math.max(0, Number(preferences.meetingBufferMinutes || 0));
-  const busy = calendarBusyIntervals({ calendarAgenda, dateKey, timezone, bufferMinutes });
-  const windows = [];
-  let cursor = workStart;
-  for (const interval of busy) {
-    if (interval.end <= workStart || interval.start >= workEnd) continue;
-    const start = Math.max(workStart, interval.start);
-    const end = Math.min(workEnd, interval.end);
-    if (start > cursor) windows.push({ start: cursor, end: start });
-    cursor = Math.max(cursor, end);
-  }
-  if (cursor < workEnd) windows.push({ start: cursor, end: workEnd });
-  return windows.filter((window) => window.end - window.start >= 15 * 60000);
-}
-
-function categoryForCandidate(candidate, categoriesByKey) {
-  const text = `${candidate.source || ""} ${candidate.leverageCategory || ""} ${candidate.title || ""}`.toLowerCase();
-  if (candidate.source === "calendar" || /prep|meeting|call|huddle|checkpoint/.test(text)) return categoriesByKey.get("meeting-prep") || categoriesByKey.get("leadership");
-  if (/waiting|follow|unblock|status|comment|reply/.test(text)) return categoriesByKey.get("follow-up") || categoriesByKey.get("leadership");
-  if (/admin|inbox|reminder|important_date|form|cleanup/.test(text)) return categoriesByKey.get("admin");
-  if (/health|recovery|lunch|movement/.test(text)) return categoriesByKey.get("health");
-  if (/learning|research|read|study/.test(text)) return categoriesByKey.get("learning") || categoriesByKey.get("deep-work");
-  return categoriesByKey.get("deep-work") || [...categoriesByKey.values()][0];
+  return buildCalendarFreeWindows({ calendarAgenda, dateKey, timezone, preferences });
 }
 
 function proposedCalendarScheduleFromContext(context = {}) {
   const categories = calendarPlanningCategories().filter((category) => category.enabled);
-  if (!categories.length) return { blocks: [], windows: [], categories: [], note: "No enabled calendar planning categories." };
-  const categoriesByKey = new Map();
-  for (const category of categories) {
-    const key = category.id.replace(/^schedule-category-/, "");
-    categoriesByKey.set(key, category);
-    if (!categoriesByKey.has(category.leverageCategory)) categoriesByKey.set(category.leverageCategory, category);
-  }
-  const windows = calendarFreeWindows({
-    calendarAgenda: context.calendarAgenda || [],
-    dateKey: context.dateKey,
-    timezone: context.timezone,
-    preferences: context.local?.preferences || {},
-  });
-  const calendarId = googleCalendarWriteCalendarId();
-  const blocks = [];
-  let windowIndex = 0;
-  let cursor = windows[0]?.start || 0;
-  const usedCandidates = new Set();
-  const candidates = (context.rankedDayCandidates || []).filter((candidate) => candidate?.title && !/calendar_conflict/i.test(candidate.id || ""));
-  for (const candidate of candidates) {
-    if (blocks.length >= 8 || !windows[windowIndex]) break;
-    if (usedCandidates.has(candidate.id)) continue;
-    const category = categoryForCandidate(candidate, categoriesByKey);
-    if (!category) continue;
-    const requestedMinutes = Math.max(category.minMinutes, Math.min(Number(candidate.estimateMinutes || category.defaultMinutes), category.maxMinutes));
-    let durationMs = requestedMinutes * 60000;
-    while (windows[windowIndex] && cursor + Math.max(category.minMinutes * 60000, 15 * 60000) > windows[windowIndex].end) {
-      windowIndex += 1;
-      cursor = windows[windowIndex]?.start || 0;
-    }
-    const window = windows[windowIndex];
-    if (!window) break;
-    const remainingMs = window.end - cursor;
-    if (remainingMs < category.minMinutes * 60000) continue;
-    durationMs = Math.min(durationMs, remainingMs);
-    if (durationMs < category.minMinutes * 60000) continue;
-    const start = new Date(cursor);
-    const end = new Date(cursor + durationMs);
-    const blockId = id("cal-block");
-    const summary = `Pillar Time: ${category.calendarTitlePrefix || category.name} - ${candidate.title}`.slice(0, 180);
-    blocks.push({
-      id: blockId,
-      calendarId,
-      categoryId: category.id,
-      categoryName: category.name,
-      sourceCandidateId: candidate.id,
-      source: candidate.source || "",
-      title: candidate.title,
-      summary,
-      description: [
-        "Created from a Pillar Time approved schedule proposal.",
-        candidate.reason ? `Why this surfaced: ${candidate.reason}` : "",
-        candidate.notes ? `Context: ${candidate.notes}` : "",
-      ].filter(Boolean).join("\n"),
-      start: start.toISOString(),
-      end: end.toISOString(),
-      timezone: context.timezone || "America/Denver",
-      minutes: Math.round(durationMs / 60000),
-    });
-    usedCandidates.add(candidate.id);
-    cursor = end.getTime() + 5 * 60000;
-  }
-  return {
-    dateKey: context.dateKey,
-    timezone: context.timezone || "America/Denver",
-    calendarId,
+  return buildProposedCalendarScheduleFromContext(context, {
     categories,
-    windows: windows.map((window) => ({ start: new Date(window.start).toISOString(), end: new Date(window.end).toISOString(), minutes: Math.round((window.end - window.start) / 60000) })),
-    blocks,
-  };
+    calendarId: googleCalendarWriteCalendarId(),
+    idFactory: () => id("cal-block"),
+  });
 }
 
 function createApprovalItemsForRun(runId, proposedActions = []) {
