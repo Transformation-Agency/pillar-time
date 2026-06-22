@@ -23,6 +23,8 @@ import {
   calendarFreeWindows as buildCalendarFreeWindows,
   calendarRoleForId,
   detectExecutiveRisks as detectExecutiveRisksPure,
+  executiveRegenerationContext,
+  executiveSynthesisPayload,
   isAllDayCalendarEvent,
   isPrimaryBlockingCalendarEvent,
   proposedCalendarScheduleFromContext as buildProposedCalendarScheduleFromContext,
@@ -5768,34 +5770,12 @@ async function synthesizeExecutiveDayBrief(context) {
       "End with one uncomfortable question the owner is least likely to ask today.",
       "Return only valid JSON.",
     ].join(" ");
-    const prompt = JSON.stringify({
-      task: "Generate an executive day coaching brief.",
-      ownerName,
-      communicationContract: {
-        selfStatement,
-        voiceRules: config.voiceRules || DEFAULT_EXECUTIVE_COACHING_VOICE,
-      },
-      additionalContext: context.additionalContext || context.local?.additionalContext || "",
-      requiredJsonShape: {
-        headline: "string",
-        coachingOpen: ["string"],
-        executiveRead: ["string"],
-        calendarRead: ["string"],
-        todaysThreeRead: ["string"],
-        highestLeverageRead: ["string"],
-        leverageRead: ["string"],
-        tensionRelief: ["string"],
-        avoidanceCheck: ["string"],
-        hardQuestion: "string",
-        linearRead: ["string"],
-        commitmentRead: ["string"],
-        approvalRead: ["string"],
-        scheduleProtection: ["string"],
-        missingInfo: ["string"],
-        coverageNotes: ["string"],
-      },
+    const prompt = JSON.stringify(executiveSynthesisPayload({
       context,
-    });
+      ownerName,
+      selfStatement,
+      voiceRules: config.voiceRules || DEFAULT_EXECUTIVE_COACHING_VOICE,
+    }));
     const parsed = JSON.parse(await callTextModel({ system, prompt }));
     return { ...fallback, ...parsed, mode: "model" };
   } catch (error) {
@@ -5898,13 +5878,14 @@ async function buildExecutiveDayContext({ dateKey, timezone, additionalContext =
   const prefs = timePreferences();
   const effectiveTimezone = timezone || prefs.timezone || "America/Denver";
   const effectiveDateKey = dateKey || localDateKey(new Date(), effectiveTimezone);
+  const regeneration = executiveRegenerationContext({ additionalContext, basedOnRunId });
   const [calendar, linearContext] = await Promise.all([fetchExecutiveCalendarAgenda({ timezone: effectiveTimezone }), fetchExecutiveLinearContext()]);
   const model = modelSettings();
   const sourceCount = sources().filter((source) => source.status === "active" && source.type !== "Calendar").length;
   const local = {
     preferences: prefs,
-    additionalContext: String(additionalContext || "").trim(),
-    basedOnRunId: String(basedOnRunId || "").trim(),
+    additionalContext: regeneration.additionalContext,
+    basedOnRunId: regeneration.basedOnRunId,
     tasks: timeTasks(),
     commitments: commitmentRowsForExecutiveDay({ dateKey: effectiveDateKey }),
     dailyCommitments: dailyCommitments(effectiveDateKey),

@@ -7,6 +7,8 @@ import {
   calendarFreeWindows,
   calendarRoleForId,
   detectExecutiveRisks,
+  executiveRegenerationContext,
+  executiveSynthesisPayload,
   isPrimaryBlockingCalendarEvent,
   proposedCalendarScheduleFromContext,
 } from "../server/executivePlanning.js";
@@ -272,4 +274,35 @@ test("executive risks detect conflicts, meeting load, stale Linear work, due com
   assert.ok(types.includes("waiting_on"));
   assert.ok(!risks.some((risk) => String(risk.evidence || "").includes("all-day")));
   assert.ok(!risks.some((risk) => risk.type === "calendar_unavailable"));
+});
+
+test("executive regeneration context trims missing context and carries prior run id into synthesis payload", () => {
+  const regeneration = executiveRegenerationContext({
+    additionalContext: "  The all-day board calendar is context only, not my appointment.\\nProtect 90 minutes for Linear TRA-10.  ",
+    basedOnRunId: "  run-original  ",
+  });
+
+  assert.deepEqual(regeneration, {
+    additionalContext: "The all-day board calendar is context only, not my appointment.\\nProtect 90 minutes for Linear TRA-10.",
+    basedOnRunId: "run-original",
+  });
+
+  const payload = executiveSynthesisPayload({
+    ownerName: "Paul",
+    selfStatement: "Be direct.",
+    voiceRules: "Coach, do not report.",
+    context: {
+      ...regeneration,
+      dateKey,
+      local: {
+        additionalContext: "fallback context",
+      },
+    },
+  });
+
+  assert.equal(payload.additionalContext, regeneration.additionalContext);
+  assert.equal(payload.context.basedOnRunId, "run-original");
+  assert.equal(payload.communicationContract.selfStatement, "Be direct.");
+  assert.equal(payload.communicationContract.voiceRules, "Coach, do not report.");
+  assert.equal(payload.requiredJsonShape.hardQuestion, "string");
 });

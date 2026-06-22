@@ -18,6 +18,44 @@ export function daysUntilLocalDate(dateKey, timezone = "America/Denver", from = 
   return Math.round((new Date(`${dateKey}T12:00:00Z`).getTime() - new Date(`${today}T12:00:00Z`).getTime()) / 86400000);
 }
 
+export function executiveRegenerationContext({ additionalContext = "", basedOnRunId = "" } = {}) {
+  return {
+    additionalContext: String(additionalContext || "").trim(),
+    basedOnRunId: String(basedOnRunId || "").trim(),
+  };
+}
+
+export function executiveSynthesisPayload({ context = {}, ownerName = "the brief owner", selfStatement = "", voiceRules = "" } = {}) {
+  return {
+    task: "Generate an executive day coaching brief.",
+    ownerName,
+    communicationContract: {
+      selfStatement,
+      voiceRules,
+    },
+    additionalContext: context.additionalContext || context.local?.additionalContext || "",
+    requiredJsonShape: {
+      headline: "string",
+      coachingOpen: ["string"],
+      executiveRead: ["string"],
+      calendarRead: ["string"],
+      todaysThreeRead: ["string"],
+      highestLeverageRead: ["string"],
+      leverageRead: ["string"],
+      tensionRelief: ["string"],
+      avoidanceCheck: ["string"],
+      hardQuestion: "string",
+      linearRead: ["string"],
+      commitmentRead: ["string"],
+      approvalRead: ["string"],
+      scheduleProtection: ["string"],
+      missingInfo: ["string"],
+      coverageNotes: ["string"],
+    },
+    context,
+  };
+}
+
 export function localDateTime(dateKey, hhmm = "09:00") {
   const match = String(hhmm || "09:00").match(/^(\d{1,2}):(\d{2})/);
   const hours = match ? Math.max(0, Math.min(23, Number(match[1]))) : 9;
