@@ -8,6 +8,10 @@ import {
 import { desktopRuntime } from "./desktopRuntime.js";
 import { generationProgressViewModel } from "./progressViewModel.js";
 import {
+  reminderDefaultPatch,
+  saveReminderDefaultsFlow,
+} from "./reminderDefaults.js";
+import {
   connectorMessageTone,
   connectorModalTarget,
   connectorRequest,
@@ -2641,13 +2645,13 @@ function Onboarding({ state, mutate, refresh }) {
     setStarterMessage(result.message);
   };
   const saveReminderDefaults = async (patch = {}) => {
-    try {
-      await mutate("/api/time/preferences", {
-        ...(state.time?.preferences || {}),
-        ...patch,
-      }, "PATCH");
-    } catch (error) {
-      setStarterMessage(error.message || "Could not save reminder settings.");
+    const result = await saveReminderDefaultsFlow({
+      preferences: state.time?.preferences || {},
+      patch,
+      mutate,
+    });
+    if (!result.ok) {
+      setStarterMessage(result.message);
     }
   };
   const toggleReview = async (review) => {
@@ -3135,8 +3139,8 @@ function Onboarding({ state, mutate, refresh }) {
             ["reminderMasterEnabled", "Master reminders"],
             ["regularRemindersEnabled", "Regular reminders"],
             ["sporadicRemindersEnabled", "Sporadic reminders"],
-          ].map(([key, label]) => <label className="switch-row" key={key}><span>{label}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.[key]} onChange={(event) => saveReminderDefaults({ [key]: event.target.checked })} /><span /></label></label>)}
-          {["desktopText", "telegramText"].map((key) => <label className="switch-row" key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.channels?.[key]} onChange={(event) => saveReminderDefaults({ channels: { ...(state.time?.preferences?.channels || {}), [key]: event.target.checked } })} /><span /></label></label>)}
+          ].map(([key, label]) => <label className="switch-row" key={key}><span>{label}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.[key]} onChange={(event) => saveReminderDefaults(reminderDefaultPatch({ key, checked: event.target.checked, preferences: state.time?.preferences || {} }))} /><span /></label></label>)}
+          {["desktopText", "telegramText"].map((key) => <label className="switch-row" key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.channels?.[key]} onChange={(event) => saveReminderDefaults(reminderDefaultPatch({ key, checked: event.target.checked, preferences: state.time?.preferences || {} }))} /><span /></label></label>)}
         </div>
         <div className="row"><Button onClick={() => go("today")}>Back</Button><Button kind="primary" onClick={() => go("reviews")}>Continue</Button></div>
       </section>}
