@@ -102,7 +102,12 @@ function copyNodeSidecar(filePath) {
   fs.chmodSync(filePath, 0o755);
   if (process.platform === "darwin") {
     execFileSync("install_name_tool", ["-add_rpath", "@loader_path/../Resources/lib", filePath], { stdio: "ignore" });
-    execFileSync("codesign", ["--force", "--sign", "-", filePath], { stdio: "ignore" });
+    const signingIdentity = process.env.PILLAR_SIGNING_IDENTITY || process.env.APPLE_SIGNING_IDENTITY || "";
+    const entitlements = path.join(tauriDir, "entitlements.plist");
+    const signArgs = signingIdentity
+      ? ["--force", "--options", "runtime", "--timestamp", "--entitlements", entitlements, "--sign", signingIdentity, filePath]
+      : ["--force", "--sign", "-", filePath];
+    execFileSync("codesign", signArgs, { stdio: "ignore" });
   }
 }
 
@@ -116,6 +121,7 @@ function nodeSharedLibraryPath() {
     const otoolOutput = execFileSync("otool", ["-L", nodeBinary], { encoding: "utf8" });
     const match = otoolOutput.match(/^\s+(\S*libnode\.\d+\.dylib)\s/m);
     if (match?.[1] && fs.existsSync(match[1])) return match[1];
+    if (!/libnode\.\d+\.dylib/.test(otoolOutput)) return null;
   } catch {
     // Fall through to the packaging error below.
   }
@@ -123,12 +129,16 @@ function nodeSharedLibraryPath() {
 }
 
 function copyNodeRuntimeLibraries() {
+  fs.mkdirSync(runtimeLibDir, { recursive: true });
   const libnode = nodeSharedLibraryPath();
   if (!libnode) return;
-  fs.mkdirSync(runtimeLibDir, { recursive: true });
   const dest = path.join(runtimeLibDir, path.basename(libnode));
   copyBundleAsset(libnode, dest);
   fs.chmodSync(dest, 0o755);
+  const signingIdentity = process.env.PILLAR_SIGNING_IDENTITY || process.env.APPLE_SIGNING_IDENTITY || "";
+  if (process.platform === "darwin" && signingIdentity) {
+    execFileSync("codesign", ["--force", "--options", "runtime", "--timestamp", "--sign", signingIdentity, dest], { stdio: "ignore" });
+  }
 }
 
 rmrf(backendDir);
