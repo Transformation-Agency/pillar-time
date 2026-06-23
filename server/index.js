@@ -2561,6 +2561,7 @@ function googleCalendarLocalOAuthConfig() {
 const GOOGLE_CALENDAR_LOCAL_OAUTH = googleCalendarLocalOAuthConfig();
 const GOOGLE_CALENDAR_DESKTOP_CLIENT_ID = process.env.PILLAR_GOOGLE_CALENDAR_CLIENT_ID || GOOGLE_CALENDAR_LOCAL_OAUTH.clientId || "190790037747-8mou84ivna7taems83u92t7fpfsd12m3.apps.googleusercontent.com";
 const GOOGLE_CALENDAR_CLIENT_SECRET = process.env.PILLAR_GOOGLE_CALENDAR_CLIENT_SECRET || GOOGLE_CALENDAR_LOCAL_OAUTH.clientSecret || "";
+const GOOGLE_CALENDAR_AUTH_BROKER_URL = String(process.env.PILLAR_GOOGLE_CALENDAR_AUTH_BROKER_URL || "https://auth.pillar.transformationagency.com").replace(/\/+$/, "");
 const GOOGLE_CALENDAR_REDIRECT_URI = process.env.PILLAR_GOOGLE_CALENDAR_REDIRECT_URI || "";
 const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events.readonly",
@@ -2583,6 +2584,25 @@ function googleCalendarRedirectUri(req) {
   return `${req.protocol}://${req.get("host")}/api/google-calendar/oauth/callback`;
 }
 
+function googleCalendarCompleteUri(req) {
+  return `${req.protocol}://${req.get("host")}/api/google-calendar/oauth/complete`;
+}
+
+function htmlEscape(value = "") {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function parseBase64UrlJson(value = "") {
+  const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  return JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+}
+
 function base64Url(buffer) {
   return Buffer.from(buffer).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
@@ -2595,7 +2615,7 @@ function googleCalendarPkcePair() {
 
 function googleCalendarPublicConnector(connector = googleCalendarCredential()) {
   const { row, data, enabled } = connector;
-  const hasClient = !!(data.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID);
+  const hasClient = !!(data.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID || data.authBrokerUrl || GOOGLE_CALENDAR_AUTH_BROKER_URL);
   const hasRefreshToken = !!data.refreshToken;
   return {
     provider: "googleCalendar",
@@ -2604,6 +2624,7 @@ function googleCalendarPublicConnector(connector = googleCalendarCredential()) {
     clientConfigured: hasClient,
     credentialStatus: hasRefreshToken ? "saved" : hasClient ? "client configured" : "missing",
     status: enabled && hasRefreshToken ? "ready" : hasClient ? "needs consent" : "pending credentials",
+    authMode: data.authMode || (data.authBrokerUrl || GOOGLE_CALENDAR_AUTH_BROKER_URL ? "broker" : "direct"),
     calendarId: data.calendarId || "primary",
     selectedCalendarIds: Array.isArray(data.selectedCalendarIds) && data.selectedCalendarIds.length ? data.selectedCalendarIds : ["primary"],
     calendars: Array.isArray(data.calendars) ? data.calendars : [],
@@ -2642,15 +2663,47 @@ async function exchangeGoogleCalendarCode({ clientId, clientSecret, code, redire
     body,
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error_description || payload.error || `Google OAuth token exchange failed: ${response.status} ${response.statusText}`);
+  if (!response.ok) {
+    const message = payload.error_description || payload.error || `Google OAuth token exchange failed: ${response.status} ${response.statusText}`;
+    if (/client_secret/i.test(message) && !clientSecret) {
+      throw new Error("This Google OAuth client requires its desktop client secret for the final token exchange. Add PILLAR_GOOGLE_CALENDAR_CLIENT_SECRET locally, then reconnect Google Calendar.");
+    }
+    throw new Error(message);
+  }
   return payload;
 }
 
 async function refreshGoogleCalendarAccessToken() {
   const connector = googleCalendarCredential();
   const { data, enabled } = connector;
-  if (!enabled || !data.refreshToken || !(data.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID)) throw new Error("Google Calendar is not connected.");
+  if (!enabled || !data.refreshToken || !(data.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID || data.authBrokerUrl || GOOGLE_CALENDAR_AUTH_BROKER_URL)) throw new Error("Google Calendar is not connected.");
   if (data.accessToken && data.expiresAt && Number(data.expiresAt) > Date.now() + 60000) return data.accessToken;
+  const authBrokerUrl = String(data.authBrokerUrl || GOOGLE_CALENDAR_AUTH_BROKER_URL || "").replace(/\/+$/, "");
+  if (data.authMode === "broker" && authBrokerUrl) {
+    const response = await fetchWithTimeout(`${authBrokerUrl}/api/google/refresh`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ refresh_token: data.refreshToken }),
+    }, 20000);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = payload.error_description || payload.error || `Google token refresh failed: ${response.status} ${response.statusText}`;
+      run("UPDATE connector_credentials SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now(), $err: error });
+      throw new Error(error);
+    }
+    if (!payload.access_token) throw new Error("Google auth broker did not return an access token.");
+    const nextData = {
+      ...data,
+      accessToken: payload.access_token,
+      expiresAt: Date.now() + Number(payload.expires_in || 3600) * 1000,
+      tokenType: payload.token_type || "Bearer",
+      authBrokerUrl,
+      authMode: "broker",
+    };
+    saveGoogleCalendarCredential(nextData, { enabled: true });
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now() });
+    return nextData.accessToken;
+  }
   const body = new URLSearchParams({
     client_id: data.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID,
     refresh_token: data.refreshToken,
@@ -6715,11 +6768,39 @@ app.post("/api/model/models", async (req, res) => {
   res.json({ ...result, state: state() });
 });
 
+async function saveCompletedGoogleCalendarOAuth(data, token, extra = {}) {
+  const nextData = {
+    ...data,
+    ...extra,
+    refreshToken: token.refresh_token || data.refreshToken || "",
+    accessToken: token.access_token || "",
+    expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000,
+    tokenType: token.token_type || "Bearer",
+    oauthState: "",
+    codeVerifier: "",
+  };
+  if (!nextData.refreshToken) throw new Error("Google did not return a refresh token. Try connecting again and approve offline access.");
+  saveGoogleCalendarCredential(nextData, { enabled: true });
+  ensureGoogleCalendarBriefSetup();
+  run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now() });
+  audit("google_calendar.connected", "connector", GOOGLE_CALENDAR_PROVIDER, "Google Calendar connected", { authMode: nextData.authMode || "direct" }, "system");
+  try {
+    const calendars = await fetchGoogleCalendarList();
+    const selectedCalendarIds = calendars.filter((calendar) => calendar.primary || calendar.selected).map((calendar) => calendar.id);
+    const withCalendars = { ...nextData, calendars, selectedCalendarIds: selectedCalendarIds.length ? selectedCalendarIds : ["primary"], calendarId: "selected" };
+    saveGoogleCalendarCredential(withCalendars, { enabled: true });
+  } catch {
+    // Keep the connection valid even if calendar-list discovery needs a retry from the app.
+  }
+  return nextData;
+}
+
 app.post("/api/google-calendar/oauth/start", (req, res) => {
   const b = req.body || {};
   const clientId = String(b.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID).trim();
   const clientSecret = String(b.clientSecret || GOOGLE_CALENDAR_CLIENT_SECRET || "").trim();
-  if (!clientId) return res.status(400).json({ error: "Google Calendar OAuth client ID is not configured.", state: state() });
+  const useBroker = !!GOOGLE_CALENDAR_AUTH_BROKER_URL && !b.clientId && !clientSecret;
+  if (!useBroker && !clientId) return res.status(400).json({ error: "Google Calendar OAuth client ID is not configured.", state: state() });
   const redirectUri = googleCalendarRedirectUri(req);
   const stateToken = id("gcal");
   const pkce = googleCalendarPkcePair();
@@ -6728,6 +6809,9 @@ app.post("/api/google-calendar/oauth/start", (req, res) => {
     clientId,
     clientSecret: clientSecret || "",
     redirectUri,
+    completeUri: googleCalendarCompleteUri(req),
+    authBrokerUrl: useBroker ? GOOGLE_CALENDAR_AUTH_BROKER_URL : "",
+    authMode: useBroker ? "broker" : "direct",
     oauthState: stateToken,
     codeVerifier: pkce.verifier,
     scope: GOOGLE_CALENDAR_SCOPE,
@@ -6735,7 +6819,13 @@ app.post("/api/google-calendar/oauth/start", (req, res) => {
     selectedCalendarIds: googleCalendarCredential().data.selectedCalendarIds || ["primary"],
   };
   saveGoogleCalendarCredential(data, { enabled: !!data.refreshToken });
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
+  const authUrl = useBroker
+    ? `${GOOGLE_CALENDAR_AUTH_BROKER_URL}/api/google/start?${new URLSearchParams({
+      state: stateToken,
+      return_to: data.completeUri,
+      scope: GOOGLE_CALENDAR_SCOPE,
+    })}`
+    : `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
@@ -6746,13 +6836,13 @@ app.post("/api/google-calendar/oauth/start", (req, res) => {
     code_challenge: pkce.challenge,
     code_challenge_method: "S256",
   })}`;
-  audit("google_calendar.oauth_started", "connector", GOOGLE_CALENDAR_PROVIDER, "Started Google Calendar OAuth consent", { redirectUri }, "system");
+  audit("google_calendar.oauth_started", "connector", GOOGLE_CALENDAR_PROVIDER, "Started Google Calendar OAuth consent", { redirectUri, authMode: data.authMode }, "system");
   if (isDesktop && process.platform === "darwin") {
     execFile("/usr/bin/open", ["-a", "Google Chrome", authUrl], (error) => {
       if (error) console.error("Failed to open Google Calendar OAuth in Chrome:", error.message || error);
     });
   }
-  res.json({ authUrl, redirectUri, state: state() });
+  res.json({ authUrl, redirectUri: useBroker ? data.completeUri : redirectUri, authMode: data.authMode, state: state() });
 });
 
 app.get("/api/google-calendar/oauth/callback", async (req, res) => {
@@ -6778,33 +6868,44 @@ app.get("/api/google-calendar/oauth/callback", async (req, res) => {
       redirectUri: data.redirectUri,
       codeVerifier: data.codeVerifier,
     });
-    const nextData = {
-      ...data,
-      refreshToken: token.refresh_token || data.refreshToken || "",
-      accessToken: token.access_token || "",
-      expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000,
-      tokenType: token.token_type || "Bearer",
-      oauthState: "",
-      codeVerifier: "",
-    };
-    if (!nextData.refreshToken) throw new Error("Google did not return a refresh token. Try connecting again and approve offline access.");
-    saveGoogleCalendarCredential(nextData, { enabled: true });
-    ensureGoogleCalendarBriefSetup();
-    run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now() });
-    audit("google_calendar.connected", "connector", GOOGLE_CALENDAR_PROVIDER, "Google Calendar connected", {}, "system");
-    try {
-      const calendars = await fetchGoogleCalendarList();
-      const selectedCalendarIds = calendars.filter((calendar) => calendar.primary || calendar.selected).map((calendar) => calendar.id);
-      const withCalendars = { ...nextData, calendars, selectedCalendarIds: selectedCalendarIds.length ? selectedCalendarIds : ["primary"], calendarId: "selected" };
-      saveGoogleCalendarCredential(withCalendars, { enabled: true });
-    } catch {
-      // Keep the connection valid even if calendar-list discovery needs a retry from the app.
-    }
+    await saveCompletedGoogleCalendarOAuth(data, token, { authMode: "direct", authBrokerUrl: "" });
     return render("Google Calendar connected", "Pillar Time can now read today's events. Return to the app to choose calendars.", { autoReturn: true });
   } catch (error) {
     const message = error.message || "Google Calendar OAuth failed";
     run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: message, $t: now() });
     audit("google_calendar.oauth_failed", "connector", GOOGLE_CALENDAR_PROVIDER, message, {}, "system");
+    return render("Google Calendar was not connected", message);
+  }
+});
+
+app.post("/api/google-calendar/oauth/complete", async (req, res) => {
+  const returnedState = String(req.body?.state || "");
+  const tokenPayload = String(req.body?.token_payload || "");
+  const errorPayload = String(req.body?.error || "");
+  const connector = googleCalendarCredential();
+  const data = connector.data;
+  const render = (title, body, { autoReturn = false } = {}) => res.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><title>${htmlEscape(title)}</title>${autoReturn ? '<meta http-equiv="refresh" content="1.4; url=/#/settings">' : ''}<style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:48px;line-height:1.5;color:#111827}main{max-width:640px}.button{display:inline-flex;align-items:center;justify-content:center;margin-top:20px;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font-weight:800;padding:12px 16px}p{font-size:18px;color:#374151}code{background:#f3f4f6;padding:2px 6px;border-radius:6px}</style></head><body><main><h1>${htmlEscape(title)}</h1><p>${htmlEscape(body)}</p><p>${autoReturn ? "Returning to Pillar Time Settings..." : "Use the button below to return to Pillar Time."}</p><a class="button" href="/#/settings">Return to Pillar Time</a></main><script>${autoReturn ? 'setTimeout(() => { window.location.href = "/#/settings"; }, 800);' : ''}</script></body></html>`);
+  if (!data.oauthState || returnedState !== data.oauthState) {
+    run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: "OAuth state did not match.", $t: now() });
+    return render("Google Calendar was not connected", "The OAuth state did not match. Start the connection again from Pillar Time.");
+  }
+  if (errorPayload) {
+    run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: errorPayload, $t: now() });
+    return render("Google Calendar was not connected", errorPayload);
+  }
+  try {
+    const token = parseBase64UrlJson(tokenPayload);
+    await saveCompletedGoogleCalendarOAuth(data, token, {
+      authMode: "broker",
+      authBrokerUrl: String(data.authBrokerUrl || GOOGLE_CALENDAR_AUTH_BROKER_URL || "").replace(/\/+$/, ""),
+      clientId: data.clientId || "",
+      clientSecret: "",
+    });
+    return render("Google Calendar connected", "Pillar Time can now read today's events. Return to the app to choose calendars.", { autoReturn: true });
+  } catch (error) {
+    const message = error.message || "Google Calendar OAuth failed";
+    run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: message, $t: now() });
+    audit("google_calendar.oauth_failed", "connector", GOOGLE_CALENDAR_PROVIDER, message, { authMode: "broker" }, "system");
     return render("Google Calendar was not connected", message);
   }
 });
