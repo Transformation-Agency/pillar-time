@@ -139,7 +139,7 @@ button { cursor: pointer; }
 .nav {
   min-width: 0;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: stretch;
   gap: 14px;
   height: 100%;
