@@ -63,6 +63,7 @@ import {
   telegramPairingStartRequests,
   telegramPairingStatusView,
 } from "./telegramPairing.js";
+import { trustedContextConstitutionView } from "./trustedContextConstitution.js";
 import {
   BookOpen,
   Bot,
@@ -1084,6 +1085,7 @@ function Meetings({ state, mutate }) {
 
 function TrustedContext({ state, mutate }) {
   const context = state.trustedContext || {};
+  const constitutionView = trustedContextConstitutionView(context);
   const health = context.health || {};
   const [factForm, setFactForm] = React.useState({
     resourceType: "identity.profile",
@@ -1204,8 +1206,8 @@ function TrustedContext({ state, mutate }) {
       </tr>)}</tbody></table> : <Empty icon="trustedContext" title="No facts yet" body="Add a profile fact to seed Trusted Context." />}
     </section>
     <section className="panel">
-      <PanelTitle icon="trustedContext" title="Workspace Constitution" sub={`Version ${context.constitution?.version || 0}`} />
-      <details className="raw-json"><summary>Current constitution</summary><pre>{JSON.stringify(context.constitution?.body || {}, null, 2)}</pre></details>
+      <PanelTitle icon="trustedContext" title="Workspace Constitution" sub={constitutionView.versionLabel} />
+      <details className="raw-json"><summary>Current constitution</summary><pre>{constitutionView.bodyText}</pre></details>
     </section>
   </Page>;
 }

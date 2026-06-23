@@ -74,6 +74,7 @@ import {
   recentTelegramCommands,
   telegramCommandAvailability,
 } from "./telegramCommands.js";
+import { constitutionUpdatePlan } from "./constitutionVersioning.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -6406,22 +6407,22 @@ app.post("/api/trusted-context/envelope-preview", (req, res) => {
 
 app.post("/api/trusted-context/constitution", (req, res) => {
   const current = trustedContextConstitution();
-  const body = req.body?.body && typeof req.body.body === "object" ? req.body.body : current.body;
-  const editor = String(req.body?.editor || "local-user").trim() || "local-user";
-  const reason = String(req.body?.reason || "Updated Trusted Context constitution").trim();
-  const version = Number(current.version || 0) + 1;
-  const t = now();
-  const rowId = id("ctx-constitution");
+  const plan = constitutionUpdatePlan({
+    current,
+    input: req.body || {},
+    now: new Date(),
+    idFactory: () => id("ctx-constitution"),
+  });
   run(`INSERT INTO context_constitution_versions (id, version, body_json, editor, reason, created_at)
        VALUES ($id, $version, $body, $editor, $reason, $t)`, {
-    $id: rowId,
-    $version: version,
-    $body: json(body),
-    $editor: editor,
-    $reason: reason,
-    $t: t,
+    $id: plan.row.id,
+    $version: plan.row.version,
+    $body: json(plan.row.body),
+    $editor: plan.row.editor,
+    $reason: plan.row.reason,
+    $t: plan.row.createdAt,
   });
-  audit("trusted_context.constitution_updated", "context_constitution", rowId, reason, { fromVersion: current.version, toVersion: version }, editor);
+  audit(plan.audit.action, plan.audit.entityType, plan.audit.entityId, plan.audit.note, plan.audit.diff, plan.audit.actor);
   res.json({ trustedContext: trustedContextState(), state: state() });
 });
 
