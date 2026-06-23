@@ -39,6 +39,12 @@ import {
   shouldDeliverLocalOccurrence as shouldDeliverLocalOccurrencePure,
 } from "./reminderScheduler.js";
 import {
+  briefDeliveryDueKey,
+  scheduledBriefDeliveryDecision,
+  scheduleParts,
+  shouldRunSourcePreflight,
+} from "./briefScheduler.js";
+import {
   buildExecutiveCandidates as buildExecutiveCandidatesPure,
   calendarBusyIntervals as buildCalendarBusyIntervals,
   calendarFreeWindows as buildCalendarFreeWindows,
@@ -74,6 +80,12 @@ import {
   recentTelegramCommands,
   telegramCommandAvailability,
 } from "./telegramCommands.js";
+import {
+  telegramSettingsPatchPlan,
+  telegramSettingsReadiness,
+  telegramTestResponse,
+  telegramTestText,
+} from "./telegramSettings.js";
 import { constitutionUpdatePlan } from "./constitutionVersioning.js";
 import {
   parseGenericFeed,
@@ -106,6 +118,12 @@ import {
   redditTokenRequestPlan,
 } from "./redditSource.js";
 import {
+  briefAudioArtifact,
+  briefAudioFilePath,
+  briefAudioGenerationPlan,
+  briefAudioTextFromArtifact,
+} from "./briefAudio.js";
+import {
   cleanPodcastSearchTerm as cleanPodcastSearchTermPure,
   parsePodcastRss as parsePodcastRssPure,
   podcastDuplicateResult,
@@ -114,6 +132,10 @@ import {
   podcastNoEpisodeResult,
   spotifyTitleCandidates as spotifyTitleCandidatesPure,
 } from "./podcastSource.js";
+import {
+  ffmpegInstallDecision,
+  sttModelInstallDecision,
+} from "./localDependencies.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -911,7 +933,9 @@ async function ffmpegStatus() {
 
 async function downloadLocalSttModel() {
   const status = await localSttStatus();
-  if (status.modelAvailable) return { ok: true, modelPath: status.modelPath, message: "Whisper model is already installed." };
+  const decision = sttModelInstallDecision(status);
+  if (decision.alreadyInstalled) return { ok: true, modelPath: status.modelPath, message: decision.message };
+  if (!decision.allowed) throw new Error(decision.message);
   fs.mkdirSync(modelsDir, { recursive: true });
   const target = path.join(modelsDir, whisperModelFile);
   const partial = `${target}.download`;
@@ -1526,15 +1550,7 @@ function ttsSettings() {
 }
 
 function briefAudioText(artifact = {}) {
-  const text = String(artifact.onePageBrief || renderOnePageBrief(artifact) || "")
-    .replace(/^#\s+/gm, "")
-    .replace(/^Generated:.*$/gm, "")
-    .replace(/^##\s+/gm, "\n")
-    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
-    .replace(/https?:\/\/\S+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return text.slice(0, 9000);
+  return briefAudioTextFromArtifact(artifact, renderOnePageBrief);
 }
 
 async function synthesizeElevenLabsAudio({ text, filenamePrefix = "brief", apiKey = "", voiceId = "", modelId = "" } = {}) {
@@ -2830,60 +2846,6 @@ async function fetchSourceCollection({ useRecentCache = false, onProgress } = {}
   };
 }
 
-function parseDeliveryMinutes(time) {
-  const match = String(time || "08:00").match(/^(\d{1,2}):(\d{2})/);
-  if (!match) return 8 * 60;
-  const hours = Math.max(0, Math.min(23, Number(match[1])));
-  const minutes = Math.max(0, Math.min(59, Number(match[2])));
-  return hours * 60 + minutes;
-}
-
-function scheduleParts(date = new Date(), timeZone = "America/Denver") {
-  try {
-    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      weekday: "long",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
-    const hour = Number(parts.hour) === 24 ? 0 : Number(parts.hour);
-    return {
-      weekday: parts.weekday,
-      dateKey: `${parts.year}-${parts.month}-${parts.day}`,
-      minutes: hour * 60 + Number(parts.minute || 0),
-    };
-  } catch {
-    return {
-      weekday: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][date.getDay()],
-      dateKey: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
-      minutes: date.getHours() * 60 + date.getMinutes(),
-    };
-  }
-}
-
-function sourcePreflightKey(date = new Date(), config = briefConfig()) {
-  const parts = scheduleParts(date, config.deliveryTimezone);
-  return `${parts.dateKey}:${config.deliveryTimezone}:${config.deliveryFrequency}:${config.deliveryDay}:${config.deliveryTime}`;
-}
-
-function shouldRunSourcePreflight(date = new Date(), config = briefConfig()) {
-  const parts = scheduleParts(date, config.deliveryTimezone);
-  if (config.deliveryFrequency === "Weekly" && config.deliveryDay !== parts.weekday) return null;
-  const nowMinutes = parts.minutes;
-  const targetMinutes = parseDeliveryMinutes(config.deliveryTime);
-  return nowMinutes === targetMinutes ? sourcePreflightKey(date, config) : null;
-}
-
-function briefDeliveryDueKey(date = new Date(), config = briefConfig()) {
-  const parts = scheduleParts(date, config.deliveryTimezone);
-  if (config.deliveryFrequency === "Weekly" && config.deliveryDay !== parts.weekday) return null;
-  return parts.minutes >= parseDeliveryMinutes(config.deliveryTime) ? sourcePreflightKey(date, config) : null;
-}
-
 async function runSourcePreflight(trigger = "Scheduled source preflight") {
   const started = now();
   const collection = await fetchSourceCollection({ useRecentCache: false });
@@ -2931,11 +2893,18 @@ async function runScheduledBriefDeliveryIfDue(trigger = "Scheduled · Auto-deliv
   const key = briefDeliveryDueKey(date, config);
   if (!key || key === appStateGet(LAST_BRIEF_DELIVERY_KEY)) return false;
   const parts = scheduleParts(date, config.deliveryTimezone);
-  if (scheduledBriefAlreadyRan(parts.dateKey, config.deliveryTimezone)) {
-    appStateSet(LAST_BRIEF_DELIVERY_KEY, key);
+  const decision = scheduledBriefDeliveryDecision({
+    nowDate: date,
+    config,
+    lastDeliveryKey: appStateGet(LAST_BRIEF_DELIVERY_KEY),
+    alreadyCompletedToday: scheduledBriefAlreadyRan(parts.dateKey, config.deliveryTimezone),
+    ready: briefDeliveryReady(),
+  });
+  if (decision.action === "mark_ran") {
+    appStateSet(LAST_BRIEF_DELIVERY_KEY, decision.key);
     return false;
   }
-  if (!briefDeliveryReady()) return false;
+  if (decision.action !== "run") return false;
   appStateSet(LAST_BRIEF_DELIVERY_KEY, key);
   try {
     await executeWorkflow(trigger);
@@ -6219,12 +6188,16 @@ app.get("/api/runtime/stt", async (req, res) => {
 });
 
 app.get("/api/audio/:fileName", (req, res) => {
-  const fileName = path.basename(String(req.params.fileName || ""));
-  const filePath = path.join(audioDir, fileName);
-  if (!fileName.endsWith(".mp3") || !fs.existsSync(filePath)) return res.status(404).json({ error: "Audio file not found", state: state() });
+  const audioFile = briefAudioFilePath({
+    audioDir,
+    fileName: req.params.fileName,
+    exists: (filePath) => fs.existsSync(filePath),
+    pathApi: path,
+  });
+  if (!audioFile) return res.status(404).json({ error: "Audio file not found", state: state() });
   res.setHeader("Content-Type", "audio/mpeg");
   res.setHeader("Cache-Control", "private, max-age=86400");
-  fs.createReadStream(filePath).pipe(res);
+  fs.createReadStream(audioFile.filePath).pipe(res);
 });
 
 app.get("/api/trusted-context", (req, res) => {
@@ -6397,16 +6370,17 @@ app.post("/api/runtime/stt/model/install", async (req, res) => {
 });
 
 app.post("/api/runtime/ffmpeg/install", async (req, res) => {
-  if (!isDesktop || process.platform !== "darwin") {
-    return res.status(400).json({ error: "One-click FFmpeg install is only available in the macOS desktop app. Install FFmpeg with your system package manager.", ffmpeg: await ffmpegStatus(), state: state() });
-  }
   const status = await ffmpegStatus();
-  if (status.available) return res.json({ ok: true, message: "FFmpeg is already installed.", ffmpeg: status, state: state() });
-  if (!status.homebrewAvailable) {
+  const decision = ffmpegInstallDecision({ status, isDesktop, platform: process.platform });
+  if (decision.action === "unsupported") {
+    return res.status(400).json({ error: decision.message, ffmpeg: status, state: state() });
+  }
+  if (decision.action === "alreadyInstalled") return res.json({ ok: true, message: decision.message, ffmpeg: status, state: state() });
+  if (decision.action === "openHomebrewInstaller") {
     const scriptPath = await openHomebrewBootstrapInstaller();
     return res.json({
       ok: true,
-      message: "Opened the Homebrew and FFmpeg installer in Terminal. Return here and click Re-check when it finishes.",
+      message: decision.message,
       installerScriptPath: scriptPath,
       ffmpeg: await ffmpegStatus(),
       state: state(),
@@ -6899,12 +6873,11 @@ app.get("/api/workflow-runs/:id", (req, res) => {
 app.post("/api/workflow-runs/:id/audio", async (req, res) => {
   try {
     const workflowRun = workflowRuns().find((item) => item.id === req.params.id);
-    if (!workflowRun) return res.status(404).json({ error: "Workflow run not found", state: state() });
-    if (workflowRun.artifact?.audio?.url && workflowRun.artifact?.audio?.fileName) {
-      return res.json({ audio: workflowRun.artifact.audio, state: state() });
-    }
-    const audio = await synthesizeElevenLabsAudio({ text: briefAudioText(workflowRun.artifact), filenamePrefix: `brief-${workflowRun.id}` });
-    const nextArtifact = { ...(workflowRun.artifact || {}), audio };
+    const plan = briefAudioGenerationPlan(workflowRun, renderOnePageBrief);
+    if (plan.status === "not-found") return res.status(404).json({ error: plan.error, state: state() });
+    if (plan.status === "cached") return res.json({ audio: plan.audio, state: state() });
+    const audio = await synthesizeElevenLabsAudio({ text: plan.text, filenamePrefix: plan.filenamePrefix });
+    const nextArtifact = briefAudioArtifact(workflowRun.artifact, audio);
     run("UPDATE workflow_runs SET artifact_json=$artifact WHERE id=$id", { $id: workflowRun.id, $artifact: json(nextArtifact) });
     audit("brief.audio_generated", "workflow_run", workflowRun.id, "Generated ElevenLabs audio for saved brief", { bytes: audio.bytes }, "system");
     res.json({ audio, state: state() });
@@ -6964,19 +6937,17 @@ app.post("/api/approvals/:id/execute", async (req, res) => {
 app.patch("/api/telegram", (req, res) => {
   const b = req.body || {};
   const current = get("SELECT * FROM telegram_settings WHERE id=1");
-  const nextToken = b.botToken === "configured" ? current.bot_token : String(b.botToken || "").trim();
-  const nextChat = String(b.chatId || "").trim();
-  const allowedUsers = Array.isArray(b.allowedUsers) ? b.allowedUsers.map((user) => String(user).trim()).filter(Boolean) : [];
+  const plan = telegramSettingsPatchPlan(b, current);
   run(`UPDATE telegram_settings SET bot_token=$token, chat_id=$chat, allowed_users=$users, enabled=$enabled,
        last_error=$err, updated_at=$t WHERE id=1`, {
-    $token: nextToken,
-    $chat: nextChat,
-    $users: json(allowedUsers),
-    $enabled: b.enabled ? 1 : 0,
-    $err: b.enabled && !nextToken ? "Missing bot token" : b.enabled && !nextChat ? "Missing chat ID" : "",
+    $token: plan.botToken,
+    $chat: plan.chatId,
+    $users: json(plan.allowedUsers),
+    $enabled: plan.enabled ? 1 : 0,
+    $err: plan.lastError,
     $t: now(),
   });
-  audit("telegram.settings_updated", "telegram_settings", "1", b.enabled ? "Telegram enabled/updated" : "Telegram disabled/updated");
+  audit("telegram.settings_updated", "telegram_settings", "1", plan.auditNote);
   res.json(state());
 });
 
@@ -7099,8 +7070,8 @@ app.post("/api/telegram/pairing/:id/poll", async (req, res) => {
 
 app.post("/api/telegram/test", async (req, res) => {
   const tg = get("SELECT * FROM telegram_settings WHERE id=1");
-  if (!tg?.bot_token) return res.status(400).json({ error: "Missing bot token", state: state() });
-  if (!tg?.chat_id) return res.status(400).json({ error: "Missing chat ID", state: state() });
+  const readiness = telegramSettingsReadiness(tg);
+  if (!readiness.ok) return res.status(400).json({ error: readiness.error, state: state() });
   const base = `https://api.telegram.org/bot${tg.bot_token}`;
   try {
     const me = await fetchWithTimeout(`${base}/getMe`);
@@ -7108,7 +7079,8 @@ app.post("/api/telegram/test", async (req, res) => {
     if (!me.ok || !mePayload.ok) {
       throw new Error(mePayload.description || `Telegram getMe failed: ${me.status} ${me.statusText}`);
     }
-    const text = `Pillar Time test message.\nBot: @${mePayload.result?.username || "unknown"}\nTime: ${new Date().toLocaleString()}`;
+    const botUsername = mePayload.result?.username || "";
+    const text = telegramTestText({ botUsername });
     const send = await fetchWithTimeout(`${base}/sendMessage`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -7119,8 +7091,8 @@ app.post("/api/telegram/test", async (req, res) => {
       throw new Error(sendPayload.description || `Telegram sendMessage failed: ${send.status} ${send.statusText}`);
     }
     run("UPDATE telegram_settings SET enabled=1, last_checked_at=$t, last_error='', updated_at=$t WHERE id=1", { $t: now() });
-    audit("telegram.test_sent", "telegram_settings", "1", `Sent test message to chat ${tg.chat_id}`, { botUsername: mePayload.result?.username || "" }, "system");
-    res.json({ ok: true, botUsername: mePayload.result?.username || "", chatId: tg.chat_id, state: state() });
+    audit("telegram.test_sent", "telegram_settings", "1", `Sent test message to chat ${tg.chat_id}`, { botUsername }, "system");
+    res.json({ ...telegramTestResponse({ botUsername, chatId: tg.chat_id }), state: state() });
   } catch (error) {
     run("UPDATE telegram_settings SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE id=1", { $t: now(), $err: error.message || "Telegram test failed" });
     audit("telegram.test_failed", "telegram_settings", "1", error.message || "Telegram test failed", {}, "system");

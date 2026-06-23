@@ -1,6 +1,12 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import {
+  briefAudioButtonState,
+  briefAudioPlayingForEvent,
+  briefAudioRestartPlan,
+  briefAudioSelectionState,
+} from "./briefAudio.js";
+import {
   briefSetupApplyFallbackRequests,
   briefSetupApplyRequest,
   briefSetupDraftMessage,
@@ -15,6 +21,10 @@ import {
   startCalendarOAuthFlow,
 } from "./calendarOnboarding.js";
 import { desktopRuntime } from "./desktopRuntime.js";
+import {
+  localDependencyRuntimeRequest,
+  localDependencySettingsView,
+} from "./localDependencies.js";
 import { generationProgressViewModel } from "./progressViewModel.js";
 import {
   canCompleteOnboarding,
@@ -73,6 +83,14 @@ import {
   telegramPairingStartRequests,
   telegramPairingStatusView,
 } from "./telegramPairing.js";
+import {
+  telegramSaveMessage,
+  telegramSettingsForm,
+  telegramSettingsMessageTone,
+  telegramSettingsRequest,
+  telegramTestMessage,
+  telegramTestRequest,
+} from "./telegramSettings.js";
 import { trustedContextConstitutionView } from "./trustedContextConstitution.js";
 import {
   BookOpen,
@@ -1815,11 +1833,12 @@ function Briefs({ state, runWorkflow, refresh }) {
   const filtered = state.workflowRuns.filter((run) => briefDisplayTitle(run).toLowerCase().includes(query.toLowerCase()));
   const selected = state.workflowRuns.find((run) => run.id === selectedId) || filtered[0] || state.workflowRuns[0];
   React.useEffect(() => {
+    const audioState = briefAudioSelectionState(selected);
     audioRef.current?.pause();
     audioRef.current = null;
-    setAudioUrl(selected?.artifact?.audio?.url || "");
-    setAudioMessage("");
-    setAudioPlaying(false);
+    setAudioUrl(audioState.audioUrl);
+    setAudioMessage(audioState.audioMessage);
+    setAudioPlaying(audioState.audioPlaying);
     setDeliberationMessage("");
     setContextMessage("");
   }, [selected?.id, selected?.artifact?.audio?.url]);
@@ -1828,9 +1847,9 @@ function Briefs({ state, runWorkflow, refresh }) {
     if (!audioRef.current || audioRef.current.src !== new URL(url, window.location.href).href) {
       audioRef.current?.pause();
       const audio = new Audio(url);
-      audio.addEventListener("ended", () => setAudioPlaying(false));
-      audio.addEventListener("pause", () => setAudioPlaying(false));
-      audio.addEventListener("play", () => setAudioPlaying(true));
+      audio.addEventListener("ended", () => setAudioPlaying((current) => briefAudioPlayingForEvent("ended", current)));
+      audio.addEventListener("pause", () => setAudioPlaying((current) => briefAudioPlayingForEvent("pause", current)));
+      audio.addEventListener("play", () => setAudioPlaying((current) => briefAudioPlayingForEvent("play", current)));
       audioRef.current = audio;
     }
     await audioRef.current.play();
@@ -1860,9 +1879,10 @@ function Briefs({ state, runWorkflow, refresh }) {
     }
   };
   const restartBriefAudio = () => {
-    if (!audioUrl) return;
-    if (audioRef.current) audioRef.current.currentTime = 0;
-    playAudioUrl(audioUrl).catch((error) => setAudioMessage(error.message || "Could not restart audio."));
+    const plan = briefAudioRestartPlan({ audioUrl, currentTime: audioRef.current?.currentTime || 0 });
+    if (!plan) return;
+    if (audioRef.current) audioRef.current.currentTime = plan.currentTime;
+    playAudioUrl(plan.audioUrl).catch((error) => setAudioMessage(error.message || "Could not restart audio."));
   };
   const deliberateBrief = async (regenerate = false) => {
     if (!selected) return;
@@ -1931,6 +1951,7 @@ function Briefs({ state, runWorkflow, refresh }) {
   const avgSignals = state.workflowRuns.length
     ? Math.round(state.workflowRuns.reduce((sum, run) => sum + (run.artifact?.selectedIssues?.length || 0), 0) / state.workflowRuns.length)
     : 0;
+  const audioButton = briefAudioButtonState({ audioBusy, audioPlaying, audioUrl, ttsStatus: state.tts?.status });
   return <Page title="Your briefs" desc="Review past briefings, open a full digest, or generate a fresh one." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate brief</Button>}>
     {state.workflowRuns.length ? <div className="briefs-layout">
       <aside className="panel recent-briefs">
@@ -1952,11 +1973,11 @@ function Briefs({ state, runWorkflow, refresh }) {
       <section className="panel brief-reader">
         {selected ? selected.status === "running" ? <BriefGenerationProgress run={selected} /> : <>
           <div className="brief-reader-actions">
-            <Button icon="volume" onClick={playBriefAudio} disabled={audioBusy || state.tts?.status !== "ready"}>{audioBusy ? "Generating..." : audioPlaying ? "Pause" : audioUrl ? "Play audio" : "Generate audio"}</Button>
-            {audioUrl && <Button icon="restart" onClick={restartBriefAudio} disabled={audioBusy || state.tts?.status !== "ready"}>Restart</Button>}
+            <Button icon="volume" onClick={playBriefAudio} disabled={audioButton.disabled}>{audioButton.label}</Button>
+            {audioUrl && <Button icon="restart" onClick={restartBriefAudio} disabled={audioButton.restartDisabled}>Restart</Button>}
             <Button icon="lenses" onClick={() => deliberateBrief(false)} disabled={deliberationBusy || !(state.briefConfig?.perspectiveLenses || []).some((lens) => lens.enabled !== false)}>{deliberationBusy ? "Deliberating..." : selected.artifact?.deliberation ? "Show deliberation" : "Deliberate brief"}</Button>
             <Button icon="pencil" onClick={() => setContextOpen((open) => !open)}>Add context & regenerate</Button>
-            {state.tts?.status !== "ready" && <span>Set up ElevenLabs in Settings to play briefs aloud.</span>}
+            {audioButton.showTtsSetupNotice && <span>Set up ElevenLabs in Settings to play briefs aloud.</span>}
           </div>
           {audioMessage && <p className={audioMessage.includes("generated") ? "ok-text" : "warn-text"}>{audioMessage}</p>}
           {deliberationMessage && <p className={deliberationMessage.includes("saved") || deliberationMessage.includes("regenerated") ? "ok-text" : "warn-text"}>{deliberationMessage}</p>}
@@ -3177,19 +3198,20 @@ function Onboarding({ state, mutate, refresh }) {
 }
 
 function Telegram({ state, mutate, refresh }) {
-  const [form, setForm] = React.useState({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
+  const [form, setForm] = React.useState(telegramSettingsForm(state.telegram));
   const [cmd, setCmd] = React.useState("/review");
   const [result, setResult] = React.useState("");
   const [telegramMessage, setTelegramMessage] = React.useState("");
   React.useEffect(() => {
-    setForm({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
+    setForm(telegramSettingsForm(state.telegram));
   }, [state.telegram]);
   const save = async (e) => {
     e.preventDefault();
     setTelegramMessage("");
     try {
-      await mutate("/api/telegram", { ...form, allowedUsers: form.allowedUsers.split(",").map((u) => u.trim()).filter(Boolean) }, "PATCH");
-      setTelegramMessage("Telegram settings saved.");
+      const request = telegramSettingsRequest(form);
+      await mutate(request.url, request.body, request.method);
+      setTelegramMessage(telegramSaveMessage());
     } catch (error) {
       setTelegramMessage(error.message);
     }
@@ -3197,8 +3219,9 @@ function Telegram({ state, mutate, refresh }) {
   const testTelegram = async () => {
     setTelegramMessage("");
     try {
-      const response = await mutate("/api/telegram/test", {});
-      setTelegramMessage(`Test message sent${response.botUsername ? ` via @${response.botUsername}` : ""}.`);
+      const request = telegramTestRequest();
+      const response = await mutate(request.url, request.body, request.method);
+      setTelegramMessage(telegramTestMessage(response));
     } catch (error) {
       setTelegramMessage(error.message);
     }
@@ -3207,7 +3230,7 @@ function Telegram({ state, mutate, refresh }) {
   return <Page title="Telegram" desc="Pair Telegram with a bot link, or use Advanced for manual chat IDs." wide>
     <div className="split">
       <div className="card form"><h2>Easy pairing</h2><TelegramPairingFlow state={state} refresh={refresh} /></div>
-      <form className="card form" onSubmit={save}><h2>Advanced manual settings</h2><label className="check"><input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Enable Telegram adapter</label><Field label="Bot token" type="password" value={form.botToken} onChange={(botToken) => setForm({ ...form, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} /><Field label="Chat ID" value={form.chatId} onChange={(chatId) => setForm({ ...form, chatId })} placeholder="-1001234567890 or 123456789" /><Field label="Allowed users" value={form.allowedUsers} onChange={(allowedUsers) => setForm({ ...form, allowedUsers })} placeholder="username, teammate, 123456789" /><div className="row"><Button icon="save" kind="primary">Save Telegram Settings</Button><Button type="button" icon="telegram" onClick={testTelegram}>Send Test</Button></div>{telegramMessage && <p className={telegramMessage.includes("sent") || telegramMessage.includes("saved") ? "ok-text" : "warn-text"}>{telegramMessage}</p>}{state.telegram.lastError && <p className="warn-text">{state.telegram.lastError}</p>}{state.telegram.lastCheckedAt && <p className="hint">Last checked {new Date(state.telegram.lastCheckedAt).toLocaleString()}</p>}</form>
+      <form className="card form" onSubmit={save}><h2>Advanced manual settings</h2><label className="check"><input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Enable Telegram adapter</label><Field label="Bot token" type="password" value={form.botToken} onChange={(botToken) => setForm({ ...form, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} /><Field label="Chat ID" value={form.chatId} onChange={(chatId) => setForm({ ...form, chatId })} placeholder="-1001234567890 or 123456789" /><Field label="Allowed users" value={form.allowedUsers} onChange={(allowedUsers) => setForm({ ...form, allowedUsers })} placeholder="username, teammate, 123456789" /><div className="row"><Button icon="save" kind="primary">Save Telegram Settings</Button><Button type="button" icon="telegram" onClick={testTelegram}>Send Test</Button></div>{telegramMessage && <p className={telegramSettingsMessageTone(telegramMessage)}>{telegramMessage}</p>}{state.telegram.lastError && <p className="warn-text">{state.telegram.lastError}</p>}{state.telegram.lastCheckedAt && <p className="hint">Last checked {new Date(state.telegram.lastCheckedAt).toLocaleString()}</p>}</form>
       <div className="card form"><h2>Command tool call</h2><Select label="Command" value={cmd} onChange={setCmd} options={state.telegram.commands} /><Button icon="run" onClick={runCmd}>Run Command</Button>{result && <pre>{result}</pre>}<h2>Supported commands</h2><div className="chips">{state.telegram.commands.map((c) => <span key={c}>{c}</span>)}</div></div>
     </div>
   </Page>;
@@ -3252,7 +3275,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     grantType: "client_credentials",
     deviceId: "DO_NOT_TRACK_THIS_DEVICE",
   });
-  const [telegramForm, setTelegramForm] = React.useState({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
+  const [telegramForm, setTelegramForm] = React.useState(telegramSettingsForm(state.telegram));
+  const [telegramSettingsMessage, setTelegramSettingsMessage] = React.useState("");
   const [detecting, setDetecting] = React.useState(false);
   const [detectError, setDetectError] = React.useState("");
   const [ffmpegStatus, setFfmpegStatus] = React.useState(state.runtime?.ffmpeg || null);
@@ -3289,7 +3313,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     }));
   }, [state.connectors?.reddit?.grantType]);
   React.useEffect(() => {
-    setTelegramForm({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
+    setTelegramForm(telegramSettingsForm(state.telegram));
   }, [state.telegram]);
   React.useEffect(() => {
     setFfmpegStatus(state.runtime?.ffmpeg || null);
@@ -3435,9 +3459,27 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setGoogleCalendarSelectionDirty(false);
     setGoogleCalendarMessage("Google Calendar disconnected.");
   };
-  const saveTelegram = (e) => {
+  const saveTelegram = async (e) => {
     e.preventDefault();
-    mutate("/api/telegram", { ...telegramForm, enabled: true, allowedUsers: telegramForm.allowedUsers.split(",").map((u) => u.trim()).filter(Boolean) }, "PATCH").then(() => setTelegramModal(false));
+    setTelegramSettingsMessage("");
+    try {
+      const request = telegramSettingsRequest(telegramForm, { enabled: true });
+      await mutate(request.url, request.body, request.method);
+      setTelegramSettingsMessage(telegramSaveMessage());
+      setTelegramModal(false);
+    } catch (error) {
+      setTelegramSettingsMessage(error.message || "Could not save Telegram settings.");
+    }
+  };
+  const testTelegramSettings = async () => {
+    setTelegramSettingsMessage("");
+    try {
+      const request = telegramTestRequest();
+      const result = await mutate(request.url, request.body, request.method);
+      setTelegramSettingsMessage(telegramTestMessage(result));
+    } catch (error) {
+      setTelegramSettingsMessage(error.message || "Telegram test failed.");
+    }
   };
   const detectModels = React.useCallback(async () => {
     const requestProvider = editingProvider || model.provider;
@@ -3485,6 +3527,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const providerRows = modelProviderRows;
   const researchRows = settingsResearchRows(state);
   const visibleModelOptions = modelOptionsProvider === (editingProvider || model.provider) ? modelOptions : [];
+  const localDependencyView = localDependencySettingsView({ ffmpeg: ffmpegStatus, stt: sttStatus });
   const openProvider = (provider) => {
     setModel({ enabled: true, provider, model: provider === state.model.provider ? state.model.model || defaultModelForProvider(provider) : defaultModelForProvider(provider), apiKey: "", baseUrl: provider === state.model.provider ? state.model.baseUrl || "" : "" });
     setModelOptions([]);
@@ -3497,7 +3540,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setFfmpegBusy(true);
     setFfmpegMessage("");
     try {
-      const result = await api("/api/runtime/ffmpeg");
+      const request = localDependencyRuntimeRequest("checkFfmpeg");
+      const result = await api(request.url);
       setFfmpegStatus(result.ffmpeg);
     } catch (error) {
       setFfmpegMessage(error.message);
@@ -3509,7 +3553,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setFfmpegBusy(true);
     setFfmpegMessage("Installing FFmpeg with Homebrew...");
     try {
-      const result = await api("/api/runtime/ffmpeg/install", { method: "POST", body: JSON.stringify({ consent: true }) });
+      const request = localDependencyRuntimeRequest("installFfmpeg");
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setFfmpegStatus(result.ffmpeg);
       setFfmpegMessage(result.message || "FFmpeg installed successfully.");
     } catch (error) {
@@ -3523,7 +3568,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setSettingsSttBusy(true);
     setSettingsSttMessage("");
     try {
-      const result = await api("/api/runtime/stt");
+      const request = localDependencyRuntimeRequest("checkStt");
+      const result = await api(request.url);
       setSettingsSttStatus(result.stt);
     } catch (error) {
       setSettingsSttMessage(error.message);
@@ -3535,7 +3581,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setSettingsSttBusy(true);
     setSettingsSttMessage("Downloading Whisper model...");
     try {
-      const result = await api("/api/runtime/stt/model/install", { method: "POST", body: JSON.stringify({}) });
+      const request = localDependencyRuntimeRequest("installSttModel");
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setSettingsSttStatus(result.stt);
       setSettingsSttMessage(result.message || "Whisper model downloaded.");
       await refresh();
@@ -3641,37 +3688,37 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       <section className="panel connector-card">
         <div className="connector-head">
           <div className="connector-title"><span className="connector-icon"><Icon name="settings" /></span><div><h2>Local system dependencies</h2><p>Host tools used by local-only workflows.</p></div></div>
-          <Badge tone={ffmpegStatus?.available && sttStatus?.available ? "ok" : "warn"}>{ffmpegStatus?.available && sttStatus?.available ? "Ready" : "Needs setup"}</Badge>
+          <Badge tone={localDependencyView.summary.tone}>{localDependencyView.summary.label}</Badge>
         </div>
         <div className="connector-row dependency-row">
           <div className="connector-name"><span className="source-icon-box"><Icon name="mic" /></span><div><strong>Whisper speech-to-text</strong><small>Optional local STT for voice input and podcast transcription.</small></div></div>
           <span>Optional local install</span>
-          <Badge tone={sttStatus?.available ? "ok" : "warn"}>{sttStatus?.available ? "Ready" : "Unavailable"}</Badge>
-          <span>{sttStatus?.modelName || "tiny.en"}</span>
+          <Badge tone={localDependencyView.stt.badgeTone}>{localDependencyView.stt.badgeLabel}</Badge>
+          <span>{localDependencyView.stt.modelLabel}</span>
           <div className="row tight-row">
             <Button type="button" icon="run" onClick={checkStt} disabled={sttBusy}>{sttBusy ? "Checking..." : "Re-check"}</Button>
-            {sttStatus?.binaryAvailable && !sttStatus?.modelAvailable && <Button type="button" icon="download" kind="primary" onClick={installSttModel} disabled={sttBusy}>{sttBusy ? "Downloading..." : "Download model"}</Button>}
+            {localDependencyView.stt.showModelDownload && <Button type="button" icon="download" kind="primary" onClick={installSttModel} disabled={sttBusy}>{sttBusy ? "Downloading..." : "Download model"}</Button>}
           </div>
         </div>
-        <div className={`notice ${sttStatus?.available ? "" : "notice-warn"}`}>
-          <strong>{sttStatus?.available ? "Local speech-to-text is enabled" : "Local speech-to-text is disabled"}</strong>
+        <div className={`notice ${localDependencyView.stt.noticeWarn ? "notice-warn" : ""}`}>
+          <strong>{localDependencyView.stt.headline}</strong>
           <span>{sttMessage || sttStatus?.message || "Checking local Whisper availability..."}</span>
-          {!sttStatus?.binaryAvailable && <span>Install whisper.cpp separately and set WHISPER_CPP_PATH when you want local speech-to-text. The desktop app does not bundle Whisper.</span>}
+          {localDependencyView.stt.showBinaryHint && <span>Install whisper.cpp separately and set WHISPER_CPP_PATH when you want local speech-to-text. The desktop app does not bundle Whisper.</span>}
         </div>
         <div className="connector-row dependency-row">
           <div className="connector-name"><span className="source-icon-box"><Icon name="Podcast" /></span><div><strong>FFmpeg</strong><small>Required for local podcast transcription.</small></div></div>
           <span>Host binary</span>
-          <Badge tone={ffmpegStatus?.available ? "ok" : "warn"}>{ffmpegStatus?.available ? "Installed" : "Unavailable"}</Badge>
-          <span>{ffmpegStatus?.path || "Not found"}</span>
+          <Badge tone={localDependencyView.ffmpeg.badgeTone}>{localDependencyView.ffmpeg.badgeLabel}</Badge>
+          <span>{localDependencyView.ffmpeg.pathLabel}</span>
           <div className="row tight-row">
             <Button type="button" icon="run" onClick={checkFfmpeg} disabled={ffmpegBusy}>{ffmpegBusy ? "Checking..." : "Re-check"}</Button>
-            {!ffmpegStatus?.available && ffmpegStatus?.installable && <Button type="button" icon="download" kind="primary" onClick={installFfmpeg} disabled={ffmpegBusy}>{ffmpegBusy ? "Installing..." : "Install FFmpeg"}</Button>}
+            {localDependencyView.ffmpeg.showInstall && <Button type="button" icon="download" kind="primary" onClick={installFfmpeg} disabled={ffmpegBusy}>{ffmpegBusy ? "Installing..." : "Install FFmpeg"}</Button>}
           </div>
         </div>
-        <div className={`notice ${ffmpegStatus?.available ? "" : "notice-warn"}`}>
-          <strong>{ffmpegStatus?.available ? "Podcast transcription is enabled" : "Podcast transcription is disabled"}</strong>
+        <div className={`notice ${localDependencyView.ffmpeg.noticeWarn ? "notice-warn" : ""}`}>
+          <strong>{localDependencyView.ffmpeg.headline}</strong>
           <span>{ffmpegStatus?.message || "Checking FFmpeg availability..."}</span>
-          {!ffmpegStatus?.available && !ffmpegStatus?.homebrewAvailable && <span>Homebrew is required for the one-click macOS installer. Install it from brew.sh, then return here.</span>}
+          {localDependencyView.ffmpeg.showHomebrewHint && <span>Homebrew is required for the one-click macOS installer. Install it from brew.sh, then return here.</span>}
           {ffmpegMessage && <span>{ffmpegMessage}</span>}
         </div>
       </section>
@@ -3728,7 +3775,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <Field label="Bot token" type="password" value={telegramForm.botToken} onChange={(botToken) => setTelegramForm({ ...telegramForm, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} />
         <Field label="Chat ID" value={telegramForm.chatId} onChange={(chatId) => setTelegramForm({ ...telegramForm, chatId })} placeholder="-1001234567890 or 123456789" />
         <Field label="Allowed users" value={telegramForm.allowedUsers} onChange={(allowedUsers) => setTelegramForm({ ...telegramForm, allowedUsers })} placeholder="username, teammate, 123456789" />
-        <div className="modal-actions"><Button type="button" onClick={() => setTelegramModal(false)}>Cancel</Button><Button icon="save" kind="primary">Save Telegram</Button></div>
+        {telegramSettingsMessage && <p className={telegramSettingsMessageTone(telegramSettingsMessage)}>{telegramSettingsMessage}</p>}
+        {state.telegram.lastError && <p className="warn-text">{state.telegram.lastError}</p>}
+        <div className="modal-actions"><Button type="button" onClick={() => setTelegramModal(false)}>Cancel</Button><Button type="button" icon="telegram" onClick={testTelegramSettings}>Send Test</Button><Button icon="save" kind="primary">Save Telegram</Button></div>
       </form>
     </div>}
     {xModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setXModal(false); }}>
