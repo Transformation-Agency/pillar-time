@@ -25,6 +25,7 @@ import {
   onboardingReviewReadiness,
 } from "./onboardingCompletion.js";
 import { submitQuickTaskCapture } from "./quickTaskCapture.js";
+import { todayAgendaRows } from "./todayAgenda.js";
 import {
   reminderDefaultPatch,
   saveReminderDefaultsFlow,
@@ -880,11 +881,6 @@ function ListRow({ title, sub, right }) {
   return <div className="list-row"><div><strong>{title}</strong><small>{sub}</small></div>{right}</div>;
 }
 
-function latestCalendarAgenda(state) {
-  const completed = state.workflowRuns?.find((run) => run.status === "completed" && run.artifact);
-  return completed?.artifact?.calendarAgenda || completed?.artifact?.calendarFetches?.flatMap((fetch) => fetch.events || []) || [];
-}
-
 function todayTime(state) {
   return state.time || { preferences: {}, suggestions: [], commitments: [], tasks: [], reminders: [], reviews: [], importantDates: [], meetings: [], scheduler: {} };
 }
@@ -913,7 +909,7 @@ function TimeSuggestionCard({ suggestion, mutate }) {
 function Today({ state, mutate, runWorkflow, setRoute }) {
   const time = todayTime(state);
   const [capture, setCapture] = React.useState("");
-  const agenda = latestCalendarAgenda(state).slice(0, 8);
+  const agenda = todayAgendaRows(state);
   const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
   const suggestions = (time.suggestions || []).slice(0, 6);
   const addTask = async (event) => {
@@ -943,7 +939,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
       </section>
       <section className="panel">
         <PanelTitle icon="calendar" title="Timeline" sub="Calendar context from the latest successful intelligence run." />
-        {agenda.length ? agenda.map((event, index) => <ListRow key={`${event.title || event.summary}-${index}`} title={event.title || event.summary || "Calendar event"} sub={[event.start, event.end].filter(Boolean).join(" to ") || event.when || "Today"} right={event.calendarUrl && <Button icon="calendar" onClick={() => openExternalUrl(event.calendarUrl)}>Open</Button>} />) : <Empty icon="calendar" title="No agenda loaded" body="Connect Google Calendar and generate intelligence to bring today’s events into this view." />}
+        {agenda.length ? agenda.map((event) => <ListRow key={event.key} title={event.title} sub={event.sub} right={event.calendarUrl && <Button icon="calendar" onClick={() => openExternalUrl(event.calendarUrl)}>Open</Button>} />) : <Empty icon="calendar" title="No agenda loaded" body="Connect Google Calendar and generate intelligence to bring today’s events into this view." />}
       </section>
       <section className="panel">
         <PanelTitle icon="reminders" title="Next Reminders" sub="Regular and sporadic nudges, paused by default until you enable them." />
