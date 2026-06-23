@@ -75,6 +75,14 @@ import {
   telegramCommandAvailability,
 } from "./telegramCommands.js";
 import { constitutionUpdatePlan } from "./constitutionVersioning.js";
+import {
+  parseGenericFeed,
+  rssCacheHitConfig,
+  rssItemsForToday,
+  rssNextConfig,
+  rssRequestPlan,
+  stripFeedHtml,
+} from "./rssSource.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -1801,32 +1809,7 @@ function parsePodcastRss(xml) {
 }
 
 function stripHtml(value = "") {
-  return decodeXml(String(value).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ")).trim();
-}
-
-function parseGenericFeed(xml) {
-  const rssItems = [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map((match) => {
-    const item = match[0];
-    return {
-      title: tagValue(item, "title") || "Untitled item",
-      url: tagValue(item, "link") || tagValue(item, "guid"),
-      body: stripHtml(tagValue(item, "description") || tagValue(item, "content:encoded")),
-      publishedAt: tagValue(item, "pubDate") || tagValue(item, "dc:date"),
-      stableId: tagValue(item, "guid") || tagValue(item, "link") || tagValue(item, "title"),
-    };
-  });
-  const atomItems = [...xml.matchAll(/<entry\b[\s\S]*?<\/entry>/gi)].map((match) => {
-    const item = match[0];
-    const link = item.match(/<link\b[^>]*>/i)?.[0] || "";
-    return {
-      title: tagValue(item, "title") || "Untitled item",
-      url: attrValue(link, "href") || tagValue(item, "id"),
-      body: stripHtml(tagValue(item, "summary") || tagValue(item, "content")),
-      publishedAt: tagValue(item, "published") || tagValue(item, "updated"),
-      stableId: tagValue(item, "id") || attrValue(link, "href") || tagValue(item, "title"),
-    };
-  });
-  return [...rssItems, ...atomItems].filter((item) => item.title || item.url);
+  return stripFeedHtml(value);
 }
 
 function startOfLocalDay() {
@@ -2150,22 +2133,18 @@ async function transcribePodcastSource(sourceId, mode = "today") {
 
 async function fetchRssSource(source) {
   const config = source.config || {};
-  const feedUrl = config.feedUrl || source.locator;
-  if (!feedUrl) return { ok: true, skipped: true, reason: "No RSS feed URL configured", seen: 0, inserted: 0 };
-  const headers = { "User-Agent": "PillarTime/0.1" };
-  if (config.lastEtag) headers["If-None-Match"] = config.lastEtag;
-  if (config.lastModified) headers["If-Modified-Since"] = config.lastModified;
-  const response = await fetchWithTimeout(feedUrl, { headers });
+  const plan = rssRequestPlan(source);
+  if (plan.skipped) return { ok: true, skipped: true, reason: plan.reason, seen: 0, inserted: 0 };
+  const response = await fetchWithTimeout(plan.feedUrl, { headers: plan.headers });
   if (response.status === 304) {
     const fetchedAt = now();
-    const nextConfig = { ...config, lastFetchedAt: fetchedAt, lastFetchCacheStatus: "not-modified", lastInsertedCount: 0 };
+    const nextConfig = rssCacheHitConfig({ config, fetchedAt });
     run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
     audit("rss.cache_hit", "source", source.id, "RSS feed not modified; using cached normalized items", {}, "system");
     return { ok: true, skipped: false, cached: true, cacheStatus: "not-modified", seen: 0, inserted: 0 };
   }
   if (!response.ok) throw new Error(`RSS fetch failed: ${response.status} ${response.statusText}`);
-  const parsedItems = parseGenericFeed(await response.text()).slice(0, Number(config.maxItems || 8));
-  const items = parsedItems.filter((item) => publishedToday(item.publishedAt));
+  const { parsedItems, items } = rssItemsForToday(await response.text(), { maxItems: config.maxItems || 8, publishedToday });
   let inserted = 0;
   for (const item of items) {
     const saved = saveNormalizedItem({
@@ -2181,16 +2160,7 @@ async function fetchRssSource(source) {
     if (saved.inserted) inserted += 1;
   }
   const fetchedAt = now();
-  const nextConfig = {
-    ...config,
-    lastFetchedAt: fetchedAt,
-    lastFetchedCount: parsedItems.length,
-    lastFetchedTodayCount: items.length,
-    lastInsertedCount: inserted,
-    lastFetchCacheStatus: inserted ? "new-items" : "deduped",
-    lastEtag: response.headers.get("etag") || config.lastEtag || "",
-    lastModified: response.headers.get("last-modified") || config.lastModified || "",
-  };
+  const nextConfig = rssNextConfig({ config, parsedItems, items, inserted, fetchedAt, responseHeaders: response.headers });
   run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
   audit("rss.fetched", "source", source.id, `Fetched ${parsedItems.length} RSS items; ${items.length} published today; inserted ${inserted}`, { fetched: parsedItems.length, today: items.length, inserted }, "system");
   return { ok: true, skipped: false, seen: parsedItems.length, today: items.length, inserted };
