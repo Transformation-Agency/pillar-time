@@ -192,7 +192,7 @@ import "./styles.css";
 
 const nav = [
   ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
-  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["linear", "Linear"], ["approvals", "Approvals"], ["trustedContext", "Trusted Context"]]],
+  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["linear", "Linear"], ["approvals", "Approvals"], ["trustedContext", "Trusted Context"], ["documents", "Documents"]]],
   ["Configure", [["briefSetup", "Brief Setup"], ["lenses", "Perspective Lenses"]]],
   ["System", [["settings", "Settings"]]],
 ];
@@ -3946,6 +3946,7 @@ function App() {
     linear: <Linear state={state} refresh={refresh} />,
     approvals: <Approvals state={state} mutate={mutate} />,
     trustedContext: <TrustedContext state={state} mutate={mutate} />,
+    documents: <Documents state={state} mutate={mutate} />,
     lenses: <Lenses state={state} mutate={mutate} />,
     telegram: <Telegram state={state} mutate={mutate} refresh={refresh} />,
     settings: <Settings state={state} mutate={mutate} refresh={refresh} desktopUpdate={desktopUpdate} />,
