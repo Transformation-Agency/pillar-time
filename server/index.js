@@ -39,19 +39,25 @@ import {
   perspectiveLensGenerationPrompt,
 } from "./perspectiveLensGeneration.js";
 import {
+  normalizedPerspectiveDeliberation,
+  perspectiveDeliberationRequest,
+} from "./perspectiveDeliberation.js";
+import {
   reminderSchedulerDecision,
   shouldDeliverLocalOccurrence as shouldDeliverLocalOccurrencePure,
 } from "./reminderScheduler.js";
 import {
   briefDeliveryDueKey,
   scheduledBriefDeliveryDecision,
+  scheduledSourcePreflightDecision,
+  scheduledSourcePreflightReadiness,
   scheduleParts,
-  shouldRunSourcePreflight,
 } from "./briefScheduler.js";
 import {
   buildCoverageDiagnostics,
   NO_NEWS_FRESHNESS_POLICY,
   noNewsClaimPolicy,
+  renderOnePageBrief as renderOnePageBriefPure,
   selectIssueClusters,
 } from "./intelligenceWorkflow.js";
 import {
@@ -2901,10 +2907,12 @@ async function runSourcePreflight(trigger = "Scheduled source preflight") {
   const started = now();
   const collection = await fetchSourceCollection({ useRecentCache: false });
   const completed = now();
+  const readiness = scheduledSourcePreflightReadiness(collection);
   audit("sources.preflight", "brief_config", "1", trigger, {
     startedAt: started,
     completedAt: completed,
-    activeSources: collection.activeSources.length,
+    readiness,
+    activeSources: readiness.activeSourceCount,
     inserted: collection.itemCount,
     x: collection.xResults.length,
     rss: collection.rssResults.length,
@@ -2970,9 +2978,12 @@ async function runScheduledBriefDeliveryIfDue(trigger = "Scheduled · Auto-deliv
 
 function startSourcePreflightScheduler() {
   const timer = setInterval(async () => {
-    const key = shouldRunSourcePreflight();
-    if (!key || key === lastSourcePreflightKey) return;
-    lastSourcePreflightKey = key;
+    const decision = scheduledSourcePreflightDecision({
+      config: briefConfig(),
+      lastPreflightKey: lastSourcePreflightKey,
+    });
+    if (decision.action !== "run") return;
+    lastSourcePreflightKey = decision.key;
     try {
       await runSourcePreflight();
     } catch (error) {
@@ -4981,113 +4992,13 @@ function hydrateArtifact(artifact = {}) {
 
 function renderOnePageBrief(artifact = {}) {
   const issues = artifact.selectedIssues || [];
-  const issueClusters = artifact.selectedIssueClusters || [];
-  const coverageDiagnostics = artifact.coverageDiagnostics || {};
   const config = briefConfig();
-  const sections = (config.sections || []).filter((section) => section.enabled !== false);
-  const brief = artifact.strategicBrief || deterministicStrategicBrief({ selectedIssues: issues, lenses: [], council: artifact.council, config });
-  const lines = [
-    `# ${artifact.title || brief.headline || "Daily Brief"}`,
-    `Generated: ${artifact.generatedAt ? new Date(artifact.generatedAt).toLocaleString() : new Date().toLocaleString()}`,
-  ];
-  const bullets = (items) => Array.isArray(items) && items.length ? items.forEach((item) => lines.push(`- ${typeof item === "string" ? item : JSON.stringify(item)}`)) : lines.push("- No read generated.");
-  const renderContent = (content) => {
-    if (Array.isArray(content)) {
-      if (!content.length) lines.push("- No read generated.");
-      content.forEach((item) => {
-        if (typeof item === "string") lines.push(`- ${item}`);
-        else if (item?.lens || item?.read) {
-          lines.push(`- ${item.lens ? `${item.lens}: ` : ""}${item.read || JSON.stringify(item)}`);
-          if (item.implication) lines.push(`  Implication: ${item.implication}`);
-        } else {
-          lines.push(`- ${JSON.stringify(item)}`);
-        }
-      });
-      return;
-    }
-    lines.push(String(content || "No read generated."));
-  };
-  const renderSourceEvidence = (section) => {
-    lines.push("", `## ${section.label || "Source Evidence"}`);
-    if (!issues.length) lines.push("No selected issues yet. The workflow completed but did not ingest enough source items to compile a brief.");
-    else {
-      issues.slice(0, 18).forEach((issue, index) => {
-        const sources = Array.isArray(issue.corroboratingSources) && issue.corroboratingSources.length ? issue.corroboratingSources.join(", ") : issue.sourceName;
-        lines.push(`${index + 1}. ${issue.title} (${sources}${issue.publishedAt ? `, ${new Date(issue.publishedAt).toLocaleString()}` : ""})`);
-        if (issue.summary) lines.push(`   ${issue.summary}`);
-        if (issue.sectionTags?.length) lines.push(`   Sections: ${issue.sectionTags.join(", ")}`);
-        if (issue.evidenceStatus) lines.push(`   Evidence: ${issue.evidenceStatus}${issue.clusterItemCount ? `; ${issue.clusterItemCount} clustered item${issue.clusterItemCount === 1 ? "" : "s"}` : ""}`);
-        if (issue.cacheContext?.framing) lines.push(`   Context: ${issue.cacheContext.framing}`);
-        if (issue.url) lines.push(`   ${issue.url}`);
-      });
-    }
-  };
-  const renderTopIssues = () => {
-    const topIssues = Array.isArray(brief.topIssues) && brief.topIssues.length
-      ? brief.topIssues
-      : issueClusters.slice(0, 18).map((cluster, index) => ({
-        rank: index + 1,
-        title: cluster.title,
-        read: cluster.summary,
-        sources: cluster.sourceNames,
-        whyItMatters: cluster.sectionTags?.join(", "),
-      }));
-    lines.push("", "## Top Issues");
-    if (!topIssues.length) {
-      lines.push("No selected news issue clusters were available. See Coverage Notes for source health.");
-      return;
-    }
-    topIssues.slice(0, 18).forEach((issue, index) => {
-      const rank = issue.rank || index + 1;
-      const sources = Array.isArray(issue.sources) ? issue.sources.join(", ") : "";
-      lines.push(`${rank}. ${issue.title || "Untitled issue"}${sources ? ` (${sources})` : ""}`);
-      if (issue.read) lines.push(`   ${issue.read}`);
-      if (issue.whyItMatters) lines.push(`   Why it matters: ${issue.whyItMatters}`);
-    });
-  };
-  const renderCoverageNotes = () => {
-    const notes = Array.isArray(brief.coverageNotes) && brief.coverageNotes.length
-      ? brief.coverageNotes
-      : (Array.isArray(coverageDiagnostics.warnings) ? coverageDiagnostics.warnings : []);
-    lines.push("", "## Coverage Notes");
-    if (!notes.length) {
-      lines.push("- No major source coverage degradation reported by the fetch layer.");
-      return;
-    }
-    notes.forEach((note) => lines.push(`- ${typeof note === "string" ? note : JSON.stringify(note)}`));
-    const failures = Array.isArray(coverageDiagnostics.topFailures) ? coverageDiagnostics.topFailures.slice(0, 6) : [];
-    failures.forEach((failure) => lines.push(`- ${failure.source || failure.type}: ${failure.error || "Fetch failed"}`));
-  };
-  const renderConfiguredSection = (section) => {
-    if (section.key === "sourceEvidence") {
-      renderSourceEvidence(section);
-      return;
-    }
-    lines.push("", `## ${section.label || section.key}`);
-    const content = brief.sectionResponses?.[section.key]
-      ?? knownSectionContent(brief, section.key)
-      ?? fallbackSectionContent(section, issues, config);
-    renderContent(content);
-  };
-  renderTopIssues();
-  if (sections.length) {
-    sections.forEach(renderConfiguredSection);
-  } else {
-    [
-      { key: "executiveRead", label: "Executive Read" },
-      { key: "backgroundContext", label: "Plain-English Context" },
-      { key: "whyJackShouldCare", label: config.ownerName && config.ownerName !== "You" ? `Why ${config.ownerName} Should Care` : "Why It Matters" },
-      { key: "futureImplications", label: "Future Implications" },
-      { key: "doctrineProjectImpact", label: "Doctrine / Project Impact" },
-      { key: "councilRead", label: "Analyzer Read" },
-      { key: "councilSynthesis", label: "Analyzer Synthesis" },
-      { key: "jackPov", label: config.ownerName && config.ownerName !== "You" ? `${config.ownerName} POV` : "POV" },
-      { key: "sourceEvidence", label: "Source Evidence" },
-      { key: "openQuestions", label: "Open Questions Before Approval" },
-    ].forEach(renderConfiguredSection);
-  }
-  renderCoverageNotes();
-  return lines.join("\n");
+  return renderOnePageBriefPure(artifact, {
+    config,
+    strategicBriefFallback: () => deterministicStrategicBrief({ selectedIssues: issues, lenses: [], council: artifact.council, config }),
+    knownSectionContentFn: knownSectionContent,
+    fallbackSectionContentFn: fallbackSectionContent,
+  });
 }
 
 function formatDeliberation(deliberation = {}) {
@@ -5132,39 +5043,10 @@ async function deliberateWorkflowRun(runId, { regenerate = false } = {}) {
   if (modelSettings().status !== "ready") throw new Error("Set up a working model before deliberating a brief.");
   const briefText = String(artifact.onePageBrief || renderOnePageBrief(artifact) || "").trim();
   if (!briefText) throw new Error("This run does not have a saved brief to deliberate.");
-  const system = [
-    "You deliberate over a saved private intelligence brief using user-created perspective lenses.",
-    "Each lens should give a distinct, useful take grounded in the saved brief text.",
-    "Do not introduce new factual claims unless you clearly mark them as questions or hypotheses.",
-    "Return only valid JSON.",
-  ].join(" ");
-  const prompt = JSON.stringify({
-    task: "Run a perspective deliberation over this saved brief.",
-    requiredJsonShape: {
-      perspectives: [{ name: "lens name", role: "lens role", take: "specific read on the brief", implication: "what this perspective would do or watch next" }],
-      synthesis: "where the perspectives agree, disagree, what matters most, and a practical next move",
-    },
-    brief: briefText.slice(0, 18000),
-    perspectiveLenses: perspectiveLenses.map((lens) => ({
-      name: lens.name,
-      role: lens.role,
-      description: lens.description,
-      instructions: lens.instructions,
-    })),
-  });
+  const { system, prompt } = perspectiveDeliberationRequest({ briefText, perspectiveLenses });
   const text = await callTextModel({ system, prompt });
   const payload = parseModelJson(text);
-  const deliberation = {
-    perspectives: (Array.isArray(payload.perspectives) ? payload.perspectives : []).slice(0, 12).map((item, index) => ({
-      name: String(item.name || perspectiveLenses[index]?.name || `Perspective ${index + 1}`).trim(),
-      role: String(item.role || perspectiveLenses[index]?.role || "").trim(),
-      take: String(item.take || item.read || "").trim(),
-      implication: String(item.implication || item.nextMove || "").trim(),
-    })).filter((item) => item.name && item.take),
-    synthesis: String(payload.synthesis || payload.summary || "").trim(),
-    generatedAt: now(),
-  };
-  if (!deliberation.perspectives.length && !deliberation.synthesis) throw new Error("The model did not return a usable deliberation.");
+  const deliberation = normalizedPerspectiveDeliberation({ payload, perspectiveLenses, generatedAt: now() });
   const nextArtifact = { ...artifact, deliberation };
   run("UPDATE workflow_runs SET artifact_json=$artifact WHERE id=$id", { $id: runId, $artifact: json(nextArtifact) });
   audit("brief.deliberated", "workflow_run", runId, `Generated deliberation with ${deliberation.perspectives.length} perspective lens${deliberation.perspectives.length === 1 ? "" : "es"}`, {}, "system");

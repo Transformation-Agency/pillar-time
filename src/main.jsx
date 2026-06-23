@@ -96,6 +96,7 @@ import {
   settingsResearchRows,
   toggleCalendarSelection,
 } from "./settingsConnectors.js";
+import { settingsAuditVisibility } from "./settingsAudit.js";
 import {
   addSelectedSourcesDecision,
   continueAfterAccessDecision,
@@ -3221,9 +3222,14 @@ function Telegram({ state, mutate, refresh }) {
 }
 
 function Audit({ state }) {
+  const auditView = settingsAuditVisibility({ auditLogs: state.auditLogs, limit: 250 });
   return <Page title="Audit Log" desc="State-changing actions are recorded here." wide>
-    <div className="card table-card">{state.auditLogs.length ? <table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Note</th></tr></thead><tbody>{state.auditLogs.map((a) => <tr key={a.id}><td className="mono">{new Date(a.ts).toLocaleString()}</td><td>{a.actor}</td><td><Badge>{a.action}</Badge></td><td className="mono">{a.entityType}:{a.entityId}</td><td>{a.note}</td></tr>)}</tbody></table> : <Empty icon="audit" title="No audit entries" body="The first state-changing action will create the first audit log." />}</div>
+    <div className="card table-card"><AuditLogTable view={auditView} /></div>
   </Page>;
+}
+
+function AuditLogTable({ view }) {
+  return view.rows.length ? <table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Note</th></tr></thead><tbody>{view.rows.map((a) => <tr key={a.id}><td className="mono">{a.time}</td><td>{a.actor}</td><td><Badge>{a.action}</Badge></td><td className="mono">{a.entity}</td><td>{a.note}</td></tr>)}</tbody></table> : <Empty icon={view.emptyState.icon} title={view.emptyState.title} body={view.emptyState.body} />;
 }
 
 function Settings({ state, mutate, refresh, desktopUpdate }) {
@@ -3579,6 +3585,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   };
   const updateTone = desktopUpdateSettingsTone(desktopUpdate);
   const updateLabel = desktopUpdateSettingsLabel(desktopUpdate);
+  const auditView = settingsAuditVisibility({ auditLogs: state.auditLogs });
   return <Page
     title="Settings"
     desc="Configure the models, services, and APIs used to analyze, research, and deliver your brief."
@@ -3713,8 +3720,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       </section>
 
       <section className="panel audit-settings">
-        <div className="connector-head"><div className="connector-title"><span className="connector-icon"><Icon name="audit" /></span><div><h2>Audit Log</h2><p>State-changing actions are recorded here.</p></div></div><Badge>{state.auditLogs.length} entries</Badge></div>
-        {state.auditLogs.length ? <table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Note</th></tr></thead><tbody>{state.auditLogs.slice(0, 12).map((a) => <tr key={a.id}><td className="mono">{new Date(a.ts).toLocaleString()}</td><td>{a.actor}</td><td><Badge>{a.action}</Badge></td><td className="mono">{a.entityType}:{a.entityId}</td><td>{a.note}</td></tr>)}</tbody></table> : <Empty icon="audit" title="No audit entries" body="The first state-changing action will create the first audit log." />}
+        <div className="connector-head"><div className="connector-title"><span className="connector-icon"><Icon name="audit" /></span><div><h2>Audit Log</h2><p>State-changing actions are recorded here.</p></div></div><Badge>{auditView.countLabel}</Badge></div>
+        <AuditLogTable view={auditView} />
       </section>
     </div>
     {connectorModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConnectorModal(false); }}>

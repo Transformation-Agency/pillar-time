@@ -5,6 +5,7 @@ import {
   buildCoverageDiagnostics,
   NO_NEWS_FRESHNESS_POLICY,
   noNewsClaimPolicy,
+  renderOnePageBrief,
   selectIssueClusters,
 } from "../server/intelligenceWorkflow.js";
 
@@ -101,4 +102,82 @@ test("no-news policy blocks false quiet claims when coverage degraded or candida
   });
   assert.equal(quiet.canClaimNoNews, true);
   assert.equal(quiet.warning, "");
+});
+
+test("rendered intelligence brief includes configured sections, top issues, and source evidence", () => {
+  const markdown = renderOnePageBrief({
+    title: "Daily Intelligence",
+    generatedAt: "2026-06-22T16:00:00.000Z",
+    selectedIssues: [{
+      title: "Primary signal",
+      sourceName: "AP",
+      corroboratingSources: ["AP", "Reuters"],
+      publishedAt: "2026-06-22T14:00:00.000Z",
+      summary: "A sourced summary.",
+      sectionTags: ["politicalNational"],
+      evidenceStatus: "full-text",
+      clusterItemCount: 2,
+      cacheContext: { framing: "This is relevant to today's agenda." },
+      url: "https://example.com/signal",
+    }],
+    strategicBrief: {
+      topIssues: [{
+        rank: 1,
+        title: "Primary signal",
+        read: "The model read.",
+        sources: ["AP", "Reuters"],
+        whyItMatters: "It changes the owner's near-term choices.",
+      }],
+      sectionResponses: {
+        executiveRead: "Lead with the strongest signal.",
+        councilRead: [{ lens: "Operator", read: "Watch the execution path.", implication: "Check the primary source." }],
+      },
+    },
+  }, {
+    config: {
+      sections: [
+        { key: "executiveRead", label: "Executive Read", enabled: true },
+        { key: "disabled", label: "Disabled", enabled: false },
+        { key: "councilRead", label: "Analyzer Read", enabled: true },
+        { key: "sourceEvidence", label: "Source Evidence", enabled: true },
+      ],
+    },
+    formatDate: (value) => `DATE:${value}`,
+  });
+
+  assert.match(markdown, /^# Daily Intelligence\nGenerated: DATE:2026-06-22T16:00:00.000Z/);
+  assert.match(markdown, /## Top Issues\n1\. Primary signal \(AP, Reuters\)\n   The model read\.\n   Why it matters: It changes the owner's near-term choices\./);
+  assert.match(markdown, /## Executive Read\nLead with the strongest signal\./);
+  assert.match(markdown, /## Analyzer Read\n- Operator: Watch the execution path\.\n  Implication: Check the primary source\./);
+  assert.match(markdown, /## Source Evidence\n1\. Primary signal \(AP, Reuters, DATE:2026-06-22T14:00:00.000Z\)/);
+  assert.match(markdown, /   Evidence: full-text; 2 clustered items/);
+  assert.match(markdown, /   Context: This is relevant to today's agenda\./);
+  assert.match(markdown, /   https:\/\/example\.com\/signal/);
+  assert.doesNotMatch(markdown, /## Disabled/);
+});
+
+test("rendered intelligence brief falls back to clusters and coverage diagnostics", () => {
+  const markdown = renderOnePageBrief({
+    generatedAt: "2026-06-22T16:00:00.000Z",
+    selectedIssueClusters: [{
+      title: "Clustered issue",
+      summary: "Cluster summary.",
+      sourceNames: ["RSS", "HN"],
+      sectionTags: ["techAi", "financialMarkets"],
+    }],
+    coverageDiagnostics: {
+      warnings: ["RSS/YouTube coverage degraded: 1 feed failed or blocked."],
+      topFailures: [{ source: "Local feed", error: "Fetch failed" }],
+    },
+  }, {
+    config: { ownerName: "Jack", sections: [] },
+    formatDate: (value) => value,
+  });
+
+  assert.match(markdown, /^# Daily Brief\nGenerated: 2026-06-22T16:00:00.000Z/);
+  assert.match(markdown, /## Top Issues\n1\. Clustered issue \(RSS, HN\)\n   Cluster summary\.\n   Why it matters: techAi, financialMarkets/);
+  assert.match(markdown, /## Why Jack Should Care\nNo usable source items published today for this section\./);
+  assert.match(markdown, /## Jack POV\nNo usable source items published today for this section\./);
+  assert.match(markdown, /## Source Evidence\nNo selected issues yet\. The workflow completed but did not ingest enough source items to compile a brief\./);
+  assert.match(markdown, /## Coverage Notes\n- RSS\/YouTube coverage degraded: 1 feed failed or blocked\.\n- Local feed: Fetch failed/);
 });

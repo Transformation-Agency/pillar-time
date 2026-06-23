@@ -46,6 +46,48 @@ export function shouldRunSourcePreflight(date = new Date(), config = {}) {
   return nowMinutes === targetMinutes ? sourcePreflightKey(date, config) : null;
 }
 
+export function scheduledSourcePreflightDecision({
+  nowDate = new Date(),
+  config = {},
+  lastPreflightKey = "",
+} = {}) {
+  const key = shouldRunSourcePreflight(nowDate, config);
+  if (!key) return { action: "skip", reason: "not_due", key: null };
+  if (key === lastPreflightKey) return { action: "skip", reason: "already_ran", key };
+  return { action: "run", key };
+}
+
+function sourceResultBuckets(collection = {}) {
+  return [
+    ...(collection.transcriptionResults || []),
+    ...(collection.xResults || []),
+    ...(collection.rssResults || []),
+    ...(collection.redditResults || []),
+    ...(collection.webResults || []),
+    ...(collection.calendarResults || []),
+  ];
+}
+
+export function scheduledSourcePreflightReadiness(collection = {}) {
+  const activeSourceCount = (collection.activeSources || []).length;
+  const checkedSourceResults = sourceResultBuckets(collection);
+  const failedSources = checkedSourceResults
+    .filter((result) => result?.ok === false || result?.error)
+    .map((result) => ({
+      sourceId: result.sourceId || "",
+      sourceName: result.sourceName || "",
+      error: String(result.error || "Source preflight failed"),
+    }));
+  return {
+    ready: activeSourceCount > 0 && failedSources.length === 0,
+    activeSourceCount,
+    checkedSourceCount: checkedSourceResults.length,
+    failedSourceCount: failedSources.length,
+    inserted: Number(collection.itemCount || 0),
+    failedSources,
+  };
+}
+
 export function briefDeliveryDueKey(date = new Date(), config = {}) {
   const parts = scheduleParts(date, config.deliveryTimezone);
   if (config.deliveryFrequency === "Weekly" && config.deliveryDay !== parts.weekday) return null;
