@@ -13,6 +13,12 @@ export function telegramSettingsPatchPlan(body = {}, current = {}) {
   };
 }
 
+export function resolveTelegramBotTokenInput(botToken = "", current = {}) {
+  const requestedToken = String(botToken || "").trim();
+  if (requestedToken === "configured") return String(current.bot_token || "").trim();
+  return requestedToken;
+}
+
 export function telegramSettingsReadiness(row = {}) {
   if (!row?.bot_token) return { ok: false, error: "Missing bot token" };
   if (!row?.chat_id) return { ok: false, error: "Missing chat ID" };

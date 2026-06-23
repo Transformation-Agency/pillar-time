@@ -97,6 +97,7 @@ import {
   telegramCommandAvailability,
 } from "./telegramCommands.js";
 import {
+  resolveTelegramBotTokenInput,
   telegramSettingsPatchPlan,
   telegramSettingsReadiness,
   telegramTestResponse,
@@ -6757,7 +6758,8 @@ app.patch("/api/telegram", (req, res) => {
 
 app.post("/api/telegram/token/validate", async (req, res) => {
   try {
-    const { token, bot } = await validateTelegramToken(req.body?.botToken);
+    const current = get("SELECT * FROM telegram_settings WHERE id=1");
+    const { token, bot } = await validateTelegramToken(resolveTelegramBotTokenInput(req.body?.botToken, current));
     run("UPDATE telegram_settings SET bot_token=$token, last_checked_at=$t, last_error='', updated_at=$t WHERE id=1", { $token: token, $t: now() });
     audit("telegram.token_validated", "telegram_settings", "1", `Validated @${bot.username}`, {}, "system");
     res.json({ ok: true, botUsername: bot.username, botName: bot.first_name || bot.username, state: state() });
@@ -6769,9 +6771,8 @@ app.post("/api/telegram/token/validate", async (req, res) => {
 
 app.post("/api/telegram/pairing/start", async (req, res) => {
   try {
-    const requestedToken = String(req.body?.botToken || "").trim();
     const current = get("SELECT * FROM telegram_settings WHERE id=1");
-    const botToken = requestedToken && requestedToken !== "configured" ? requestedToken : current.bot_token;
+    const botToken = resolveTelegramBotTokenInput(req.body?.botToken || "configured", current);
     const { token, bot, base } = await validateTelegramToken(botToken);
     const webhook = await fetchWithTimeout(`${base}/getWebhookInfo`);
     const webhookPayload = await webhook.json().catch(() => ({}));

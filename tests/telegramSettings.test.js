@@ -15,6 +15,7 @@ import {
   telegramSettingsReadiness,
   telegramTestResponse,
   telegramTestText,
+  resolveTelegramBotTokenInput,
 } from "../server/telegramSettings.js";
 
 test("Telegram settings form and request preserve saved token placeholders", () => {
@@ -82,6 +83,14 @@ test("Telegram settings patch plan trims input and preserves stored credentials"
   assert.equal(telegramSettingsPatchPlan({ enabled: true, botToken: "", chatId: "42" }, {}).lastError, "Missing bot token");
   assert.equal(telegramSettingsPatchPlan({ enabled: true, botToken: "123:abc", chatId: "" }, {}).lastError, "Missing chat ID");
   assert.equal(telegramSettingsPatchPlan({ enabled: false, botToken: "", chatId: "" }, {}).lastError, "");
+});
+
+test("Telegram token validation resolves the saved-token placeholder server-side", () => {
+  assert.equal(resolveTelegramBotTokenInput("configured", {
+    bot_token: "123456:stored-secret",
+  }), "123456:stored-secret");
+  assert.equal(resolveTelegramBotTokenInput(" 123:abc ", {}), "123:abc");
+  assert.equal(resolveTelegramBotTokenInput("configured", {}), "");
 });
 
 test("Telegram test helpers validate readiness and shape Telegram message results", () => {
