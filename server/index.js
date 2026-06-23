@@ -35,6 +35,10 @@ import {
   providerCredentialStatus as modelCredentialStatus,
 } from "./modelConfig.js";
 import {
+  generatedPerspectiveLensDrafts,
+  perspectiveLensGenerationPrompt,
+} from "./perspectiveLensGeneration.js";
+import {
   reminderSchedulerDecision,
   shouldDeliverLocalOccurrence as shouldDeliverLocalOccurrencePure,
 } from "./reminderScheduler.js";
@@ -124,6 +128,15 @@ import {
   redditTokenRequestPlan,
 } from "./redditSource.js";
 import {
+  extractWebMeta,
+  webCacheHitConfig,
+  webErrorConfig,
+  webNextConfig,
+  webNormalizedItem,
+  webPageMetadata,
+  webRequestPlan,
+} from "./webSource.js";
+import {
   briefAudioArtifact,
   briefAudioFilePath,
   briefAudioGenerationPlan,
@@ -138,6 +151,13 @@ import {
   podcastNoEpisodeResult,
   spotifyTitleCandidates as spotifyTitleCandidatesPure,
 } from "./podcastSource.js";
+import {
+  youtubeChannelIdFromPage,
+  youtubeFeedUrlForChannel,
+  youtubeItemsForToday,
+  youtubeNextConfig,
+  youtubeRequestPlan,
+} from "./youtubeSource.js";
 import {
   ffmpegInstallDecision,
   sttModelInstallDecision,
@@ -1740,16 +1760,7 @@ function spotifyTitleCandidates(title) {
 }
 
 function extractMeta(html, property) {
-  const patterns = [
-    new RegExp(`<meta[^>]+property=["']${property}["'][^>]+content=["']([^"']+)["']`, "i"),
-    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${property}["']`, "i"),
-    new RegExp(`<meta[^>]+name=["']${property}["'][^>]+content=["']([^"']+)["']`, "i"),
-  ];
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) return match[1].replace(/&amp;/g, "&").replace(/&#x27;/g, "'").replace(/&quot;/g, "\"");
-  }
-  return "";
+  return extractWebMeta(html, property);
 }
 
 async function resolveSpotifyPodcast(spotifyUrl) {
@@ -2159,6 +2170,43 @@ async function fetchRssSource(source) {
   return { ok: true, skipped: false, seen: parsedItems.length, today: items.length, inserted };
 }
 
+async function fetchYouTubeSource(source) {
+  const config = source.config || {};
+  const plan = youtubeRequestPlan(source);
+  if (plan.skipped) return { ok: true, skipped: true, reason: plan.reason, seen: 0, inserted: 0 };
+  let channelId = config.channelId || "";
+  let feedUrl = plan.feedUrl;
+  if (!feedUrl && plan.resolveUrl) {
+    const page = await fetchWithTimeout(plan.resolveUrl, { headers: plan.headers });
+    if (!page.ok) throw new Error(`YouTube channel resolve failed: ${page.status} ${page.statusText}`);
+    channelId = youtubeChannelIdFromPage(await page.text());
+    feedUrl = youtubeFeedUrlForChannel(channelId);
+  }
+  if (!feedUrl) throw new Error("Could not resolve YouTube channel feed URL");
+  const response = await fetchWithTimeout(feedUrl, { headers: plan.headers });
+  if (!response.ok) throw new Error(`YouTube RSS fetch failed: ${response.status} ${response.statusText}`);
+  const { parsedItems, items } = youtubeItemsForToday(await response.text(), { maxItems: config.maxItems || 5, publishedToday });
+  let inserted = 0;
+  for (const item of items) {
+    const saved = saveNormalizedItem({
+      source,
+      stableId: item.stableId,
+      canonicalUrl: item.url,
+      title: item.title,
+      body: item.body,
+      publishedAt: item.publishedAt ? new Date(item.publishedAt).toISOString() : null,
+      relevanceScore: scoreText(`${item.title} ${item.body}`, config.keywords),
+      risingScore: item.publishedAt && new Date(item.publishedAt) >= startOfLocalDay() ? 0.32 : 0.08,
+    });
+    if (saved.inserted) inserted += 1;
+  }
+  const fetchedAt = now();
+  const nextConfig = youtubeNextConfig({ config, channelId, feedUrl, parsedItems, items, inserted, fetchedAt });
+  run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
+  audit("youtube.fetched", "source", source.id, `Fetched ${parsedItems.length} YouTube RSS items; ${items.length} published today; inserted ${inserted}`, { fetched: parsedItems.length, today: items.length, inserted }, "system");
+  return { ok: true, skipped: false, seen: parsedItems.length, today: items.length, inserted };
+}
+
 function redditUrlForSource(source) {
   return redditJsonUrlForSource(source);
 }
@@ -2229,45 +2277,29 @@ async function fetchRedditSource(source) {
 
 async function fetchWebSource(source) {
   const config = source.config || {};
-  const url = config.url || source.locator;
-  if (!url || !/^https?:\/\//.test(url)) return { ok: true, skipped: true, reason: "No public web URL configured", seen: 0, inserted: 0 };
-  const headers = { "User-Agent": "PillarTime/0.1" };
-  if (config.lastEtag) headers["If-None-Match"] = config.lastEtag;
-  if (config.lastModified) headers["If-Modified-Since"] = config.lastModified;
-  const response = await fetchWithTimeout(url, { headers });
+  const plan = webRequestPlan(source);
+  if (!plan.ok) return { ok: true, skipped: true, reason: plan.reason, seen: 0, inserted: 0 };
+  const response = await fetchWithTimeout(plan.url, { headers: plan.headers });
   if (response.status === 304) {
     const fetchedAt = now();
-    const nextConfig = { ...config, lastFetchedAt: fetchedAt, lastFetchCacheStatus: "not-modified", lastInsertedCount: 0 };
+    const nextConfig = webCacheHitConfig({ config, fetchedAt });
     run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
     audit("web.cache_hit", "source", source.id, "Web page not modified; using cached normalized item", {}, "system");
     return { ok: true, skipped: false, cached: true, cacheStatus: "not-modified", seen: 0, inserted: 0 };
   }
   if (!response.ok) throw new Error(`Web fetch failed: ${response.status} ${response.statusText}`);
   const html = await response.text();
-  const title = stripHtml(extractMeta(html, "og:title") || extractMeta(html, "twitter:title") || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || source.name);
-  const description = stripHtml(extractMeta(html, "og:description") || extractMeta(html, "description") || "");
-  const publishedAt = extractMeta(html, "article:published_time") || extractMeta(html, "datePublished") || extractMeta(html, "publishdate") || extractMeta(html, "pubdate") || "";
-  const saved = saveNormalizedItem({
+  const metadata = webPageMetadata(html, { fallbackTitle: source.name });
+  const saved = saveNormalizedItem(webNormalizedItem({
     source,
-    stableId: `${url}:${title}`,
-    canonicalUrl: url,
-    title,
-    body: description,
-    publishedAt: publishedAt && publishedToday(publishedAt) ? new Date(publishedAt).toISOString() : null,
-    relevanceScore: scoreText(`${title} ${description}`, config.keywords),
-    risingScore: 0.05,
-  });
+    url: plan.url,
+    metadata,
+    publishedToday,
+    scoreText,
+  }));
   const inserted = saved.inserted ? 1 : 0;
   const fetchedAt = now();
-  const nextConfig = {
-    ...config,
-    lastFetchedAt: fetchedAt,
-    lastFetchedCount: 1,
-    lastInsertedCount: inserted,
-    lastFetchCacheStatus: inserted ? "new-item" : "deduped",
-    lastEtag: response.headers.get("etag") || config.lastEtag || "",
-    lastModified: response.headers.get("last-modified") || config.lastModified || "",
-  };
+  const nextConfig = webNextConfig({ config, inserted, fetchedAt, responseHeaders: response.headers });
   run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
   audit("web.fetched", "source", source.id, `Fetched web page metadata; inserted ${inserted}`, { fetched: 1, inserted }, "system");
   return { ok: true, skipped: false, seen: 1, inserted };
@@ -2777,7 +2809,7 @@ async function fetchSourceCollection({ useRecentCache = false, onProgress } = {}
     }
   }
   const rssResults = [];
-  for (const source of [...rssSources, ...youtubeSources]) {
+  for (const source of rssSources) {
     try {
       const cached = useRecentCache ? recentSourceCache(source) : null;
       rssResults.push(cached ? { sourceId: source.id, sourceName: source.name, ...cached } : { sourceId: source.id, sourceName: source.name, ...(await fetchRssSource(source)) });
@@ -2786,6 +2818,17 @@ async function fetchSourceCollection({ useRecentCache = false, onProgress } = {}
       audit(`${source.type.toLowerCase()}.fetch_failed`, "source", source.id, error.message || `${source.type} fetch failed`, {}, "system");
     } finally {
       reportFetchProgress(`${source.type}: ${source.name}`);
+    }
+  }
+  for (const source of youtubeSources) {
+    try {
+      const cached = useRecentCache ? recentSourceCache(source) : null;
+      rssResults.push(cached ? { sourceId: source.id, sourceName: source.name, ...cached } : { sourceId: source.id, sourceName: source.name, ...(await fetchYouTubeSource(source)) });
+    } catch (error) {
+      rssResults.push({ sourceId: source.id, sourceName: source.name, ok: false, error: error.message || "YouTube fetch failed" });
+      audit("youtube.fetch_failed", "source", source.id, error.message || "YouTube fetch failed", {}, "system");
+    } finally {
+      reportFetchProgress(`YouTube: ${source.name}`);
     }
   }
   const redditResults = [];
@@ -2806,6 +2849,9 @@ async function fetchSourceCollection({ useRecentCache = false, onProgress } = {}
       const cached = useRecentCache ? recentSourceCache(source) : null;
       webResults.push(cached ? { sourceId: source.id, sourceName: source.name, ...cached } : { sourceId: source.id, sourceName: source.name, ...(await fetchWebSource(source)) });
     } catch (error) {
+      const fetchedAt = now();
+      const nextConfig = webErrorConfig({ config: source.config || {}, fetchedAt, error: error.message || "Web fetch failed" });
+      run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
       webResults.push({ sourceId: source.id, sourceName: source.name, ok: false, error: error.message || "Web fetch failed" });
       audit("web.fetch_failed", "source", source.id, error.message || "Web fetch failed", {}, "system");
     } finally {
@@ -3234,15 +3280,11 @@ function seedDefaultPodcastSources() {
   });
 }
 
-function youtubeFeedUrl(channelId) {
-  return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-}
-
 function seedDefaultYouTubeSources() {
   const markerKey = "default_youtube_source_catalog_version";
   if (get("SELECT value FROM app_state WHERE key=$key", { $key: markerKey })?.value === DEFAULT_YOUTUBE_SOURCE_CATALOG_VERSION) return;
   for (const [name, handle, channelId, note] of DEFAULT_YOUTUBE_SOURCES) {
-    const feedUrl = youtubeFeedUrl(channelId);
+    const feedUrl = youtubeFeedUrlForChannel(channelId);
     seedSourceRecord({
       name,
       type: "YouTube",
@@ -6508,52 +6550,20 @@ app.patch("/api/brief-config", (req, res) => {
   res.json(state());
 });
 
-function requestedPerspectiveLensLimit(promptText) {
-  const text = promptText.toLowerCase();
-  if (/\b(one|single|a lens|one lens|single lens|one perspective|single perspective)\b/.test(text)) return 1;
-  const digit = /\b([2-6])\b/.exec(text);
-  if (digit) return Number(digit[1]);
-  const wordCounts = { two: 2, three: 3, four: 4, five: 5, six: 6 };
-  for (const [word, count] of Object.entries(wordCounts)) {
-    if (new RegExp(`\\b${word}\\b`).test(text)) return count;
-  }
-  if (/\b(multiple|several|different perspectives|range of perspectives|set of perspectives|set of lenses|lenses|perspectives)\b/.test(text)) return 4;
-  return 1;
-}
-
 app.post("/api/perspective-lenses/generate", async (req, res) => {
   const promptText = String(req.body?.prompt || "").trim();
   if (promptText.length < 8) return res.status(400).json({ error: "Describe the perspectives you want first.", state: state() });
   if (modelSettings().status !== "ready") return res.status(400).json({ error: "Set up a working model before generating perspective lenses.", state: state() });
-  const lensLimit = requestedPerspectiveLensLimit(promptText);
-  const system = [
-    "You turn natural-language perspective requests into editable perspective lenses for a brief deliberation feature.",
-    "Infer how many lenses the user wants from the request.",
-    "Default to exactly one comprehensive lens when the user asks for one persona, one named thinker, one role, or one viewpoint.",
-    "Generate multiple lenses only when the user clearly asks for multiple, several, a set, a range, or names multiple viewpoints.",
-    "When a user references a real person, create an inspired analytical viewpoint, not a claim to represent that person's actual current opinions.",
-    "Each lens must be practical, source-grounded, and safe for a private intelligence brief.",
-    "Return only valid JSON.",
-  ].join(" ");
-  const modelPrompt = JSON.stringify({
-    task: `Generate exactly ${lensLimit} perspective lens${lensLimit === 1 ? "" : "es"} from the user's request.`,
-    request: promptText,
-    countRules: {
-      singularDefault: "If the request describes one persona or viewpoint, create one comprehensive lens with a rich role, description, and instructions.",
-      multipleOnlyWhenExplicit: "Only create multiple lenses when the user explicitly asks for multiple perspectives or names more than one viewpoint.",
-    },
-    requiredJsonShape: {
-      lenses: [{ name: "short name", role: "perspective role", description: "what it notices", instructions: "how it should evaluate a saved brief", enabled: true }],
-    },
-  });
+  const { lensLimit, system, prompt } = perspectiveLensGenerationPrompt(promptText);
   try {
-    const text = await callTextModel({ system, prompt: modelPrompt });
-    const payload = parseModelJson(text);
-    const lenses = sanitizePerspectiveLenses((Array.isArray(payload.lenses) ? payload.lenses : []).map((lens, index) => ({
-      ...lens,
-      id: lens.id || id(`perspective-${index + 1}`),
-    }))).slice(0, lensLimit);
-    if (!lenses.length) throw new Error("The model did not return usable perspective lenses.");
+    const text = await callTextModel({ system, prompt });
+    const lenses = generatedPerspectiveLensDrafts({
+      modelText: text,
+      lensLimit,
+      parseJson: parseModelJson,
+      sanitizeLenses: sanitizePerspectiveLenses,
+      createId: id,
+    });
     audit("perspectives.generated", "brief_config", "1", `Generated ${lenses.length} perspective lenses from onboarding prompt`, {}, "system");
     res.json({ lenses, state: state() });
   } catch (error) {

@@ -51,7 +51,25 @@ import {
   localDependencyRuntimeRequest,
   localDependencySettingsView,
 } from "./localDependencies.js";
+import {
+  appendPerspectiveTranscript,
+  perspectiveGenerationFailure,
+  perspectiveGenerationRequest,
+  perspectiveGenerationSuccess,
+  perspectiveVoiceFailure,
+} from "./perspectiveLensGeneration.js";
 import { generationProgressViewModel } from "./progressViewModel.js";
+import {
+  activePerspectiveLensCount,
+  addPerspectiveLens,
+  editPerspectiveLenses,
+  filterPerspectiveLenses,
+  newPerspectiveLens,
+  perspectiveLensMessageTone,
+  removePerspectiveLens,
+  savePerspectiveLensesFlow,
+  updatePerspectiveLens,
+} from "./perspectiveLenses.js";
 import {
   canCompleteOnboarding,
   deliverySaveRequest,
@@ -508,7 +526,7 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
   const [helpOpen, setHelpOpen] = React.useState(false);
   const helpRef = React.useRef(null);
   const activeSources = state?.sources?.filter((s) => s.status === "active").length || 0;
-  const counts = { sources: activeSources, lenses: state?.briefConfig?.perspectiveLenses?.filter((l) => l.enabled !== false).length || 0 };
+  const counts = { sources: activeSources, lenses: activePerspectiveLensCount(state?.briefConfig?.perspectiveLenses || []) };
   const updateVisible = desktopUpdateBannerVisible(desktopUpdate);
   const updateBusy = desktopUpdateIsBusy(desktopUpdate);
   React.useEffect(() => {
@@ -1313,24 +1331,23 @@ function Lenses({ state, mutate }) {
     if (!dirty) setLenses(state.briefConfig?.perspectiveLenses || []);
   }, [state.briefConfig?.perspectiveLenses, dirty]);
   const editLenses = (updater) => {
-    setDirty(true);
-    setMessage("Unsaved changes.");
-    setLenses(updater);
+    setLenses((current) => {
+      const next = editPerspectiveLenses(current, updater);
+      setDirty(next.dirty);
+      setMessage(next.message);
+      return next.lenses;
+    });
   };
-  const updateLens = (index, patch) => editLenses((current) => current.map((lens, i) => i === index ? { ...lens, ...patch } : lens));
-  const addLens = () => editLenses((current) => [...current, { id: `perspective-${Date.now()}`, name: "New Perspective", role: "Point of view", description: "", instructions: "Read the saved brief from this perspective and name what it notices, worries about, and would do next.", enabled: true }]);
-  const removeLens = (index) => editLenses((current) => current.filter((_, i) => i !== index));
+  const updateLens = (index, patch) => editLenses((current) => updatePerspectiveLens(current, index, patch));
+  const addLens = () => editLenses((current) => addPerspectiveLens(current, newPerspectiveLens()));
+  const removeLens = (index) => editLenses((current) => removePerspectiveLens(current, index));
   const save = async () => {
     setMessage("");
-    try {
-      await mutate("/api/brief-config", { ...state.briefConfig, perspectiveLenses: lenses }, "PATCH");
-      setDirty(false);
-      setMessage("Perspective lenses saved.");
-    } catch (error) {
-      setMessage(error.message || "Could not save perspective lenses.");
-    }
+    const result = await savePerspectiveLensesFlow({ currentConfig: state.briefConfig, lenses, mutate });
+    setDirty(result.dirty);
+    setMessage(result.message);
   };
-  const filtered = lenses.filter((lens) => `${lens.name} ${lens.role} ${lens.description}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = filterPerspectiveLenses(lenses, query);
   return <Page
     title="Perspective Lenses"
     desc="Optional viewpoints used only when you deliberate a saved brief."
@@ -1353,7 +1370,7 @@ function Lenses({ state, mutate }) {
         })}
       </div>
       {!filtered.length && <Empty icon="lenses" title="No perspective lenses" body="Add lenses here, or generate them during onboarding from natural language." />}
-      {message && <p className={message.includes("saved") ? "ok-text" : message.includes("Unsaved") ? "hint" : "warn-text"}>{message}</p>}
+      {message && <p className={perspectiveLensMessageTone(message)}>{message}</p>}
     </section>
   </Page>;
 }
@@ -2686,11 +2703,12 @@ function Onboarding({ state, mutate, refresh }) {
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(payload.error || "Could not transcribe voice input.");
           const transcript = String(payload.transcript || "").trim();
-          if (!transcript) throw new Error("Transcription returned no text. You can try again or type the request.");
-          setPerspectivePrompt((current) => `${current ? `${current} ` : ""}${transcript}`.trim());
-          setPerspectiveMessage("Voice input added.");
+          const voiceResult = appendPerspectiveTranscript("", transcript);
+          if (!voiceResult.added) throw new Error(voiceResult.message);
+          setPerspectivePrompt((current) => appendPerspectiveTranscript(current, transcript).prompt);
+          setPerspectiveMessage(voiceResult.message);
         } catch (error) {
-          setPerspectiveMessage(error.message || "Voice input stopped. You can keep typing instead.");
+          setPerspectiveMessage(perspectiveVoiceFailure(error));
         }
       };
       setListening(true);
@@ -2704,11 +2722,13 @@ function Onboarding({ state, mutate, refresh }) {
     setGeneratingPerspectives(true);
     setPerspectiveMessage("");
     try {
-      const result = await api("/api/perspective-lenses/generate", { method: "POST", body: JSON.stringify({ prompt: perspectivePrompt }) });
-      setPerspectiveDrafts(result.lenses || []);
-      setPerspectiveMessage(`Generated ${(result.lenses || []).length} perspective lens${(result.lenses || []).length === 1 ? "" : "es"}.`);
+      const request = perspectiveGenerationRequest(perspectivePrompt);
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
+      const next = perspectiveGenerationSuccess(result.lenses);
+      setPerspectiveDrafts(next.drafts);
+      setPerspectiveMessage(next.message);
     } catch (error) {
-      setPerspectiveMessage(error.message || "Could not generate perspective lenses.");
+      setPerspectiveMessage(perspectiveGenerationFailure(error));
     } finally {
       setGeneratingPerspectives(false);
     }
