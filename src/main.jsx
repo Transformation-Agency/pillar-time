@@ -17,6 +17,14 @@ import {
 import { desktopRuntime } from "./desktopRuntime.js";
 import { generationProgressViewModel } from "./progressViewModel.js";
 import {
+  canCompleteOnboarding,
+  deliverySaveRequest,
+  firstIncompleteOnboardingStep,
+  initialOnboardingStep,
+  onboardingCompleteRequest,
+  onboardingReviewReadiness,
+} from "./onboardingCompletion.js";
+import {
   reminderDefaultPatch,
   saveReminderDefaultsFlow,
 } from "./reminderDefaults.js";
@@ -2426,12 +2434,11 @@ function Onboarding({ state, mutate, refresh }) {
   const readiness = state.onboarding.readiness || {};
   const savedOwnerName = state.briefConfig?.ownerName || "";
   const hasSavedFirstName = !isDefaultOwnerName(savedOwnerName);
-  const initialIncomplete = () => {
-    if (!hasSavedFirstName) return "welcome";
-    if (!readiness.scheduleSet) return "schedule";
-    return "review";
-  };
-  const [step, setStep] = React.useState(!hasSavedFirstName ? "welcome" : state.onboarding.currentStep === "complete" ? initialIncomplete() : state.onboarding.currentStep || "welcome");
+  const [step, setStep] = React.useState(initialOnboardingStep({
+    savedOwnerName,
+    currentStep: state.onboarding.currentStep,
+    readiness,
+  }));
   const [model, setModel] = React.useState({ enabled: true, provider: state.model.provider || "openai", model: state.model.model || defaultModelForProvider(state.model.provider || "openai"), apiKey: "", baseUrl: state.model.baseUrl || "" });
   const [modelOptions, setModelOptions] = React.useState(state.model.model ? [state.model.model] : []);
   const [modelOptionsProvider, setModelOptionsProvider] = React.useState(state.model.provider || "openai");
@@ -2439,14 +2446,9 @@ function Onboarding({ state, mutate, refresh }) {
   const [detecting, setDetecting] = React.useState(false);
   const [returnAfterModel, setReturnAfterModel] = React.useState("");
   const [firstName, setFirstName] = React.useState(hasSavedFirstName ? savedOwnerName : "");
-  const firstNameReady = !isDefaultOwnerName(firstName.trim() || savedOwnerName);
-  const reviewReadiness = { ...readiness, ownerNameReady: firstNameReady };
-  const canComplete = reviewReadiness.ownerNameReady && reviewReadiness.scheduleSet;
-  const firstIncomplete = () => {
-    if (!reviewReadiness.ownerNameReady) return "welcome";
-    if (!reviewReadiness.scheduleSet) return "schedule";
-    return "review";
-  };
+  const reviewReadiness = onboardingReviewReadiness({ readiness, firstName, savedOwnerName });
+  const canComplete = canCompleteOnboarding(reviewReadiness);
+  const firstIncomplete = () => firstIncompleteOnboardingStep(reviewReadiness);
   const [nameMessage, setNameMessage] = React.useState("");
   const [savingFirstName, setSavingFirstName] = React.useState(false);
   const [operatingManual, setOperatingManual] = React.useState(state.time?.preferences?.operatingManual || "");
@@ -2964,11 +2966,13 @@ function Onboarding({ state, mutate, refresh }) {
     }
   };
   const saveDelivery = async (patch) => {
-    await mutate("/api/brief-config", { ...state.briefConfig, deliveryTimezone: timezone, ...patch }, "PATCH");
+    const request = deliverySaveRequest({ currentConfig: state.briefConfig, timezone, patch });
+    await mutate(request.url, request.body, request.method);
   };
   const complete = async () => {
     try {
-      await mutate("/api/onboarding/complete", {});
+      const request = onboardingCompleteRequest();
+      await mutate(request.url, request.body);
     } catch (error) {
       setSourceMessage(error.message);
     }
