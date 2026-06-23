@@ -73,6 +73,7 @@ import {
   proposedCalendarScheduleFromContext as buildProposedCalendarScheduleFromContext,
   toDateMs,
 } from "./executivePlanning.js";
+import { approvalQueueItemsForRender } from "./executiveBriefRender.js";
 import {
   googleCalendarPublicConnectorView,
   linearPublicConnectorView,
@@ -5354,7 +5355,7 @@ function renderExecutiveDayBrief(artifact = {}) {
   addList("Proposed Calendar", (artifact.proposedCalendarSchedule?.blocks || []).map((block) => `${new Date(block.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}-${new Date(block.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${block.summary}`), "No calendar fill blocks proposed.");
   addList("Linear Focus", brief.linearRead);
   addList("Commitments & Follow-ups", brief.commitmentRead);
-  addList("Approval Queue", brief.approvalRead || (artifact.approvalItems || []).map((item) => item.title), "No approval-gated actions are pending from this run.");
+  addList("Approval Queue", approvalQueueItemsForRender({ brief, artifact }), "No approval-gated actions are pending from this run.");
   addList("Schedule Protection", brief.scheduleProtection || (artifact.risks || []).filter((risk) => risk.type?.includes("calendar") || risk.type === "meeting_load").map((risk) => risk.title), "No schedule protection warnings detected.");
   addList("Missing Info / Watchouts", brief.missingInfo || (artifact.risks || []).map((risk) => risk.title));
   addList("Coverage Notes", brief.coverageNotes || artifact.coverageNotes);
