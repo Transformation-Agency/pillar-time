@@ -45,6 +45,15 @@ import {
   submitStarterCommitmentFlow,
 } from "./starterCommitment.js";
 import {
+  telegramPaired,
+  telegramPairingMessageTone,
+  telegramPairingPollMessage,
+  telegramPairingPollRequest,
+  telegramPairingStartMessage,
+  telegramPairingStartRequests,
+  telegramPairingStatusView,
+} from "./telegramPairing.js";
+import {
   BookOpen,
   Bot,
   Box,
@@ -2206,19 +2215,21 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
   const [bot, setBot] = React.useState("");
   const [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
-  const paired = session?.status === "paired" || (state.telegram.enabled && state.telegram.chatId && state.telegram.botToken);
+  const paired = telegramPaired({ session, telegram: state.telegram });
+  const statusView = telegramPairingStatusView({ session, telegram: state.telegram, bot });
   React.useEffect(() => {
     if (!session?.id || session.status !== "waiting") return;
     const timer = setInterval(async () => {
       try {
-        const result = await api(`/api/telegram/pairing/${session.id}/poll`, { method: "POST", body: JSON.stringify({}) });
+        const request = telegramPairingPollRequest(session.id);
+        const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
         setSession(result.session);
         if (result.session?.status === "paired") {
-          setMessage("Paired. Telegram delivery is ready.");
+          setMessage(telegramPairingPollMessage(result.session));
           await refresh();
           onPaired?.();
         }
-        if (["failed", "expired"].includes(result.session?.status)) setMessage(result.session.error || "Pairing stopped. Start a new code.");
+        if (["failed", "expired"].includes(result.session?.status)) setMessage(telegramPairingPollMessage(result.session));
       } catch (error) {
         if (error.payload?.session) setSession(error.payload.session);
         setMessage(error.message);
@@ -2231,11 +2242,12 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
     setBusy(true);
     setMessage("");
     try {
-      const validation = await api("/api/telegram/token/validate", { method: "POST", body: JSON.stringify({ botToken }) });
+      const [validateRequest, startRequest] = telegramPairingStartRequests(botToken);
+      const validation = await api(validateRequest.url, { method: validateRequest.method, body: JSON.stringify(validateRequest.body) });
       setBot(validation.botUsername);
-      const result = await api("/api/telegram/pairing/start", { method: "POST", body: JSON.stringify({ botToken }) });
+      const result = await api(startRequest.url, { method: startRequest.method, body: JSON.stringify(startRequest.body) });
       setSession(result.session);
-      setMessage("Pairing code is live. In Telegram, chat with your bot, send /start, then reply with the code shown here.");
+      setMessage(telegramPairingStartMessage());
       await refresh();
     } catch (error) {
       setMessage(error.message);
@@ -2260,8 +2272,8 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
     </form>
     {(session || paired) && <div className={`pair-status ${paired ? "paired" : session?.status || "waiting"}`}>
       <div className="pair-status-head">
-        <div><strong>{paired ? "Telegram paired" : session?.status === "waiting" ? "Waiting for Telegram" : "Pairing status"}</strong><span>{bot || session?.botUsername ? `@${bot || session?.botUsername}` : "Telegram bot"}</span></div>
-        <Badge tone={paired ? "ok" : session?.status === "failed" || session?.status === "expired" ? "warn" : "muted"}>{paired ? "Connected" : session?.status || "waiting"}</Badge>
+        <div><strong>{statusView.title}</strong><span>{statusView.botLabel}</span></div>
+        <Badge tone={statusView.badgeTone}>{statusView.badgeLabel}</Badge>
       </div>
       {!paired && session?.deepLink && <div className="pair-grid">
         <div className="pair-actions">
@@ -2276,7 +2288,7 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
         </div>
       </div>}
     </div>}
-    {message && <p className={message.includes("ready") || message.includes("live") || message.includes("Paired") ? "ok-text" : "warn-text"}>{message}</p>}
+    {message && <p className={telegramPairingMessageTone(message)}>{message}</p>}
   </div>;
 }
 
