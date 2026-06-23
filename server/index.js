@@ -105,6 +105,15 @@ import {
   redditShouldUseRssFallback,
   redditTokenRequestPlan,
 } from "./redditSource.js";
+import {
+  cleanPodcastSearchTerm as cleanPodcastSearchTermPure,
+  parsePodcastRss as parsePodcastRssPure,
+  podcastDuplicateResult,
+  podcastEpisodeCandidates,
+  podcastNoEpisodeConfig,
+  podcastNoEpisodeResult,
+  spotifyTitleCandidates as spotifyTitleCandidatesPure,
+} from "./podcastSource.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -1702,23 +1711,11 @@ async function callTextModel({ system, prompt }) {
 }
 
 function cleanPodcastSearchTerm(value) {
-  return String(value || "")
-    .replace(/\s*\|\s*Podcast on Spotify\s*/gi, "")
-    .replace(/\s*\|\s*Spotify\s*/gi, "")
-    .replace(/^Listen to\s+/i, "")
-    .replace(/\s+on Spotify$/i, "")
-    .trim();
+  return cleanPodcastSearchTermPure(value);
 }
 
 function spotifyTitleCandidates(title) {
-  const cleaned = cleanPodcastSearchTerm(title);
-  const parts = cleaned.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean);
-  return [...new Set([
-    cleaned,
-    parts.at(-1),
-    parts.length > 1 ? parts.slice(1).join(" - ") : "",
-    parts[0],
-  ].filter(Boolean))];
+  return spotifyTitleCandidatesPure(title);
 }
 
 function extractMeta(html, property) {
@@ -1789,45 +1786,8 @@ async function resolveSpotifyPodcast(spotifyUrl) {
   };
 }
 
-function decodeXml(value = "") {
-  return String(value)
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .trim();
-}
-
-function tagValue(xml, tag) {
-  const match = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "i"));
-  return decodeXml(match?.[1] || "");
-}
-
-function attrValue(xml, attr) {
-  const match = xml.match(new RegExp(`${attr}=["']([^"']+)["']`, "i"));
-  return decodeXml(match?.[1] || "");
-}
-
 function parsePodcastRss(xml) {
-  const channelTitle = tagValue(xml, "title");
-  return [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map((match) => {
-    const item = match[0];
-    const enclosure = item.match(/<enclosure\b[^>]*>/i)?.[0] || "";
-    return {
-      title: tagValue(item, "title") || "Untitled episode",
-      guid: tagValue(item, "guid") || tagValue(item, "link") || attrValue(enclosure, "url"),
-      link: tagValue(item, "link"),
-      pubDate: tagValue(item, "pubDate"),
-      description: tagValue(item, "description"),
-      audioUrl: attrValue(enclosure, "url"),
-      audioType: attrValue(enclosure, "type") || "audio/mpeg",
-      audioLength: Number(attrValue(enclosure, "length") || 0),
-      channelTitle,
-    };
-  }).filter((episode) => episode.audioUrl);
+  return parsePodcastRssPure(xml);
 }
 
 function stripHtml(value = "") {
@@ -2098,30 +2058,20 @@ async function transcribePodcastSource(sourceId, mode = "today") {
   const feed = await fetchWithTimeout(feedUrl);
   if (!feed.ok) throw new Error(`RSS fetch failed: ${feed.status} ${feed.statusText}`);
   const episodes = parsePodcastRss(await feed.text());
-  const candidates = mode === "latest" ? episodes : episodes.filter(episodeIsToday);
+  const candidates = podcastEpisodeCandidates({ episodes, mode, episodeIsToday });
   const episode = candidates[0];
   if (!episode) {
     const fetchedAt = now();
-    const config = { ...source.config, lastFetchedAt: fetchedAt, lastFetchCacheStatus: "no-episode", lastFetchedCount: episodes.length, lastInsertedCount: 0 };
+    const config = podcastNoEpisodeConfig({ config: source.config, fetchedAt, episodes });
     run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(config), $t: fetchedAt });
-    return { ok: true, transcribed: false, reason: mode === "latest" ? "No podcast episodes with audio were found." : "No podcast episode published today was found.", episodesChecked: episodes.length };
+    return podcastNoEpisodeResult({ mode, episodes });
   }
   const episodeFingerprint = createHash("sha256").update(`${source.id}:${episode.guid || episode.audioUrl}`).digest("hex");
   const existingEpisode = get("SELECT id FROM normalized_items WHERE fingerprint=$fingerprint", { $fingerprint: episodeFingerprint });
   if (existingEpisode) {
     const config = { ...source.config, lastTranscribedGuid: episode.guid, lastTranscribedAt: now(), lastTranscriptItemId: existingEpisode.id };
     run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(config), $t: now() });
-    return {
-      ok: true,
-      transcribed: false,
-      skipped: true,
-      reason: "Episode was already transcribed.",
-      episode: { title: episode.title, pubDate: episode.pubDate, audioUrl: episode.audioUrl },
-      documentId: source.config.lastTranscriptDocumentId || null,
-      words: 0,
-      chunks: 0,
-      audioBytes: 0,
-    };
+    return podcastDuplicateResult({ episode, documentId: source.config.lastTranscriptDocumentId || null });
   }
 
   const modelRow = get("SELECT * FROM model_settings WHERE id=1");

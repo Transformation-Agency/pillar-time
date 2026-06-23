@@ -56,6 +56,11 @@ import {
   sourceSubmitRequest,
 } from "./sourceForm.js";
 import {
+  podcastResolvePatch,
+  podcastTranscriptionAvailable,
+  podcastTranscriptionNotice,
+} from "./podcastSource.js";
+import {
   starterCommitmentMessageTone,
   submitStarterCommitmentFlow,
 } from "./starterCommitment.js";
@@ -1143,8 +1148,8 @@ function Sources({ state, mutate }) {
   const [transcribeMessage, setTranscribeMessage] = React.useState("");
   const ffmpeg = state.runtime?.ffmpeg;
   const stt = state.runtime?.stt;
-  const cloudTranscriptionReady = ["openai", "custom"].includes(state.model?.provider) && state.model?.status === "ready";
-  const transcriptionAvailable = ffmpeg?.available !== false && (stt?.available || cloudTranscriptionReady);
+  const transcriptionAvailable = podcastTranscriptionAvailable({ ffmpeg, stt, model: state.model });
+  const transcriptionNotice = podcastTranscriptionNotice(transcriptionAvailable);
   const definition = sourceDefinitions[form.type];
   const mode = definition.modes[form.config.mode] ? form.config.mode : Object.keys(definition.modes)[0];
   const modeDefinition = definition.modes[mode];
@@ -1197,20 +1202,7 @@ function Sources({ state, mutate }) {
         setSpotifyResolve({ loading: false, message: result.error || "Could not resolve RSS feed.", tone: "warn" });
         return;
       }
-      setForm((current) => ({
-        ...current,
-        name: current.name || result.podcastTitle || "",
-        config: {
-          ...current.config,
-          mode: "spotify",
-          feedUrl: result.feedUrl,
-          podcastTitle: result.podcastTitle,
-          podcastAuthor: result.author,
-          spotifyTitle: result.spotifyTitle,
-          resolverConfidence: result.confidence,
-          transcribeNewEpisodes: current.config.transcribeNewEpisodes ?? true,
-        },
-      }));
+      setForm((current) => podcastResolvePatch({ currentForm: current, result }));
       setSpotifyResolve({ loading: false, message: `Resolved ${result.podcastTitle} RSS feed (${result.confidence} confidence).`, tone: "ok" });
     } catch (error) {
       setSpotifyResolve({ loading: false, message: error.message, tone: "warn" });
@@ -1313,8 +1305,8 @@ function Sources({ state, mutate }) {
             {spotifyResolve.message && <Badge tone={spotifyResolve.tone}>{spotifyResolve.message}</Badge>}
           </div>}
           {form.type === "Podcast" && <div className={`notice ${transcriptionAvailable ? "" : "notice-warn"}`}>
-            <strong>{transcriptionAvailable ? "Podcast transcription available" : "Podcast transcription unavailable"}</strong>
-            <span>{transcriptionAvailable ? "Podcast audio can be split with FFmpeg and transcribed with local Whisper or your configured cloud fallback." : "Set up FFmpeg plus local Whisper STT or an OpenAI-compatible transcription endpoint before podcast audio can be transcribed."}</span>
+            <strong>{transcriptionNotice.title}</strong>
+            <span>{transcriptionNotice.body}</span>
           </div>}
           {form.type === "Podcast" && <label className="check"><input type="checkbox" checked={form.config.transcribeNewEpisodes !== false && transcriptionAvailable} disabled={!transcriptionAvailable} onChange={(event) => updateConfig("transcribeNewEpisodes", event.target.checked)} /> Transcribe new episodes for briefs</label>}
         </div>
