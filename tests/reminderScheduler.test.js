@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   reminderOccurrenceId,
   reminderSchedulerDecision,
+  scheduledOccurrenceDeliveryPlan,
   shouldDeliverLocalOccurrence,
 } from "../server/reminderScheduler.js";
 
@@ -80,4 +81,33 @@ test("reminder scheduler only uses channels enabled both on reminder and globall
     prefs,
     nowDate,
   }).deliveries, []);
+});
+
+test("scheduled reminder occurrences deliver when they become due and suppress duplicate attempts", () => {
+  assert.deepEqual(scheduledOccurrenceDeliveryPlan({
+    reminder,
+    prefs,
+    occurrence: { intended_local_date: "2026-06-22", intended_local_time: "10:10", dedupe_key: "reminder-1:2026-06-22:10:10" },
+    nowDate,
+  }).deliveries, []);
+
+  assert.deepEqual(scheduledOccurrenceDeliveryPlan({
+    reminder,
+    prefs,
+    occurrence: { intended_local_date: "2026-06-22", intended_local_time: "10:00", dedupe_key: "reminder-1:2026-06-22:10:00" },
+    nowDate,
+  }).deliveries, [
+    { channel: "telegram", mode: "text", status: "send" },
+    { channel: "desktop", mode: "text", status: "skipped", error: "Desktop notification adapter pending Tauri notification permission wiring." },
+  ]);
+
+  assert.deepEqual(scheduledOccurrenceDeliveryPlan({
+    reminder,
+    prefs,
+    occurrence: { intended_local_date: "2026-06-22", intended_local_time: "10:00", dedupe_key: "reminder-1:2026-06-22:10:00" },
+    attempted: [{ channel: "telegram", mode: "text" }],
+    nowDate,
+  }).deliveries, [
+    { channel: "desktop", mode: "text", status: "skipped", error: "Desktop notification adapter pending Tauri notification permission wiring." },
+  ]);
 });

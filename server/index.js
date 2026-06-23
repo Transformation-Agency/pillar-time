@@ -44,6 +44,7 @@ import {
 } from "./perspectiveDeliberation.js";
 import {
   reminderSchedulerDecision,
+  scheduledOccurrenceDeliveryPlan,
   shouldDeliverLocalOccurrence as shouldDeliverLocalOccurrencePure,
 } from "./reminderScheduler.js";
 import {
@@ -3879,6 +3880,7 @@ async function runTimeReminderSchedulerTick(trigger = "tick") {
   timeSchedulerState.running = true;
   timeSchedulerState.lastTickAt = now();
   try {
+    await processDueScheduledReminderOccurrences(prefs);
     for (const reminder of reminders()) {
       const decision = reminderSchedulerDecision({ reminder, prefs });
       if (decision.action !== "schedule") continue;
@@ -3897,6 +3899,27 @@ async function runTimeReminderSchedulerTick(trigger = "tick") {
   } catch (error) {
     timeSchedulerState.lastError = error.message || "Reminder scheduler failed";
     audit("time.scheduler_failed", "scheduler", "time", timeSchedulerState.lastError, { trigger }, "system");
+  }
+}
+
+async function processDueScheduledReminderOccurrences(prefs) {
+  const reminderRows = new Map(reminders().map((reminder) => [reminder.id, reminder]));
+  const scheduledRows = all("SELECT * FROM reminder_occurrences WHERE status='scheduled' ORDER BY due_at ASC");
+  for (const row of scheduledRows) {
+    const reminder = reminderRows.get(row.reminder_id);
+    if (!reminder) continue;
+    const occurrence = {
+      dateKey: row.intended_local_date,
+      localTime: row.intended_local_time,
+      dedupeKey: row.dedupe_key,
+    };
+    const attempted = all("SELECT channel, mode FROM reminder_delivery_attempts WHERE occurrence_id=$occurrenceId", { $occurrenceId: row.id });
+    const decision = scheduledOccurrenceDeliveryPlan({ reminder, prefs, occurrence, attempted });
+    if (decision.action !== "schedule" || !decision.due) continue;
+    for (const delivery of decision.deliveries) {
+      if (delivery.status === "send") await deliverTimeReminder({ reminder, occurrenceId: row.id, channel: delivery.channel, mode: delivery.mode });
+      else recordReminderAttempt({ occurrenceId: row.id, channel: delivery.channel, mode: delivery.mode, status: delivery.status, error: delivery.error || "" });
+    }
   }
 }
 

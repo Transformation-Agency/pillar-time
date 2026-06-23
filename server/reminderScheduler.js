@@ -42,3 +42,18 @@ export function reminderSchedulerDecision({ reminder = {}, prefs = {}, nowDate =
     deliveries,
   };
 }
+
+export function scheduledOccurrenceDeliveryPlan({ reminder = {}, prefs = {}, occurrence = {}, attempted = [], nowDate = new Date() } = {}) {
+  const normalizedOccurrence = {
+    dateKey: occurrence.dateKey || occurrence.intended_local_date,
+    localTime: occurrence.localTime || occurrence.intended_local_time,
+    dedupeKey: occurrence.dedupeKey || occurrence.dedupe_key,
+  };
+  const decision = reminderSchedulerDecision({ reminder: { ...reminder, nextOccurrence: normalizedOccurrence }, prefs, nowDate });
+  if (decision.action !== "schedule" || !decision.due) return { ...decision, deliveries: [] };
+  const attemptedKeys = new Set(attempted.map((item) => `${item.channel}:${item.mode || "text"}`));
+  return {
+    ...decision,
+    deliveries: decision.deliveries.filter((delivery) => !attemptedKeys.has(`${delivery.channel}:${delivery.mode || "text"}`)),
+  };
+}
