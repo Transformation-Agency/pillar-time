@@ -5682,6 +5682,7 @@ seed();
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: false, limit: "256kb" }));
 
 app.patch("/api/time/preferences", (req, res) => {
   const b = req.body || {};
