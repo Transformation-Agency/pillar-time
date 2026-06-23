@@ -48,7 +48,7 @@ test("model save plan validates enabled model setup without live provider calls"
   assert.equal(modelSavePlan({ provider: "anthropic", enabled: true, savedApiKey: "key", model: "claude-sonnet" }).missing, false);
   assert.equal(modelSavePlan({ provider: "anthropic", enabled: true, savedApiKey: "key" }).missing, true);
   assert.equal(modelSavePlan({ provider: "custom", enabled: true, savedApiKey: "key", model: "local-model" }).lastError, "Missing runtime provider key, model name, or custom Base URL");
-  assert.equal(modelSavePlan({ provider: "custom", enabled: true, savedApiKey: "key", model: "local-model", baseUrl: " http://localhost:11434/v1/ " }).baseUrl, "http://localhost:11434/v1/");
+  assert.equal(modelSavePlan({ provider: "custom", enabled: true, savedApiKey: "key", model: "local-model", baseUrl: " http://localhost:11434/v1/// " }).baseUrl, "http://localhost:11434/v1");
   assert.equal(modelSavePlan({ provider: "openai", enabled: false }).missing, false);
 });
 

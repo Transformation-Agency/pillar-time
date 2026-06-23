@@ -33,7 +33,7 @@ export function modelBaseUrl({ provider = "openai", baseUrl = "" } = {}) {
 
 export function modelSavePlan({ provider = "openai", model = "", apiKey = "", savedApiKey = "", enabled = true, baseUrl = "", envApiKey = "" } = {}) {
   const normalized = normalizeModelProvider(provider);
-  const nextBaseUrl = normalized === "custom" ? String(baseUrl || "").trim() : "";
+  const nextBaseUrl = normalized === "custom" ? String(baseUrl || "").trim().replace(/\/+$/, "") : "";
   const runtimeKey = apiKey || savedApiKey || envApiKey;
   const modelName = model || defaultModelForProvider(normalized);
   const credentialStatus = providerCredentialStatus({ savedApiKey: runtimeKey });
