@@ -12,6 +12,10 @@ import {
   saveReminderDefaultsFlow,
 } from "./reminderDefaults.js";
 import {
+  reviewMessageTone,
+  toggleReviewTemplateFlow,
+} from "./reviewTemplates.js";
+import {
   connectorMessageTone,
   connectorModalTarget,
   connectorRequest,
@@ -2656,12 +2660,8 @@ function Onboarding({ state, mutate, refresh }) {
   };
   const toggleReview = async (review) => {
     setReviewMessage("");
-    try {
-      await mutate(`/api/time/reviews/${review.id}`, { enabled: !review.enabled }, "PATCH");
-      setReviewMessage(`${review.title} ${review.enabled ? "disabled" : "enabled"}.`);
-    } catch (error) {
-      setReviewMessage(error.message || "Could not update review.");
-    }
+    const result = await toggleReviewTemplateFlow({ review, mutate });
+    setReviewMessage(result.message);
   };
   const detectModels = async () => {
     setDetecting(true);
@@ -3151,7 +3151,7 @@ function Onboarding({ state, mutate, refresh }) {
           <div className="time-card-head"><div><strong>{review.title}</strong><small>{review.cadence}</small></div><Badge tone={review.enabled ? "ok" : "muted"}>{review.enabled ? "On" : "Off"}</Badge></div>
           <Button icon={review.enabled ? "x" : "check"} onClick={() => toggleReview(review)}>{review.enabled ? "Disable" : "Enable"}</Button>
         </div>)}</div>
-        {reviewMessage && <p className={reviewMessage.includes("enabled") || reviewMessage.includes("disabled") ? "ok-text" : "warn-text"}>{reviewMessage}</p>}
+        {reviewMessage && <p className={reviewMessageTone(reviewMessage)}>{reviewMessage}</p>}
         <div className="row"><Button onClick={() => go("reminders")}>Back</Button><Button kind="primary" onClick={() => go("model")}>Continue</Button></div>
       </section>}
       {step === "model" && <section className="onboarding-panel">
