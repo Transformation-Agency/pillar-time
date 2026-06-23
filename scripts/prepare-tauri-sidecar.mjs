@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "..");
 const tauriDir = path.join(root, "src-tauri");
 const resourcesDir = path.join(tauriDir, "resources");
 const backendDir = path.join(resourcesDir, "backend");
+const whisperResourcesDir = path.join(resourcesDir, "whisper");
 const binariesDir = path.join(tauriDir, "binaries");
 const sidecarName = "pillar-time-backend";
 const legacySidecarName = "jack-daily-brief-backend";
@@ -101,6 +102,7 @@ function copyNodeSidecar(filePath) {
 }
 
 rmrf(backendDir);
+rmrf(whisperResourcesDir);
 fs.mkdirSync(backendDir, { recursive: true });
 fs.mkdirSync(binariesDir, { recursive: true });
 
@@ -137,5 +139,6 @@ console.log(`Prepared Tauri Node sidecar resources for ${hostTriple}. Local Whis
 
 const debugResourcesDir = path.join(tauriDir, "target", "debug", "resources");
 if (fs.existsSync(debugResourcesDir)) {
+  rmrf(path.join(debugResourcesDir, "whisper"));
   copyBundleAsset(backendDir, path.join(debugResourcesDir, "backend"));
 }
