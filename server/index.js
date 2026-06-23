@@ -83,6 +83,16 @@ import {
   rssRequestPlan,
   stripFeedHtml,
 } from "./rssSource.js";
+import {
+  X_QUICK_MAX_RESULTS,
+  xEstimatedCost,
+  xFetchReadiness,
+  xNextConfig,
+  xPostToNormalizedItem,
+  xPostsForToday,
+  xQueryParams,
+  xQuickQuery,
+} from "./xSource.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -2745,27 +2755,7 @@ function xHeaders(token) {
   return { Authorization: `Bearer ${token}` };
 }
 
-const X_QUICK_MAX_RESULTS = 10;
 const X_QUICK_CACHE_MINUTES = 60;
-const X_ESTIMATED_POST_READ_COST_USD = 0.005;
-
-function xQuickQuery(rawQuery = "") {
-  let query = String(rawQuery || "").trim();
-  if (!query) return "";
-  if (!/\bis:retweet\b/i.test(query) && !/\b-is:retweet\b/i.test(query)) query += " -is:retweet";
-  if (!/\bis:reply\b/i.test(query) && !/\b-is:reply\b/i.test(query)) query += " -is:reply";
-  return query;
-}
-
-function xQueryParams(config, maxResults = X_QUICK_MAX_RESULTS) {
-  const params = new URLSearchParams({
-    query: xQuickQuery(config.query || ""),
-    max_results: String(X_QUICK_MAX_RESULTS),
-    "tweet.fields": "created_at,public_metrics,author_id,lang",
-    start_time: startOfLocalDay().toISOString(),
-  });
-  return params;
-}
 
 async function fetchXCount({ source, token }) {
   const config = source.config || {};
@@ -2781,50 +2771,29 @@ async function fetchXCount({ source, token }) {
 
 async function fetchXSource(source) {
   const config = source.config || {};
-  if (!config.query) return { ok: true, skipped: true, reason: "No X query configured", inserted: 0, seen: 0 };
   const token = xBearerToken();
-  if (!token) return { ok: true, skipped: true, reason: "X connector is missing or disabled", inserted: 0, seen: 0 };
+  const readiness = xFetchReadiness({ config, token });
+  if (readiness.skipped) return readiness;
 
   const maxResults = X_QUICK_MAX_RESULTS;
   const quickQuery = xQuickQuery(config.query);
-  const params = xQueryParams({ ...config, query: quickQuery }, maxResults);
+  const params = xQueryParams({ ...config, query: quickQuery }, { startTime: startOfLocalDay(), maxResults });
   const response = await fetchWithTimeout(`https://api.x.com/2/tweets/search/recent?${params}`, { headers: xHeaders(token) });
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`X recent search failed: ${response.status} ${response.statusText} ${text.slice(0, 240)}`);
   }
   const payload = await response.json();
-  const parsedPosts = Array.isArray(payload.data) ? payload.data.slice(0, maxResults) : [];
-  const posts = parsedPosts.filter((post) => publishedToday(post.created_at));
+  const { parsedPosts, posts } = xPostsForToday(payload, { publishedToday });
   let inserted = 0;
   for (const post of posts) {
-    const metrics = post.public_metrics || {};
-    const engagement = Number(metrics.like_count || 0) + Number(metrics.retweet_count || 0) * 2 + Number(metrics.reply_count || 0) + Number(metrics.quote_count || 0) * 2;
-    const saved = saveNormalizedItem({
-      source,
-      stableId: post.id,
-      canonicalUrl: `https://x.com/i/web/status/${post.id}`,
-      title: post.text.split(/\s+/).slice(0, 16).join(" "),
-      body: post.text,
-      publishedAt: post.created_at || null,
-      relevanceScore: scoreText(post.text, config.keywords),
-      risingScore: Math.min(1, Math.log10(engagement + 1) / 4),
-    });
+    const saved = saveNormalizedItem(xPostToNormalizedItem({ source, post, scoreText }));
     if (saved.inserted) inserted += 1;
   }
-  const estimatedCost = Number((parsedPosts.length * X_ESTIMATED_POST_READ_COST_USD).toFixed(3));
-  const nextConfig = {
-    ...config,
-    query: config.query,
-    quickMode: true,
-    quickModeLocked: true,
-    lastFetchedAt: now(),
-    lastFetchedCount: parsedPosts.length,
-    lastFetchedTodayCount: posts.length,
-    lastInsertedCount: inserted,
-    lastEstimatedCostUsd: estimatedCost,
-  };
-  run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: now() });
+  const fetchedAt = now();
+  const estimatedCost = xEstimatedCost(parsedPosts);
+  const nextConfig = xNextConfig({ config, parsedPosts, posts, inserted, fetchedAt });
+  run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
   audit("x.fetched", "source", source.id, `Quick fetched ${parsedPosts.length} X posts; ${posts.length} published today; inserted ${inserted}; est. cost $${estimatedCost.toFixed(3)}`, { query: quickQuery, fetched: parsedPosts.length, today: posts.length, inserted, maxResults, estimatedCostUsd: estimatedCost, quickMode: true }, "system");
   return { ok: true, skipped: false, seen: parsedPosts.length, today: posts.length, inserted, maxResults, estimatedCostUsd: estimatedCost, quickMode: true, query: quickQuery };
 }
