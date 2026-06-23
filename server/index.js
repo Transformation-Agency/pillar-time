@@ -7407,7 +7407,7 @@ if (process.env.NODE_ENV === "production") {
   app.use(vite.middlewares);
 }
 
-const port = Number(process.env.PORT || 5173);
+const port = Number(process.env.PILLAR_TIME_PORT || process.env.PORT || 5173);
 const host = process.env.HOST || "127.0.0.1";
 const googleCalendarCallbackPort = GOOGLE_CALENDAR_REDIRECT_URI ? Number(new URL(GOOGLE_CALENDAR_REDIRECT_URI).port || 80) : 0;
 const server = app.listen(port, host);

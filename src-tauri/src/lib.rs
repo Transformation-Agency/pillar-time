@@ -16,8 +16,8 @@ use tauri::{
     Manager, RunEvent, WebviewUrl, WebviewWindowBuilder,
 };
 
-const BACKEND_PORT: u16 = 42817;
-const BACKEND_URL: &str = "http://127.0.0.1:42817";
+const BACKEND_PORT: u16 = 42917;
+const BACKEND_URL: &str = "http://127.0.0.1:42917";
 const SIDECAR_PREFIX: &str = "pillar-time-backend";
 
 struct BackendProcess(Mutex<Option<Child>>);
@@ -171,6 +171,7 @@ fn spawn_backend(app: &tauri::App) -> Result<Child, String> {
         .env("PILLAR_BACKEND_DIR", backend_dir)
         .env("PILLAR_TIME_DATA_DIR", data_dir)
         .env("HOST", "127.0.0.1")
+        .env("PILLAR_TIME_PORT", BACKEND_PORT.to_string())
         .env("PORT", BACKEND_PORT.to_string())
         .stdin(Stdio::null())
         .stdout(Stdio::from(log_file))

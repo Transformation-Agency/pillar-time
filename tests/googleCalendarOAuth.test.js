@@ -14,7 +14,7 @@ test("Google Calendar OAuth start plan builds PKCE consent URL and preserves sel
     currentData: { selectedCalendarIds: ["primary", "work"] },
     defaultClientId: "client-id",
     defaultClientSecret: "client-secret",
-    redirectUri: "http://127.0.0.1:42817/api/google-calendar/oauth/callback",
+    redirectUri: "http://127.0.0.1:42917/api/google-calendar/oauth/callback",
     stateToken: "state-123",
     pkce: { verifier: "verifier-abc", challenge: "challenge-xyz" },
     scope: "calendar.events calendar.list",
@@ -23,7 +23,7 @@ test("Google Calendar OAuth start plan builds PKCE consent URL and preserves sel
 
   assert.equal(url.hostname, "accounts.google.com");
   assert.equal(url.searchParams.get("client_id"), "client-id");
-  assert.equal(url.searchParams.get("redirect_uri"), "http://127.0.0.1:42817/api/google-calendar/oauth/callback");
+  assert.equal(url.searchParams.get("redirect_uri"), "http://127.0.0.1:42917/api/google-calendar/oauth/callback");
   assert.equal(url.searchParams.get("access_type"), "offline");
   assert.equal(url.searchParams.get("prompt"), "consent");
   assert.equal(url.searchParams.get("state"), "state-123");
