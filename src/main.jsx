@@ -15,6 +15,10 @@ import {
   toggleCalendarSelection,
 } from "./settingsConnectors.js";
 import {
+  starterCommitmentMessageTone,
+  submitStarterCommitmentFlow,
+} from "./starterCommitment.js";
+import {
   BookOpen,
   Bot,
   Box,
@@ -2624,21 +2628,17 @@ function Onboarding({ state, mutate, refresh }) {
   };
   const addStarterCommitment = async (event) => {
     event.preventDefault();
-    if (!starterCommitment.trim()) {
-      setStarterMessage("Write one commitment or priority first.");
-      return;
-    }
     setStarterMessage("");
-    try {
-      const title = starterCommitment.trim();
-      await api("/api/time/tasks", { method: "POST", body: JSON.stringify({ title, source: "onboarding", leverageCategory: "deepWork", priority: "high" }) });
-      await api("/api/time/commitments", { method: "POST", body: JSON.stringify({ title, notes: "Added during onboarding.", rank: Math.min(3, (state.time?.commitments || []).length + 1) }) });
+    const result = await submitStarterCommitmentFlow({
+      value: starterCommitment,
+      existingCommitments: state.time?.commitments || [],
+      api,
+      refresh,
+    });
+    if (result.clearInput) {
       setStarterCommitment("");
-      setStarterMessage("Added to Planner and Today’s Three.");
-      await refresh();
-    } catch (error) {
-      setStarterMessage(error.message || "Could not add commitment.");
     }
+    setStarterMessage(result.message);
   };
   const saveReminderDefaults = async (patch = {}) => {
     try {
@@ -3124,7 +3124,7 @@ function Onboarding({ state, mutate, refresh }) {
         <div className="readiness-list">
           {(state.time?.commitments || []).slice(0, 3).map((item) => <div key={item.id}><Icon name="check" /><span>{item.title}</span><Badge tone={item.status === "done" ? "ok" : "muted"}>{item.status}</Badge></div>)}
         </div>
-        {starterMessage && <p className={starterMessage.includes("Added") ? "ok-text" : "warn-text"}>{starterMessage}</p>}
+        {starterMessage && <p className={starterCommitmentMessageTone(starterMessage)}>{starterMessage}</p>}
         <div className="row"><Button onClick={() => go("profile")}>Back</Button><Button kind="primary" onClick={() => go("reminders")}>Continue</Button></div>
       </section>}
       {step === "reminders" && <section className="onboarding-panel onboarding-panel-wide">
