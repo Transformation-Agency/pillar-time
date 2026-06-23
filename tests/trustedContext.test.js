@@ -292,6 +292,24 @@ test("proposed profile updates remain proposals and do not become verified facts
   assert.equal(envelope.identityKernel["communication.style"], undefined);
 });
 
+test("proposed profile updates accept API proposed value aliases", () => {
+  const proposedValue = proposeProfileUpdate({
+    fieldKey: "focusRule",
+    resourceType: "identity",
+    proposedValue: "Protect a follow-up block after deep work.",
+    source: "ui",
+  });
+  const value = proposeProfileUpdate({
+    fieldKey: "followUpRule",
+    resourceType: "identity",
+    value: "Close loops before opening a new one.",
+    source: "api",
+  });
+
+  assert.equal(proposedValue.proposedValue, "Protect a follow-up block after deep work.");
+  assert.equal(value.proposedValue, "Close loops before opening a new one.");
+});
+
 test("context quality warns when the envelope lacks verified identity facts", () => {
   const envelope = buildContextEnvelope({
     request: request(),

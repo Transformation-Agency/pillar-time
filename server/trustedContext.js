@@ -173,11 +173,12 @@ export function buildContextEnvelope({ request = {}, constitution = {}, facts = 
   };
 }
 
-export function proposeProfileUpdate({ observation = "", fieldKey = "", resourceType = "profile.preference", source = "manual", confidence = 0.5 } = {}) {
+export function proposeProfileUpdate({ observation = "", proposedValue = "", value = "", fieldKey = "", resourceType = "profile.preference", source = "manual", confidence = 0.5 } = {}) {
+  const normalizedValue = observation || proposedValue || value;
   return {
     fieldKey,
     resourceType,
-    proposedValue: String(observation || ""),
+    proposedValue: String(normalizedValue || ""),
     source,
     confidence,
     status: "proposed",
