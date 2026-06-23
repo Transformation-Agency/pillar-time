@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "..");
 const tauriDir = path.join(root, "src-tauri");
 const resourcesDir = path.join(tauriDir, "resources");
 const backendDir = path.join(resourcesDir, "backend");
+const runtimeLibDir = path.join(tauriDir, "lib");
 const whisperResourcesDir = path.join(resourcesDir, "whisper");
 const binariesDir = path.join(tauriDir, "binaries");
 const sidecarName = "pillar-time-backend";
@@ -99,9 +100,39 @@ function copyNodeSidecar(filePath) {
   const nodeBinary = process.env.PILLAR_NODE_SIDECAR_PATH || process.execPath;
   fs.copyFileSync(nodeBinary, filePath);
   fs.chmodSync(filePath, 0o755);
+  if (process.platform === "darwin") {
+    execFileSync("install_name_tool", ["-add_rpath", "@loader_path/../Resources/lib", filePath], { stdio: "ignore" });
+    execFileSync("codesign", ["--force", "--sign", "-", filePath], { stdio: "ignore" });
+  }
+}
+
+function nodeSharedLibraryPath() {
+  if (process.platform !== "darwin") return null;
+  const nodeBinary = process.env.PILLAR_NODE_SIDECAR_PATH || process.execPath;
+  const nodeHome = path.dirname(path.dirname(nodeBinary));
+  const candidate = path.join(nodeHome, "lib", `libnode.${process.versions.modules}.dylib`);
+  if (fs.existsSync(candidate)) return candidate;
+  try {
+    const otoolOutput = execFileSync("otool", ["-L", nodeBinary], { encoding: "utf8" });
+    const match = otoolOutput.match(/^\s+(\S*libnode\.\d+\.dylib)\s/m);
+    if (match?.[1] && fs.existsSync(match[1])) return match[1];
+  } catch {
+    // Fall through to the packaging error below.
+  }
+  throw new Error(`Could not find libnode.${process.versions.modules}.dylib for the packaged backend sidecar.`);
+}
+
+function copyNodeRuntimeLibraries() {
+  const libnode = nodeSharedLibraryPath();
+  if (!libnode) return;
+  fs.mkdirSync(runtimeLibDir, { recursive: true });
+  const dest = path.join(runtimeLibDir, path.basename(libnode));
+  copyBundleAsset(libnode, dest);
+  fs.chmodSync(dest, 0o755);
 }
 
 rmrf(backendDir);
+rmrf(runtimeLibDir);
 rmrf(whisperResourcesDir);
 fs.mkdirSync(backendDir, { recursive: true });
 fs.mkdirSync(binariesDir, { recursive: true });
@@ -134,6 +165,7 @@ for (const file of fs.readdirSync(binariesDir)) {
 }
 
 copyNodeSidecar(path.join(binariesDir, `${sidecarName}-${hostTriple}${exeSuffix}`));
+copyNodeRuntimeLibraries();
 
 console.log(`Prepared Tauri Node sidecar resources for ${hostTriple}. Local Whisper is optional and configured after install.`);
 
@@ -141,4 +173,5 @@ const debugResourcesDir = path.join(tauriDir, "target", "debug", "resources");
 if (fs.existsSync(debugResourcesDir)) {
   rmrf(path.join(debugResourcesDir, "whisper"));
   copyBundleAsset(backendDir, path.join(debugResourcesDir, "backend"));
+  copyBundleAsset(runtimeLibDir, path.join(debugResourcesDir, "lib"));
 }
