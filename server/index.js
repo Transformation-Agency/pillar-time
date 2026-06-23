@@ -10,14 +10,172 @@ import { DatabaseSync } from "node:sqlite";
 import { localDateKey, nextOccurrence, rankActions, sporadicTimes } from "./timeEngine.js";
 import { groupIssuesByProject, LinearClient } from "./linearClient.js";
 import {
+  GOOGLE_CALENDAR_WRITE_SCOPE,
+  assertGoogleCalendarWriteCredential,
+  googleCalendarEventRequest,
+  googleCalendarWriteCalendarId as selectGoogleCalendarWriteCalendarId,
+} from "./googleCalendarWrite.js";
+import {
+  googleCalendarConnectedData,
+  googleCalendarListData,
+  googleCalendarOAuthStartPlan,
+  googleCalendarSelectedCalendarIds,
+} from "./googleCalendarOAuth.js";
+import { executeApprovalAction } from "./approvalExecutor.js";
+import { approvalStatusUpdate, approvalView } from "./approvalQueue.js";
+import {
+  defaultModelForProvider,
+  modelBaseUrl,
+  modelProviderCredentialKey,
+  modelProviders,
+  modelSavePlan,
+  modelSettingsView,
+  normalizeModelProvider,
+  parseProviderModelList,
+  providerCredentialStatus as modelCredentialStatus,
+} from "./modelConfig.js";
+import {
+  generatedPerspectiveLensDrafts,
+  perspectiveLensGenerationPrompt,
+} from "./perspectiveLensGeneration.js";
+import {
+  normalizedPerspectiveDeliberation,
+  perspectiveDeliberationRequest,
+} from "./perspectiveDeliberation.js";
+import {
+  reminderSchedulerDecision,
+  scheduledOccurrenceDeliveryPlan,
+  shouldDeliverLocalOccurrence as shouldDeliverLocalOccurrencePure,
+} from "./reminderScheduler.js";
+import {
+  briefDeliveryDueKey,
+  scheduledBriefDeliveryDecision,
+  scheduledSourcePreflightDecision,
+  scheduledSourcePreflightReadiness,
+  scheduleParts,
+} from "./briefScheduler.js";
+import {
+  buildCoverageDiagnostics,
+  NO_NEWS_FRESHNESS_POLICY,
+  noNewsClaimPolicy,
+  renderOnePageBrief as renderOnePageBriefPure,
+  selectIssueClusters,
+} from "./intelligenceWorkflow.js";
+import {
+  buildExecutiveCandidates as buildExecutiveCandidatesPure,
+  calendarBusyIntervals as buildCalendarBusyIntervals,
+  calendarFreeWindows as buildCalendarFreeWindows,
+  calendarRoleForId,
+  detectExecutiveRisks as detectExecutiveRisksPure,
+  executiveRegenerationContext,
+  executiveSynthesisPayload,
+  isAllDayCalendarEvent,
+  isPrimaryBlockingCalendarEvent,
+  proposedCalendarScheduleFromContext as buildProposedCalendarScheduleFromContext,
+  toDateMs,
+} from "./executivePlanning.js";
+import { addedContextItemsForRender, approvalQueueItemsForRender } from "./executiveBriefRender.js";
+import {
+  googleCalendarPublicConnectorView,
+  linearPublicConnectorView,
+  redditPublicConnectorView,
+  storedApiKeyConnectorView,
+  telegramPublicSettingsView,
+} from "./credentialPosture.js";
+import {
   buildContextEnvelope,
   interactionModes,
   partitions,
   proposeProfileUpdate,
+  profileFactFromRow as trustedProfileFactFromRow,
+  profileFactInput,
+  profileFactValidationErrorResponse,
   trustLevels,
   validateContextRequest,
   visibilityLevels,
 } from "./trustedContext.js";
+import {
+  parseTelegramCommand,
+  recentTelegramCommands,
+  telegramCommandAvailability,
+} from "./telegramCommands.js";
+import {
+  resolveTelegramBotTokenInput,
+  telegramSettingsPatchPlan,
+  telegramSettingsReadiness,
+  telegramTestResponse,
+  telegramTestText,
+} from "./telegramSettings.js";
+import { constitutionUpdatePlan } from "./constitutionVersioning.js";
+import {
+  parseGenericFeed,
+  rssCacheHitConfig,
+  rssItemsForToday,
+  rssNextConfig,
+  rssRequestPlan,
+  stripFeedHtml,
+} from "./rssSource.js";
+import {
+  X_QUICK_MAX_RESULTS,
+  xEstimatedCost,
+  xFetchReadiness,
+  xNextConfig,
+  xPostToNormalizedItem,
+  xPostsForToday,
+  xQueryParams,
+  xQuickQuery,
+} from "./xSource.js";
+import {
+  redditCredentialData,
+  redditJsonUrlForSource,
+  redditNextConfig,
+  redditOAuthPathForSource,
+  redditPostPublishedAt,
+  redditPostsFromListing,
+  redditPostToNormalizedItem,
+  redditRssUrlForSource as redditRssUrlForSourcePlan,
+  redditShouldUseRssFallback,
+  redditTokenRequestPlan,
+} from "./redditSource.js";
+import {
+  extractWebMeta,
+  webCacheHitConfig,
+  webErrorConfig,
+  webNextConfig,
+  webNormalizedItem,
+  webPageMetadata,
+  webRequestPlan,
+} from "./webSource.js";
+import {
+  briefAudioArtifact,
+  briefAudioFilePath,
+  briefAudioGenerationPlan,
+  briefAudioTextFromArtifact,
+} from "./briefAudio.js";
+import {
+  cleanPodcastSearchTerm as cleanPodcastSearchTermPure,
+  parsePodcastRss as parsePodcastRssPure,
+  podcastDuplicateResult,
+  podcastEpisodeCandidates,
+  podcastNoEpisodeConfig,
+  podcastNoEpisodeResult,
+  spotifyTitleCandidates as spotifyTitleCandidatesPure,
+} from "./podcastSource.js";
+import {
+  youtubeChannelIdFromPage,
+  youtubeFeedUrlForChannel,
+  youtubeItemsForToday,
+  youtubeNextConfig,
+  youtubeRequestPlan,
+} from "./youtubeSource.js";
+import {
+  ffmpegInstallDecision,
+  sttModelInstallDecision,
+} from "./localDependencies.js";
+import {
+  normalizeElevenLabsVoices,
+  ttsSettingsPatchPlan,
+} from "./ttsSettings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -65,7 +223,6 @@ const audioDir = path.join(dataDir, "audio");
 fs.mkdirSync(audioDir, { recursive: true });
 const modelsDir = path.join(dataDir, "models");
 fs.mkdirSync(modelsDir, { recursive: true });
-
 function backupDatabaseBeforePillarTimeMigration() {
   const legacyPath = path.join(dataDir, "pillar-brief.sqlite");
   const marker = path.join(dataDir, ".pillar-time-migration-backup-created");
@@ -168,6 +325,7 @@ function migrate() {
       id TEXT PRIMARY KEY,
       label TEXT NOT NULL,
       trigger TEXT NOT NULL,
+      run_type TEXT NOT NULL DEFAULT 'intelligence',
       status TEXT NOT NULL,
       started_at TEXT NOT NULL,
       completed_at TEXT,
@@ -189,6 +347,21 @@ function migrate() {
       resolved_by TEXT,
       resolved_at TEXT,
       resolution_note TEXT
+    );
+    CREATE TABLE IF NOT EXISTS calendar_planning_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      calendar_title_prefix TEXT NOT NULL DEFAULT '',
+      color TEXT NOT NULL DEFAULT '',
+      default_minutes INTEGER NOT NULL DEFAULT 60,
+      min_minutes INTEGER NOT NULL DEFAULT 25,
+      max_minutes INTEGER NOT NULL DEFAULT 120,
+      leverage_category TEXT NOT NULL DEFAULT 'deepWork',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      protected INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS audit_logs (
       id TEXT PRIMARY KEY,
@@ -342,6 +515,34 @@ function migrate() {
       rank INTEGER NOT NULL DEFAULT 1,
       status TEXT NOT NULL DEFAULT 'active',
       completed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS commitments (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active',
+      owner TEXT NOT NULL DEFAULT '',
+      requested_by TEXT NOT NULL DEFAULT '',
+      due_at TEXT,
+      priority TEXT NOT NULL DEFAULT 'normal',
+      leverage_category TEXT NOT NULL DEFAULT 'admin',
+      source_system TEXT NOT NULL DEFAULT 'manual',
+      source_id TEXT NOT NULL DEFAULT '',
+      related_people_json TEXT NOT NULL DEFAULT '[]',
+      related_projects_json TEXT NOT NULL DEFAULT '[]',
+      related_events_json TEXT NOT NULL DEFAULT '[]',
+      next_action TEXT NOT NULL DEFAULT '',
+      estimate_minutes INTEGER NOT NULL DEFAULT 30,
+      waiting_on TEXT NOT NULL DEFAULT '',
+      blockers TEXT NOT NULL DEFAULT '',
+      partition TEXT NOT NULL DEFAULT 'professional',
+      confidence REAL NOT NULL DEFAULT 0.6,
+      verification_state TEXT NOT NULL DEFAULT 'unverified',
+      authoritative_system TEXT NOT NULL DEFAULT '',
+      external_refs_json TEXT NOT NULL DEFAULT '[]',
+      evidence_json TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -524,6 +725,8 @@ function migrate() {
   if (!sourceColumns.includes("config_json")) {
     db.exec("ALTER TABLE sources ADD COLUMN config_json TEXT NOT NULL DEFAULT '{}';");
   }
+  const workflowRunColumns = db.prepare("PRAGMA table_info(workflow_runs)").all().map((c) => c.name);
+  if (!workflowRunColumns.includes("run_type")) db.exec("ALTER TABLE workflow_runs ADD COLUMN run_type TEXT NOT NULL DEFAULT 'intelligence';");
   const briefColumns = db.prepare("PRAGMA table_info(brief_config)").all().map((c) => c.name);
   if (!briefColumns.includes("delivery_frequency")) db.exec("ALTER TABLE brief_config ADD COLUMN delivery_frequency TEXT NOT NULL DEFAULT 'Daily';");
   if (!briefColumns.includes("delivery_time")) db.exec("ALTER TABLE brief_config ADD COLUMN delivery_time TEXT NOT NULL DEFAULT '08:00';");
@@ -552,8 +755,7 @@ function migrate() {
 }
 
 const now = () => new Date().toISOString();
-const defaultOpenAiModel = "gpt-4.1";
-const modelProviders = ["openai", "anthropic", "openrouter", "gemini", "xai", "custom"];
+const defaultOpenAiModel = defaultModelForProvider("openai");
 const id = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const json = (value) => JSON.stringify(value ?? null);
 const parse = (value, fallback) => {
@@ -743,7 +945,7 @@ async function localSttStatus() {
     message: binaryInstalled.ok && modelInstalled
       ? `Local speech-to-text is ready with whisper.cpp ${defaultWhisperModel}.`
       : !binaryInstalled.ok
-        ? "Local speech-to-text needs a whisper.cpp binary. Set WHISPER_CPP_PATH or bundle whisper-cli in vendor/whisper/bin."
+        ? "Local Whisper is optional. Install whisper.cpp and set WHISPER_CPP_PATH to enable local speech-to-text, or use an OpenAI-compatible transcription endpoint."
         : `Local speech-to-text needs the ${whisperModelFile} model. Download it in Settings or set WHISPER_MODEL_PATH.`,
   };
 }
@@ -771,7 +973,9 @@ async function ffmpegStatus() {
 
 async function downloadLocalSttModel() {
   const status = await localSttStatus();
-  if (status.modelAvailable) return { ok: true, modelPath: status.modelPath, message: "Whisper model is already installed." };
+  const decision = sttModelInstallDecision(status);
+  if (decision.alreadyInstalled) return { ok: true, modelPath: status.modelPath, message: decision.message };
+  if (!decision.allowed) throw new Error(decision.message);
   fs.mkdirSync(modelsDir, { recursive: true });
   const target = path.join(modelsDir, whisperModelFile);
   const partial = `${target}.download`;
@@ -839,19 +1043,8 @@ function providerEnvKey(provider) {
   return "";
 }
 
-function defaultModelForProvider(provider) {
-  if (provider === "openai") return defaultOpenAiModel;
-  if (provider === "xai") return "grok-4.3";
-  return "";
-}
-
 function providerCredentialStatus(provider, savedApiKey = "") {
-  if (savedApiKey) return "saved";
-  return providerEnvKey(provider) ? "env" : "missing";
-}
-
-function modelProviderCredentialKey(provider) {
-  return `model:${provider}`;
+  return modelCredentialStatus({ savedApiKey, envApiKey: providerEnvKey(provider) });
 }
 
 function savedModelProviderKey(provider, current = get("SELECT * FROM model_settings WHERE id=1")) {
@@ -872,8 +1065,7 @@ function saveModelProviderKey(provider, apiKey) {
 }
 
 async function fetchProviderModels({ provider, apiKey, savedApiKey, baseUrl }) {
-  const resolvedProvider = modelProviders.includes(provider) ? provider : "openai";
-  provider = resolvedProvider;
+  provider = normalizeModelProvider(provider);
   const envKey = providerEnvKey(provider);
   const runtimeKey = apiKey || savedApiKey || envKey;
   const source = apiKey ? "input" : savedApiKey ? "saved" : envKey ? "env" : "none";
@@ -913,13 +1105,7 @@ async function fetchProviderModels({ provider, apiKey, savedApiKey, baseUrl }) {
       return { provider, models: [], credentialSource: source, error: `Model discovery failed: ${response.status} ${response.statusText}` };
     }
     const payload = await response.json();
-    const data = Array.isArray(payload.data) ? payload.data : Array.isArray(payload.models) ? payload.models : [];
-    const models = data
-      .filter((item) => provider !== "gemini" || (item.supportedGenerationMethods || []).includes("generateContent"))
-      .map((item) => item.id || item.name || item.model)
-      .map((name) => String(name).replace(/^models\//, ""))
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b));
+    const models = parseProviderModelList(provider, payload);
     return { provider, models, credentialSource: source, error: "" };
   } catch (error) {
     return { provider, models: [], credentialSource: source, error: error.message || "Model discovery failed" };
@@ -928,17 +1114,7 @@ async function fetchProviderModels({ provider, apiKey, savedApiKey, baseUrl }) {
 
 function modelRuntime(modelRow) {
   const apiKey = modelRow.api_key || savedModelProviderKey(modelRow.provider, modelRow) || providerEnvKey(modelRow.provider);
-  const baseUrl = modelRow.provider === "custom"
-    ? modelRow.base_url.replace(/\/+$/, "")
-    : modelRow.provider === "openrouter"
-      ? "https://openrouter.ai/api/v1"
-    : modelRow.provider === "anthropic"
-      ? "https://api.anthropic.com/v1"
-      : modelRow.provider === "gemini"
-        ? "https://generativelanguage.googleapis.com/v1beta"
-        : modelRow.provider === "xai"
-          ? "https://api.x.ai/v1"
-        : "https://api.openai.com/v1";
+  const baseUrl = modelBaseUrl({ provider: modelRow.provider, baseUrl: modelRow.base_url });
   return { apiKey, baseUrl };
 }
 
@@ -1386,12 +1562,7 @@ async function listElevenLabsVoices(apiKey = "") {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload?.detail?.message || payload?.message || `ElevenLabs voice lookup failed: ${response.status}`);
-  return (payload.voices || []).map((voice) => ({
-    id: voice.voice_id,
-    name: voice.name,
-    category: voice.category || "",
-    previewUrl: voice.preview_url || "",
-  })).filter((voice) => voice.id && voice.name);
+  return normalizeElevenLabsVoices(payload);
 }
 
 function ttsSettings() {
@@ -1414,15 +1585,7 @@ function ttsSettings() {
 }
 
 function briefAudioText(artifact = {}) {
-  const text = String(artifact.onePageBrief || renderOnePageBrief(artifact) || "")
-    .replace(/^#\s+/gm, "")
-    .replace(/^Generated:.*$/gm, "")
-    .replace(/^##\s+/gm, "\n")
-    .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
-    .replace(/https?:\/\/\S+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return text.slice(0, 9000);
+  return briefAudioTextFromArtifact(artifact, renderOnePageBrief);
 }
 
 async function synthesizeElevenLabsAudio({ text, filenamePrefix = "brief", apiKey = "", voiceId = "", modelId = "" } = {}) {
@@ -1599,36 +1762,15 @@ async function callTextModel({ system, prompt }) {
 }
 
 function cleanPodcastSearchTerm(value) {
-  return String(value || "")
-    .replace(/\s*\|\s*Podcast on Spotify\s*/gi, "")
-    .replace(/\s*\|\s*Spotify\s*/gi, "")
-    .replace(/^Listen to\s+/i, "")
-    .replace(/\s+on Spotify$/i, "")
-    .trim();
+  return cleanPodcastSearchTermPure(value);
 }
 
 function spotifyTitleCandidates(title) {
-  const cleaned = cleanPodcastSearchTerm(title);
-  const parts = cleaned.split(/\s+-\s+/).map((part) => part.trim()).filter(Boolean);
-  return [...new Set([
-    cleaned,
-    parts.at(-1),
-    parts.length > 1 ? parts.slice(1).join(" - ") : "",
-    parts[0],
-  ].filter(Boolean))];
+  return spotifyTitleCandidatesPure(title);
 }
 
 function extractMeta(html, property) {
-  const patterns = [
-    new RegExp(`<meta[^>]+property=["']${property}["'][^>]+content=["']([^"']+)["']`, "i"),
-    new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+property=["']${property}["']`, "i"),
-    new RegExp(`<meta[^>]+name=["']${property}["'][^>]+content=["']([^"']+)["']`, "i"),
-  ];
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) return match[1].replace(/&amp;/g, "&").replace(/&#x27;/g, "'").replace(/&quot;/g, "\"");
-  }
-  return "";
+  return extractWebMeta(html, property);
 }
 
 async function resolveSpotifyPodcast(spotifyUrl) {
@@ -1686,74 +1828,12 @@ async function resolveSpotifyPodcast(spotifyUrl) {
   };
 }
 
-function decodeXml(value = "") {
-  return String(value)
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .trim();
-}
-
-function tagValue(xml, tag) {
-  const match = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "i"));
-  return decodeXml(match?.[1] || "");
-}
-
-function attrValue(xml, attr) {
-  const match = xml.match(new RegExp(`${attr}=["']([^"']+)["']`, "i"));
-  return decodeXml(match?.[1] || "");
-}
-
 function parsePodcastRss(xml) {
-  const channelTitle = tagValue(xml, "title");
-  return [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map((match) => {
-    const item = match[0];
-    const enclosure = item.match(/<enclosure\b[^>]*>/i)?.[0] || "";
-    return {
-      title: tagValue(item, "title") || "Untitled episode",
-      guid: tagValue(item, "guid") || tagValue(item, "link") || attrValue(enclosure, "url"),
-      link: tagValue(item, "link"),
-      pubDate: tagValue(item, "pubDate"),
-      description: tagValue(item, "description"),
-      audioUrl: attrValue(enclosure, "url"),
-      audioType: attrValue(enclosure, "type") || "audio/mpeg",
-      audioLength: Number(attrValue(enclosure, "length") || 0),
-      channelTitle,
-    };
-  }).filter((episode) => episode.audioUrl);
+  return parsePodcastRssPure(xml);
 }
 
 function stripHtml(value = "") {
-  return decodeXml(String(value).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ")).trim();
-}
-
-function parseGenericFeed(xml) {
-  const rssItems = [...xml.matchAll(/<item\b[\s\S]*?<\/item>/gi)].map((match) => {
-    const item = match[0];
-    return {
-      title: tagValue(item, "title") || "Untitled item",
-      url: tagValue(item, "link") || tagValue(item, "guid"),
-      body: stripHtml(tagValue(item, "description") || tagValue(item, "content:encoded")),
-      publishedAt: tagValue(item, "pubDate") || tagValue(item, "dc:date"),
-      stableId: tagValue(item, "guid") || tagValue(item, "link") || tagValue(item, "title"),
-    };
-  });
-  const atomItems = [...xml.matchAll(/<entry\b[\s\S]*?<\/entry>/gi)].map((match) => {
-    const item = match[0];
-    const link = item.match(/<link\b[^>]*>/i)?.[0] || "";
-    return {
-      title: tagValue(item, "title") || "Untitled item",
-      url: attrValue(link, "href") || tagValue(item, "id"),
-      body: stripHtml(tagValue(item, "summary") || tagValue(item, "content")),
-      publishedAt: tagValue(item, "published") || tagValue(item, "updated"),
-      stableId: tagValue(item, "id") || attrValue(link, "href") || tagValue(item, "title"),
-    };
-  });
-  return [...rssItems, ...atomItems].filter((item) => item.title || item.url);
+  return stripFeedHtml(value);
 }
 
 function startOfLocalDay() {
@@ -2020,30 +2100,20 @@ async function transcribePodcastSource(sourceId, mode = "today") {
   const feed = await fetchWithTimeout(feedUrl);
   if (!feed.ok) throw new Error(`RSS fetch failed: ${feed.status} ${feed.statusText}`);
   const episodes = parsePodcastRss(await feed.text());
-  const candidates = mode === "latest" ? episodes : episodes.filter(episodeIsToday);
+  const candidates = podcastEpisodeCandidates({ episodes, mode, episodeIsToday });
   const episode = candidates[0];
   if (!episode) {
     const fetchedAt = now();
-    const config = { ...source.config, lastFetchedAt: fetchedAt, lastFetchCacheStatus: "no-episode", lastFetchedCount: episodes.length, lastInsertedCount: 0 };
+    const config = podcastNoEpisodeConfig({ config: source.config, fetchedAt, episodes });
     run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(config), $t: fetchedAt });
-    return { ok: true, transcribed: false, reason: mode === "latest" ? "No podcast episodes with audio were found." : "No podcast episode published today was found.", episodesChecked: episodes.length };
+    return podcastNoEpisodeResult({ mode, episodes });
   }
   const episodeFingerprint = createHash("sha256").update(`${source.id}:${episode.guid || episode.audioUrl}`).digest("hex");
   const existingEpisode = get("SELECT id FROM normalized_items WHERE fingerprint=$fingerprint", { $fingerprint: episodeFingerprint });
   if (existingEpisode) {
     const config = { ...source.config, lastTranscribedGuid: episode.guid, lastTranscribedAt: now(), lastTranscriptItemId: existingEpisode.id };
     run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(config), $t: now() });
-    return {
-      ok: true,
-      transcribed: false,
-      skipped: true,
-      reason: "Episode was already transcribed.",
-      episode: { title: episode.title, pubDate: episode.pubDate, audioUrl: episode.audioUrl },
-      documentId: source.config.lastTranscriptDocumentId || null,
-      words: 0,
-      chunks: 0,
-      audioBytes: 0,
-    };
+    return podcastDuplicateResult({ episode, documentId: source.config.lastTranscriptDocumentId || null });
   }
 
   const modelRow = get("SELECT * FROM model_settings WHERE id=1");
@@ -2077,22 +2147,18 @@ async function transcribePodcastSource(sourceId, mode = "today") {
 
 async function fetchRssSource(source) {
   const config = source.config || {};
-  const feedUrl = config.feedUrl || source.locator;
-  if (!feedUrl) return { ok: true, skipped: true, reason: "No RSS feed URL configured", seen: 0, inserted: 0 };
-  const headers = { "User-Agent": "PillarTime/0.1" };
-  if (config.lastEtag) headers["If-None-Match"] = config.lastEtag;
-  if (config.lastModified) headers["If-Modified-Since"] = config.lastModified;
-  const response = await fetchWithTimeout(feedUrl, { headers });
+  const plan = rssRequestPlan(source);
+  if (plan.skipped) return { ok: true, skipped: true, reason: plan.reason, seen: 0, inserted: 0 };
+  const response = await fetchWithTimeout(plan.feedUrl, { headers: plan.headers });
   if (response.status === 304) {
     const fetchedAt = now();
-    const nextConfig = { ...config, lastFetchedAt: fetchedAt, lastFetchCacheStatus: "not-modified", lastInsertedCount: 0 };
+    const nextConfig = rssCacheHitConfig({ config, fetchedAt });
     run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
     audit("rss.cache_hit", "source", source.id, "RSS feed not modified; using cached normalized items", {}, "system");
     return { ok: true, skipped: false, cached: true, cacheStatus: "not-modified", seen: 0, inserted: 0 };
   }
   if (!response.ok) throw new Error(`RSS fetch failed: ${response.status} ${response.statusText}`);
-  const parsedItems = parseGenericFeed(await response.text()).slice(0, Number(config.maxItems || 8));
-  const items = parsedItems.filter((item) => publishedToday(item.publishedAt));
+  const { parsedItems, items } = rssItemsForToday(await response.text(), { maxItems: config.maxItems || 8, publishedToday });
   let inserted = 0;
   for (const item of items) {
     const saved = saveNormalizedItem({
@@ -2108,82 +2174,77 @@ async function fetchRssSource(source) {
     if (saved.inserted) inserted += 1;
   }
   const fetchedAt = now();
-  const nextConfig = {
-    ...config,
-    lastFetchedAt: fetchedAt,
-    lastFetchedCount: parsedItems.length,
-    lastFetchedTodayCount: items.length,
-    lastInsertedCount: inserted,
-    lastFetchCacheStatus: inserted ? "new-items" : "deduped",
-    lastEtag: response.headers.get("etag") || config.lastEtag || "",
-    lastModified: response.headers.get("last-modified") || config.lastModified || "",
-  };
+  const nextConfig = rssNextConfig({ config, parsedItems, items, inserted, fetchedAt, responseHeaders: response.headers });
   run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
   audit("rss.fetched", "source", source.id, `Fetched ${parsedItems.length} RSS items; ${items.length} published today; inserted ${inserted}`, { fetched: parsedItems.length, today: items.length, inserted }, "system");
   return { ok: true, skipped: false, seen: parsedItems.length, today: items.length, inserted };
 }
 
-function redditUrlForSource(source) {
+async function fetchYouTubeSource(source) {
   const config = source.config || {};
-  const limit = Math.max(5, Math.min(25, Number(config.maxItems || 10)));
-  if (config.mode === "search") {
-    const params = new URLSearchParams({ q: config.query || source.locator, sort: config.sort || "new", t: "day", limit: String(limit), raw_json: "1" });
-    return `https://www.reddit.com/search.json?${params}`;
+  const plan = youtubeRequestPlan(source);
+  if (plan.skipped) return { ok: true, skipped: true, reason: plan.reason, seen: 0, inserted: 0 };
+  let channelId = config.channelId || "";
+  let feedUrl = plan.feedUrl;
+  if (!feedUrl && plan.resolveUrl) {
+    const page = await fetchWithTimeout(plan.resolveUrl, { headers: plan.headers });
+    if (!page.ok) throw new Error(`YouTube channel resolve failed: ${page.status} ${page.statusText}`);
+    channelId = youtubeChannelIdFromPage(await page.text());
+    feedUrl = youtubeFeedUrlForChannel(channelId);
   }
-  if (config.mode === "user") {
-    const user = String(config.username || source.locator || "").replace(/^u\//, "").replace(/^@/, "");
-    return `https://www.reddit.com/user/${encodeURIComponent(user)}/submitted.json?limit=${limit}&raw_json=1`;
+  if (!feedUrl) throw new Error("Could not resolve YouTube channel feed URL");
+  const response = await fetchWithTimeout(feedUrl, { headers: plan.headers });
+  if (!response.ok) throw new Error(`YouTube RSS fetch failed: ${response.status} ${response.statusText}`);
+  const { parsedItems, items } = youtubeItemsForToday(await response.text(), { maxItems: config.maxItems || 5, publishedToday });
+  let inserted = 0;
+  for (const item of items) {
+    const saved = saveNormalizedItem({
+      source,
+      stableId: item.stableId,
+      canonicalUrl: item.url,
+      title: item.title,
+      body: item.body,
+      publishedAt: item.publishedAt ? new Date(item.publishedAt).toISOString() : null,
+      relevanceScore: scoreText(`${item.title} ${item.body}`, config.keywords),
+      risingScore: item.publishedAt && new Date(item.publishedAt) >= startOfLocalDay() ? 0.32 : 0.08,
+    });
+    if (saved.inserted) inserted += 1;
   }
-  const subreddit = String(config.subreddits || source.locator || "").split(",")[0].trim().replace(/^r\//, "").replace(/^subreddits:/, "");
-  const sort = ["hot", "top"].includes(config.sort) ? config.sort : "new";
-  return `https://www.reddit.com/r/${encodeURIComponent(subreddit)}/${sort}.json?limit=${limit}&raw_json=1`;
+  const fetchedAt = now();
+  const nextConfig = youtubeNextConfig({ config, channelId, feedUrl, parsedItems, items, inserted, fetchedAt });
+  run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
+  audit("youtube.fetched", "source", source.id, `Fetched ${parsedItems.length} YouTube RSS items; ${items.length} published today; inserted ${inserted}`, { fetched: parsedItems.length, today: items.length, inserted }, "system");
+  return { ok: true, skipped: false, seen: parsedItems.length, today: items.length, inserted };
+}
+
+function redditUrlForSource(source) {
+  return redditJsonUrlForSource(source);
 }
 
 function redditRssUrlForSource(source) {
-  const config = source.config || {};
-  if (config.mode === "search") {
-    const params = new URLSearchParams({ q: config.query || source.locator, sort: config.sort || "new", t: "day" });
-    return `https://www.reddit.com/search.rss?${params}`;
-  }
-  if (config.mode === "user") {
-    const user = String(config.username || source.locator || "").replace(/^u\//, "").replace(/^@/, "");
-    return `https://www.reddit.com/user/${encodeURIComponent(user)}/submitted.rss`;
-  }
-  const subreddit = String(config.subreddits || source.locator || "").split(",")[0].trim().replace(/^r\//, "").replace(/^subreddits:/, "");
-  const sort = ["hot", "top"].includes(config.sort) ? config.sort : "new";
-  return `https://www.reddit.com/r/${encodeURIComponent(subreddit)}/${sort}.rss`;
+  return redditRssUrlForSourcePlan(source);
 }
 
 async function fetchRedditSource(source) {
   const config = source.config || {};
   if (redditCredential().enabled && redditCredential().data.clientId) {
     const payload = await fetchRedditOAuthJson(redditOAuthPathForSource(source));
-    const parsedPosts = (payload.data?.children || []).map((child) => child.data).filter(Boolean);
-    const posts = parsedPosts.filter((post) => publishedToday(post.created_utc ? new Date(post.created_utc * 1000).toISOString() : null));
+    const parsedPosts = redditPostsFromListing(payload);
+    const posts = parsedPosts.filter((post) => publishedToday(redditPostPublishedAt(post)));
     let inserted = 0;
     for (const post of posts) {
-      const body = [post.selftext, post.url && !String(post.url).includes("reddit.com") ? `Link: ${post.url}` : ""].filter(Boolean).join("\n");
-      const saved = saveNormalizedItem({
-        source,
-        stableId: post.name || post.id,
-        canonicalUrl: `https://www.reddit.com${post.permalink || ""}`,
-        title: post.title,
-        body,
-        publishedAt: post.created_utc ? new Date(post.created_utc * 1000).toISOString() : null,
-        relevanceScore: scoreText(`${post.title} ${body}`, config.keywords || config.query),
-        risingScore: Math.min(1, Math.log10(Number(post.score || 0) + Number(post.num_comments || 0) + 1) / 4),
-      });
+      const saved = saveNormalizedItem(redditPostToNormalizedItem({ source, post, scoreText }));
       if (saved.inserted) inserted += 1;
     }
     const fetchedAt = now();
-    const nextConfig = { ...config, lastFetchedAt: fetchedAt, lastFetchedCount: parsedPosts.length, lastFetchedTodayCount: posts.length, lastInsertedCount: inserted, lastFetchMode: "oauth-api" };
+    const nextConfig = redditNextConfig({ config, parsedCount: parsedPosts.length, todayCount: posts.length, inserted, fetchedAt, mode: "oauth-api" });
     run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
     run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: REDDIT_PROVIDER, $t: fetchedAt });
     audit("reddit.fetched", "source", source.id, `Fetched ${parsedPosts.length} Reddit OAuth posts; ${posts.length} published today; inserted ${inserted}`, { fetched: parsedPosts.length, today: posts.length, inserted, mode: "oauth-api" }, "system");
     return { ok: true, skipped: false, seen: parsedPosts.length, today: posts.length, inserted, mode: "oauth-api" };
   }
   const response = await fetchWithTimeout(redditUrlForSource(source), { headers: { "User-Agent": "PillarTime/0.1 by operator" } });
-  if (response.status === 403 || response.status === 429) {
+  if (redditShouldUseRssFallback(response.status)) {
     const rss = await fetchWithTimeout(redditRssUrlForSource(source), { headers: { "User-Agent": "PillarTime/0.1 by operator" } });
     if (!rss.ok) throw new Error(`Reddit fetch failed: ${response.status} ${response.statusText}; RSS fallback failed: ${rss.status} ${rss.statusText}`);
     const parsedItems = parseGenericFeed(await rss.text()).slice(0, Number(config.maxItems || 10));
@@ -2202,77 +2263,53 @@ async function fetchRedditSource(source) {
       });
       if (saved.inserted) inserted += 1;
     }
-    const nextConfig = { ...config, lastFetchedAt: now(), lastFetchedCount: parsedItems.length, lastFetchedTodayCount: items.length, lastInsertedCount: inserted, lastFetchMode: "rss-fallback" };
-    run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: now() });
+    const fetchedAt = now();
+    const nextConfig = redditNextConfig({ config, parsedCount: parsedItems.length, todayCount: items.length, inserted, fetchedAt, mode: "rss-fallback" });
+    run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
     audit("reddit.fetched", "source", source.id, `Fetched ${parsedItems.length} Reddit RSS items; ${items.length} published today; inserted ${inserted}`, { fetched: parsedItems.length, today: items.length, inserted, mode: "rss-fallback" }, "system");
     return { ok: true, skipped: false, seen: parsedItems.length, today: items.length, inserted, mode: "rss-fallback" };
   }
   if (!response.ok) throw new Error(`Reddit fetch failed: ${response.status} ${response.statusText}`);
   const payload = await response.json();
-  const parsedPosts = (payload.data?.children || []).map((child) => child.data).filter(Boolean);
-  const posts = parsedPosts.filter((post) => publishedToday(post.created_utc ? new Date(post.created_utc * 1000).toISOString() : null));
+  const parsedPosts = redditPostsFromListing(payload);
+  const posts = parsedPosts.filter((post) => publishedToday(redditPostPublishedAt(post)));
   let inserted = 0;
   for (const post of posts) {
-    const body = [post.selftext, post.url && !String(post.url).includes("reddit.com") ? `Link: ${post.url}` : ""].filter(Boolean).join("\n");
-    const saved = saveNormalizedItem({
-      source,
-      stableId: post.name || post.id,
-      canonicalUrl: `https://www.reddit.com${post.permalink || ""}`,
-      title: post.title,
-      body,
-      publishedAt: post.created_utc ? new Date(post.created_utc * 1000).toISOString() : null,
-      relevanceScore: scoreText(`${post.title} ${body}`, config.keywords || config.query),
-      risingScore: Math.min(1, Math.log10(Number(post.score || 0) + Number(post.num_comments || 0) + 1) / 4),
-    });
+    const saved = saveNormalizedItem(redditPostToNormalizedItem({ source, post, scoreText }));
     if (saved.inserted) inserted += 1;
   }
-  const nextConfig = { ...config, lastFetchedAt: now(), lastFetchedCount: parsedPosts.length, lastFetchedTodayCount: posts.length, lastInsertedCount: inserted };
-  run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: now() });
+  const fetchedAt = now();
+  const nextConfig = redditNextConfig({ config, parsedCount: parsedPosts.length, todayCount: posts.length, inserted, fetchedAt });
+  run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
   audit("reddit.fetched", "source", source.id, `Fetched ${parsedPosts.length} Reddit posts; ${posts.length} published today; inserted ${inserted}`, { fetched: parsedPosts.length, today: posts.length, inserted }, "system");
   return { ok: true, skipped: false, seen: parsedPosts.length, today: posts.length, inserted };
 }
 
 async function fetchWebSource(source) {
   const config = source.config || {};
-  const url = config.url || source.locator;
-  if (!url || !/^https?:\/\//.test(url)) return { ok: true, skipped: true, reason: "No public web URL configured", seen: 0, inserted: 0 };
-  const headers = { "User-Agent": "PillarTime/0.1" };
-  if (config.lastEtag) headers["If-None-Match"] = config.lastEtag;
-  if (config.lastModified) headers["If-Modified-Since"] = config.lastModified;
-  const response = await fetchWithTimeout(url, { headers });
+  const plan = webRequestPlan(source);
+  if (!plan.ok) return { ok: true, skipped: true, reason: plan.reason, seen: 0, inserted: 0 };
+  const response = await fetchWithTimeout(plan.url, { headers: plan.headers });
   if (response.status === 304) {
     const fetchedAt = now();
-    const nextConfig = { ...config, lastFetchedAt: fetchedAt, lastFetchCacheStatus: "not-modified", lastInsertedCount: 0 };
+    const nextConfig = webCacheHitConfig({ config, fetchedAt });
     run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
     audit("web.cache_hit", "source", source.id, "Web page not modified; using cached normalized item", {}, "system");
     return { ok: true, skipped: false, cached: true, cacheStatus: "not-modified", seen: 0, inserted: 0 };
   }
   if (!response.ok) throw new Error(`Web fetch failed: ${response.status} ${response.statusText}`);
   const html = await response.text();
-  const title = stripHtml(extractMeta(html, "og:title") || extractMeta(html, "twitter:title") || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || source.name);
-  const description = stripHtml(extractMeta(html, "og:description") || extractMeta(html, "description") || "");
-  const publishedAt = extractMeta(html, "article:published_time") || extractMeta(html, "datePublished") || extractMeta(html, "publishdate") || extractMeta(html, "pubdate") || "";
-  const saved = saveNormalizedItem({
+  const metadata = webPageMetadata(html, { fallbackTitle: source.name });
+  const saved = saveNormalizedItem(webNormalizedItem({
     source,
-    stableId: `${url}:${title}`,
-    canonicalUrl: url,
-    title,
-    body: description,
-    publishedAt: publishedAt && publishedToday(publishedAt) ? new Date(publishedAt).toISOString() : null,
-    relevanceScore: scoreText(`${title} ${description}`, config.keywords),
-    risingScore: 0.05,
-  });
+    url: plan.url,
+    metadata,
+    publishedToday,
+    scoreText,
+  }));
   const inserted = saved.inserted ? 1 : 0;
   const fetchedAt = now();
-  const nextConfig = {
-    ...config,
-    lastFetchedAt: fetchedAt,
-    lastFetchedCount: 1,
-    lastInsertedCount: inserted,
-    lastFetchCacheStatus: inserted ? "new-item" : "deduped",
-    lastEtag: response.headers.get("etag") || config.lastEtag || "",
-    lastModified: response.headers.get("last-modified") || config.lastModified || "",
-  };
+  const nextConfig = webNextConfig({ config, inserted, fetchedAt, responseHeaders: response.headers });
   run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
   audit("web.fetched", "source", source.id, `Fetched web page metadata; inserted ${inserted}`, { fetched: 1, inserted }, "system");
   return { ok: true, skipped: false, seen: 1, inserted };
@@ -2311,19 +2348,24 @@ function formatCalendarEventBody(event = {}, source = {}, config = {}) {
 }
 
 function calendarAgendaFromEvents(events = [], source = {}, config = {}) {
-  return events.map((event) => ({
-    id: event.id,
-    title: event.summary || "Untitled event",
-    calendar: source.name,
-    calendarId: config.calendarId || "primary",
-    start: eventDateTimeValue(event.start),
-    end: eventDateTimeValue(event.end),
-    time: eventDisplayTime(event),
-    location: event.location || "",
-    attendees: config.includeAttendees === false ? [] : (event.attendees || []).slice(0, 12).map((attendee) => attendee.displayName || attendee.email).filter(Boolean),
-    description: config.includeDescriptions ? stripHtml(event.description || "").slice(0, 1000) : "",
-    htmlLink: event.htmlLink || "",
-  }));
+  return events.map((event) => {
+    const calendarId = event.pillarCalendarId || config.calendarId || "primary";
+    return {
+      id: event.id,
+      title: event.summary || "Untitled event",
+      calendar: source.name,
+      calendarId,
+      calendarRole: calendarRoleForId(calendarId),
+      allDay: isAllDayCalendarEvent(event),
+      start: eventDateTimeValue(event.start),
+      end: eventDateTimeValue(event.end),
+      time: eventDisplayTime(event),
+      location: event.location || "",
+      attendees: config.includeAttendees === false ? [] : (event.attendees || []).slice(0, 12).map((attendee) => attendee.displayName || attendee.email).filter(Boolean),
+      description: config.includeDescriptions ? stripHtml(event.description || "").slice(0, 1000) : "",
+      htmlLink: event.htmlLink || "",
+    };
+  });
 }
 
 async function fetchGoogleCalendarEventsForCalendar({ source, calendarId, accessToken, config }) {
@@ -2406,20 +2448,12 @@ function linearClient() {
 }
 
 function linearPublicConnector(row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: LINEAR_PROVIDER })) {
-  const hasEnvKey = !!linearApiKey();
-  return {
-    provider: LINEAR_PROVIDER,
-    enabled: !!row?.enabled && hasEnvKey,
-    apiKeySaved: false,
-    credentialStatus: hasEnvKey ? "env" : "missing",
-    status: hasEnvKey && row?.enabled ? "ready" : hasEnvKey ? "disabled" : "missing env",
+  return linearPublicConnectorView({
+    row,
+    hasEnvKey: !!linearApiKey(),
     teamKey: DEFAULT_LINEAR_TEAM_KEY,
     workspaceHint: "Transformation Agency",
-    writeEnabled: hasEnvKey && !!row?.enabled,
-    lastCheckedAt: row?.last_checked_at || null,
-    lastError: row?.last_error || "",
-    updatedAt: row?.updated_at || null,
-  };
+  });
 }
 
 function redditCredential() {
@@ -2427,35 +2461,25 @@ function redditCredential() {
   const data = parse(row?.api_key, {});
   const envClientId = process.env.REDDIT_CLIENT_ID || process.env.PILLAR_REDDIT_CLIENT_ID || "";
   const envClientSecret = process.env.REDDIT_CLIENT_SECRET || process.env.PILLAR_REDDIT_CLIENT_SECRET || "";
+  const credential = redditCredentialData({
+    storedData: data,
+    rowEnabled: !!row?.enabled,
+    envClientId,
+    envClientSecret,
+  });
   return {
     row,
-    enabled: !!row?.enabled || !!envClientId,
-    data: {
-      ...data,
-      clientId: data.clientId || envClientId,
-      clientSecret: data.clientSecret || envClientSecret,
-      grantType: data.grantType || (data.clientSecret || envClientSecret ? "client_credentials" : "installed_client"),
-      deviceId: data.deviceId || "DO_NOT_TRACK_THIS_DEVICE",
-    },
+    ...credential,
   };
 }
 
 function redditPublicConnector({ row, data, enabled } = {}) {
-  const source = data || parse(row?.api_key, {});
-  const hasClientId = !!(source.clientId || process.env.REDDIT_CLIENT_ID || process.env.PILLAR_REDDIT_CLIENT_ID);
-  const isEnabled = !!enabled || !!process.env.REDDIT_CLIENT_ID || !!process.env.PILLAR_REDDIT_CLIENT_ID;
-  return {
-    provider: REDDIT_PROVIDER,
-    enabled: isEnabled,
-    apiKeySaved: hasClientId,
-    credentialStatus: hasClientId ? "saved" : "missing",
-    status: isEnabled && hasClientId ? "ready" : "pending credentials",
-    grantType: source.grantType || (source.clientSecret ? "client_credentials" : "installed_client"),
-    tokenExpiresAt: source.expiresAt || null,
-    lastCheckedAt: row?.last_checked_at || null,
-    lastError: row?.last_error || null,
-    updatedAt: row?.updated_at || null,
-  };
+  return redditPublicConnectorView({
+    row,
+    data: data || parse(row?.api_key, {}),
+    enabled,
+    envClientId: process.env.REDDIT_CLIENT_ID || process.env.PILLAR_REDDIT_CLIENT_ID || "",
+  });
 }
 
 function saveRedditCredential(data = {}, { enabled = true, error = "" } = {}) {
@@ -2477,30 +2501,18 @@ async function refreshRedditAccessToken({ force = false } = {}) {
   if (!credential.enabled) throw new Error("Reddit connector is not enabled.");
   if (!data.clientId) throw new Error("Reddit client ID is missing.");
   if (!force && data.accessToken && Number(data.expiresAt || 0) > Date.now() + 60000) return data.accessToken;
-  const grantType = data.grantType === "installed_client" ? "installed_client" : "client_credentials";
-  const body = new URLSearchParams();
-  if (grantType === "installed_client") {
-    body.set("grant_type", "https://oauth.reddit.com/grants/installed_client");
-    body.set("device_id", String(data.deviceId || "DO_NOT_TRACK_THIS_DEVICE"));
-  } else {
-    body.set("grant_type", "client_credentials");
-  }
-  const basic = Buffer.from(`${data.clientId}:${data.clientSecret || ""}`).toString("base64");
-  const response = await fetchWithTimeout("https://www.reddit.com/api/v1/access_token", {
+  const plan = redditTokenRequestPlan(data);
+  const response = await fetchWithTimeout(plan.url, {
     method: "POST",
-    headers: {
-      Authorization: `Basic ${basic}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": "PillarTime/0.1 by operator",
-    },
-    body,
+    headers: plan.headers,
+    body: plan.body,
   }, 15000);
   if (!response.ok) throw new Error(`Reddit OAuth failed: ${response.status} ${response.statusText}`);
   const token = await response.json();
   if (!token.access_token) throw new Error("Reddit OAuth did not return an access token.");
   const nextData = {
     ...data,
-    grantType,
+    grantType: plan.grantType,
     accessToken: token.access_token,
     tokenType: token.token_type || "bearer",
     scope: token.scope || data.scope || "",
@@ -2526,22 +2538,6 @@ async function fetchRedditOAuthJson(path) {
   return response.json();
 }
 
-function redditOAuthPathForSource(source) {
-  const config = source.config || {};
-  const limit = Math.max(5, Math.min(25, Number(config.maxItems || 10)));
-  if (config.mode === "search") {
-    const params = new URLSearchParams({ q: config.query || source.locator, sort: config.sort || "new", t: "day", limit: String(limit), raw_json: "1" });
-    return `/search.json?${params}`;
-  }
-  if (config.mode === "user") {
-    const user = String(config.username || source.locator || "").replace(/^u\//, "").replace(/^@/, "");
-    return `/user/${encodeURIComponent(user)}/submitted.json?limit=${limit}&raw_json=1`;
-  }
-  const subreddit = String(config.subreddits || source.locator || "").split(",")[0].trim().replace(/^r\//, "").replace(/^subreddits:/, "");
-  const sort = ["hot", "top"].includes(config.sort) ? config.sort : "new";
-  return `/r/${encodeURIComponent(subreddit)}/${sort}.json?limit=${limit}&raw_json=1`;
-}
-
 const GOOGLE_CALENDAR_PROVIDER = "google_calendar";
 function googleCalendarLocalOAuthConfig() {
   const file = String(process.env.PILLAR_GOOGLE_CALENDAR_CLIENT_JSON || "").trim();
@@ -2563,7 +2559,7 @@ const GOOGLE_CALENDAR_DESKTOP_CLIENT_ID = process.env.PILLAR_GOOGLE_CALENDAR_CLI
 const GOOGLE_CALENDAR_CLIENT_SECRET = process.env.PILLAR_GOOGLE_CALENDAR_CLIENT_SECRET || GOOGLE_CALENDAR_LOCAL_OAUTH.clientSecret || "";
 const GOOGLE_CALENDAR_REDIRECT_URI = process.env.PILLAR_GOOGLE_CALENDAR_REDIRECT_URI || "";
 const GOOGLE_CALENDAR_SCOPES = [
-  "https://www.googleapis.com/auth/calendar.events.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ];
 const GOOGLE_CALENDAR_SCOPE = GOOGLE_CALENDAR_SCOPES.join(" ");
@@ -2595,24 +2591,14 @@ function googleCalendarPkcePair() {
 
 function googleCalendarPublicConnector(connector = googleCalendarCredential()) {
   const { row, data, enabled } = connector;
-  const hasClient = !!(data.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID);
-  const hasRefreshToken = !!data.refreshToken;
-  return {
-    provider: "googleCalendar",
+  return googleCalendarPublicConnectorView({
+    row,
+    data,
     enabled,
-    apiKeySaved: hasRefreshToken,
-    clientConfigured: hasClient,
-    credentialStatus: hasRefreshToken ? "saved" : hasClient ? "client configured" : "missing",
-    status: enabled && hasRefreshToken ? "ready" : hasClient ? "needs consent" : "pending credentials",
-    calendarId: data.calendarId || "primary",
-    selectedCalendarIds: Array.isArray(data.selectedCalendarIds) && data.selectedCalendarIds.length ? data.selectedCalendarIds : ["primary"],
-    calendars: Array.isArray(data.calendars) ? data.calendars : [],
-    scope: data.scope || GOOGLE_CALENDAR_SCOPE,
-    redirectUri: data.redirectUri || "",
-    lastCheckedAt: row?.last_checked_at || null,
-    lastError: row?.last_error || null,
-    updatedAt: row?.updated_at || null,
-  };
+    desktopClientId: GOOGLE_CALENDAR_DESKTOP_CLIENT_ID,
+    defaultScope: GOOGLE_CALENDAR_SCOPE,
+    writeScope: GOOGLE_CALENDAR_WRITE_SCOPE,
+  });
 }
 
 function saveGoogleCalendarCredential(data, { enabled = false, lastError = "" } = {}) {
@@ -2698,31 +2684,33 @@ async function fetchGoogleCalendarList() {
   })).filter((calendar) => calendar.id);
 }
 
+function assertGoogleCalendarWriteReady() {
+  return assertGoogleCalendarWriteCredential(googleCalendarCredential(), GOOGLE_CALENDAR_WRITE_SCOPE);
+}
+
+function googleCalendarWriteCalendarId(data = googleCalendarCredential().data || {}) {
+  return selectGoogleCalendarWriteCalendarId(data);
+}
+
+async function createGoogleCalendarEvent({ calendarId = "primary", summary, description = "", start, end, timezone = "America/Denver", extendedProperties = {} }) {
+  const connector = assertGoogleCalendarWriteReady();
+  const accessToken = await refreshGoogleCalendarAccessToken();
+  const { targetCalendarId, body } = googleCalendarEventRequest({ calendarId, credentialData: connector.data, summary, description, start, end, timezone, extendedProperties });
+  const response = await fetchWithTimeout(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(targetCalendarId)}/events`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }, 20000);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error?.message || `Google Calendar event create failed: ${response.status} ${response.statusText}`);
+  return payload;
+}
+
 function xHeaders(token) {
   return { Authorization: `Bearer ${token}` };
 }
 
-const X_QUICK_MAX_RESULTS = 10;
 const X_QUICK_CACHE_MINUTES = 60;
-const X_ESTIMATED_POST_READ_COST_USD = 0.005;
-
-function xQuickQuery(rawQuery = "") {
-  let query = String(rawQuery || "").trim();
-  if (!query) return "";
-  if (!/\bis:retweet\b/i.test(query) && !/\b-is:retweet\b/i.test(query)) query += " -is:retweet";
-  if (!/\bis:reply\b/i.test(query) && !/\b-is:reply\b/i.test(query)) query += " -is:reply";
-  return query;
-}
-
-function xQueryParams(config, maxResults = X_QUICK_MAX_RESULTS) {
-  const params = new URLSearchParams({
-    query: xQuickQuery(config.query || ""),
-    max_results: String(X_QUICK_MAX_RESULTS),
-    "tweet.fields": "created_at,public_metrics,author_id,lang",
-    start_time: startOfLocalDay().toISOString(),
-  });
-  return params;
-}
 
 async function fetchXCount({ source, token }) {
   const config = source.config || {};
@@ -2738,50 +2726,29 @@ async function fetchXCount({ source, token }) {
 
 async function fetchXSource(source) {
   const config = source.config || {};
-  if (!config.query) return { ok: true, skipped: true, reason: "No X query configured", inserted: 0, seen: 0 };
   const token = xBearerToken();
-  if (!token) return { ok: true, skipped: true, reason: "X connector is missing or disabled", inserted: 0, seen: 0 };
+  const readiness = xFetchReadiness({ config, token });
+  if (readiness.skipped) return readiness;
 
   const maxResults = X_QUICK_MAX_RESULTS;
   const quickQuery = xQuickQuery(config.query);
-  const params = xQueryParams({ ...config, query: quickQuery }, maxResults);
+  const params = xQueryParams({ ...config, query: quickQuery }, { startTime: startOfLocalDay(), maxResults });
   const response = await fetchWithTimeout(`https://api.x.com/2/tweets/search/recent?${params}`, { headers: xHeaders(token) });
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`X recent search failed: ${response.status} ${response.statusText} ${text.slice(0, 240)}`);
   }
   const payload = await response.json();
-  const parsedPosts = Array.isArray(payload.data) ? payload.data.slice(0, maxResults) : [];
-  const posts = parsedPosts.filter((post) => publishedToday(post.created_at));
+  const { parsedPosts, posts } = xPostsForToday(payload, { publishedToday });
   let inserted = 0;
   for (const post of posts) {
-    const metrics = post.public_metrics || {};
-    const engagement = Number(metrics.like_count || 0) + Number(metrics.retweet_count || 0) * 2 + Number(metrics.reply_count || 0) + Number(metrics.quote_count || 0) * 2;
-    const saved = saveNormalizedItem({
-      source,
-      stableId: post.id,
-      canonicalUrl: `https://x.com/i/web/status/${post.id}`,
-      title: post.text.split(/\s+/).slice(0, 16).join(" "),
-      body: post.text,
-      publishedAt: post.created_at || null,
-      relevanceScore: scoreText(post.text, config.keywords),
-      risingScore: Math.min(1, Math.log10(engagement + 1) / 4),
-    });
+    const saved = saveNormalizedItem(xPostToNormalizedItem({ source, post, scoreText }));
     if (saved.inserted) inserted += 1;
   }
-  const estimatedCost = Number((parsedPosts.length * X_ESTIMATED_POST_READ_COST_USD).toFixed(3));
-  const nextConfig = {
-    ...config,
-    query: config.query,
-    quickMode: true,
-    quickModeLocked: true,
-    lastFetchedAt: now(),
-    lastFetchedCount: parsedPosts.length,
-    lastFetchedTodayCount: posts.length,
-    lastInsertedCount: inserted,
-    lastEstimatedCostUsd: estimatedCost,
-  };
-  run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: now() });
+  const fetchedAt = now();
+  const estimatedCost = xEstimatedCost(parsedPosts);
+  const nextConfig = xNextConfig({ config, parsedPosts, posts, inserted, fetchedAt });
+  run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
   audit("x.fetched", "source", source.id, `Quick fetched ${parsedPosts.length} X posts; ${posts.length} published today; inserted ${inserted}; est. cost $${estimatedCost.toFixed(3)}`, { query: quickQuery, fetched: parsedPosts.length, today: posts.length, inserted, maxResults, estimatedCostUsd: estimatedCost, quickMode: true }, "system");
   return { ok: true, skipped: false, seen: parsedPosts.length, today: posts.length, inserted, maxResults, estimatedCostUsd: estimatedCost, quickMode: true, query: quickQuery };
 }
@@ -2852,7 +2819,7 @@ async function fetchSourceCollection({ useRecentCache = false, onProgress } = {}
     }
   }
   const rssResults = [];
-  for (const source of [...rssSources, ...youtubeSources]) {
+  for (const source of rssSources) {
     try {
       const cached = useRecentCache ? recentSourceCache(source) : null;
       rssResults.push(cached ? { sourceId: source.id, sourceName: source.name, ...cached } : { sourceId: source.id, sourceName: source.name, ...(await fetchRssSource(source)) });
@@ -2861,6 +2828,17 @@ async function fetchSourceCollection({ useRecentCache = false, onProgress } = {}
       audit(`${source.type.toLowerCase()}.fetch_failed`, "source", source.id, error.message || `${source.type} fetch failed`, {}, "system");
     } finally {
       reportFetchProgress(`${source.type}: ${source.name}`);
+    }
+  }
+  for (const source of youtubeSources) {
+    try {
+      const cached = useRecentCache ? recentSourceCache(source) : null;
+      rssResults.push(cached ? { sourceId: source.id, sourceName: source.name, ...cached } : { sourceId: source.id, sourceName: source.name, ...(await fetchYouTubeSource(source)) });
+    } catch (error) {
+      rssResults.push({ sourceId: source.id, sourceName: source.name, ok: false, error: error.message || "YouTube fetch failed" });
+      audit("youtube.fetch_failed", "source", source.id, error.message || "YouTube fetch failed", {}, "system");
+    } finally {
+      reportFetchProgress(`YouTube: ${source.name}`);
     }
   }
   const redditResults = [];
@@ -2881,6 +2859,9 @@ async function fetchSourceCollection({ useRecentCache = false, onProgress } = {}
       const cached = useRecentCache ? recentSourceCache(source) : null;
       webResults.push(cached ? { sourceId: source.id, sourceName: source.name, ...cached } : { sourceId: source.id, sourceName: source.name, ...(await fetchWebSource(source)) });
     } catch (error) {
+      const fetchedAt = now();
+      const nextConfig = webErrorConfig({ config: source.config || {}, fetchedAt, error: error.message || "Web fetch failed" });
+      run("UPDATE sources SET config_json=$config, updated_at=$t WHERE id=$id", { $id: source.id, $config: json(nextConfig), $t: fetchedAt });
       webResults.push({ sourceId: source.id, sourceName: source.name, ok: false, error: error.message || "Web fetch failed" });
       audit("web.fetch_failed", "source", source.id, error.message || "Web fetch failed", {}, "system");
     } finally {
@@ -2926,68 +2907,16 @@ async function fetchSourceCollection({ useRecentCache = false, onProgress } = {}
   };
 }
 
-function parseDeliveryMinutes(time) {
-  const match = String(time || "08:00").match(/^(\d{1,2}):(\d{2})/);
-  if (!match) return 8 * 60;
-  const hours = Math.max(0, Math.min(23, Number(match[1])));
-  const minutes = Math.max(0, Math.min(59, Number(match[2])));
-  return hours * 60 + minutes;
-}
-
-function scheduleParts(date = new Date(), timeZone = "America/Denver") {
-  try {
-    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      weekday: "long",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(date).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
-    const hour = Number(parts.hour) === 24 ? 0 : Number(parts.hour);
-    return {
-      weekday: parts.weekday,
-      dateKey: `${parts.year}-${parts.month}-${parts.day}`,
-      minutes: hour * 60 + Number(parts.minute || 0),
-    };
-  } catch {
-    return {
-      weekday: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][date.getDay()],
-      dateKey: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
-      minutes: date.getHours() * 60 + date.getMinutes(),
-    };
-  }
-}
-
-function sourcePreflightKey(date = new Date(), config = briefConfig()) {
-  const parts = scheduleParts(date, config.deliveryTimezone);
-  return `${parts.dateKey}:${config.deliveryTimezone}:${config.deliveryFrequency}:${config.deliveryDay}:${config.deliveryTime}`;
-}
-
-function shouldRunSourcePreflight(date = new Date(), config = briefConfig()) {
-  const parts = scheduleParts(date, config.deliveryTimezone);
-  if (config.deliveryFrequency === "Weekly" && config.deliveryDay !== parts.weekday) return null;
-  const nowMinutes = parts.minutes;
-  const targetMinutes = parseDeliveryMinutes(config.deliveryTime);
-  return nowMinutes === targetMinutes ? sourcePreflightKey(date, config) : null;
-}
-
-function briefDeliveryDueKey(date = new Date(), config = briefConfig()) {
-  const parts = scheduleParts(date, config.deliveryTimezone);
-  if (config.deliveryFrequency === "Weekly" && config.deliveryDay !== parts.weekday) return null;
-  return parts.minutes >= parseDeliveryMinutes(config.deliveryTime) ? sourcePreflightKey(date, config) : null;
-}
-
 async function runSourcePreflight(trigger = "Scheduled source preflight") {
   const started = now();
   const collection = await fetchSourceCollection({ useRecentCache: false });
   const completed = now();
+  const readiness = scheduledSourcePreflightReadiness(collection);
   audit("sources.preflight", "brief_config", "1", trigger, {
     startedAt: started,
     completedAt: completed,
-    activeSources: collection.activeSources.length,
+    readiness,
+    activeSources: readiness.activeSourceCount,
     inserted: collection.itemCount,
     x: collection.xResults.length,
     rss: collection.rssResults.length,
@@ -3027,11 +2956,18 @@ async function runScheduledBriefDeliveryIfDue(trigger = "Scheduled · Auto-deliv
   const key = briefDeliveryDueKey(date, config);
   if (!key || key === appStateGet(LAST_BRIEF_DELIVERY_KEY)) return false;
   const parts = scheduleParts(date, config.deliveryTimezone);
-  if (scheduledBriefAlreadyRan(parts.dateKey, config.deliveryTimezone)) {
-    appStateSet(LAST_BRIEF_DELIVERY_KEY, key);
+  const decision = scheduledBriefDeliveryDecision({
+    nowDate: date,
+    config,
+    lastDeliveryKey: appStateGet(LAST_BRIEF_DELIVERY_KEY),
+    alreadyCompletedToday: scheduledBriefAlreadyRan(parts.dateKey, config.deliveryTimezone),
+    ready: briefDeliveryReady(),
+  });
+  if (decision.action === "mark_ran") {
+    appStateSet(LAST_BRIEF_DELIVERY_KEY, decision.key);
     return false;
   }
-  if (!briefDeliveryReady()) return false;
+  if (decision.action !== "run") return false;
   appStateSet(LAST_BRIEF_DELIVERY_KEY, key);
   try {
     await executeWorkflow(trigger);
@@ -3046,9 +2982,12 @@ async function runScheduledBriefDeliveryIfDue(trigger = "Scheduled · Auto-deliv
 
 function startSourcePreflightScheduler() {
   const timer = setInterval(async () => {
-    const key = shouldRunSourcePreflight();
-    if (!key || key === lastSourcePreflightKey) return;
-    lastSourcePreflightKey = key;
+    const decision = scheduledSourcePreflightDecision({
+      config: briefConfig(),
+      lastPreflightKey: lastSourcePreflightKey,
+    });
+    if (decision.action !== "run") return;
+    lastSourcePreflightKey = decision.key;
     try {
       await runSourcePreflight();
     } catch (error) {
@@ -3356,15 +3295,11 @@ function seedDefaultPodcastSources() {
   });
 }
 
-function youtubeFeedUrl(channelId) {
-  return `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
-}
-
 function seedDefaultYouTubeSources() {
   const markerKey = "default_youtube_source_catalog_version";
   if (get("SELECT value FROM app_state WHERE key=$key", { $key: markerKey })?.value === DEFAULT_YOUTUBE_SOURCE_CATALOG_VERSION) return;
   for (const [name, handle, channelId, note] of DEFAULT_YOUTUBE_SOURCES) {
-    const feedUrl = youtubeFeedUrl(channelId);
+    const feedUrl = youtubeFeedUrlForChannel(channelId);
     seedSourceRecord({
       name,
       type: "YouTube",
@@ -3385,6 +3320,10 @@ function seedTimeDefaults() {
   const t = now();
   if (!get("SELECT id FROM time_preferences WHERE id=1")) {
     run("INSERT INTO time_preferences (id, updated_at) VALUES (1, $t)", { $t: t });
+  }
+  const prefs = get("SELECT operating_manual FROM time_preferences WHERE id=1") || {};
+  if (!String(prefs.operating_manual || "").trim()) {
+    run("UPDATE time_preferences SET operating_manual=$manual, updated_at=$t WHERE id=1", { $manual: DEFAULT_EXECUTIVE_SELF_STATEMENT, $t: t });
   }
   const templates = [
     ["review-morning", "morning", "Morning planning", ["What is already on the calendar?", "What are the top leverage candidates?", "What should become Today's Three?", "What needs preparation or follow-up?"]],
@@ -3413,6 +3352,30 @@ function seedTimeDefaults() {
          VALUES ($id, $title, 'Template reminder. Enable and edit before use.', $type, $scheduleType, $localTime, $start, '[1,2,3,4,5]', 0, $t, $t)
          ON CONFLICT(id) DO NOTHING`, { $id: reminderId, $title: title, $type: type, $scheduleType: scheduleType, $localTime: localTime, $start: localDateKey(new Date(), "America/Denver"), $t: t });
   }
+  const planningCategories = [
+    ["schedule-category-deep-work", "Deep Work", "Protected focus time for the highest-leverage work candidate.", "Deep Work", "#1f6feb", 90, 45, 120, "deepWork"],
+    ["schedule-category-meeting-prep", "Meeting Prep", "Preparation block before meetings, calls, reviews, and checkpoints.", "Prep", "#8957e5", 25, 15, 45, "leadership"],
+    ["schedule-category-follow-up", "Follow-up", "Communication, callbacks, status checks, and commitment cleanup.", "Follow-up", "#2da44e", 30, 15, 60, "leadership"],
+    ["schedule-category-admin", "Admin / Inbox", "Operational cleanup, inbox triage, forms, and short maintenance work.", "Admin", "#bf8700", 45, 20, 60, "admin"],
+    ["schedule-category-health", "Health / Recovery", "Lunch, movement, reset, and recovery protection.", "Recovery", "#d1242f", 45, 20, 75, "healthFamilyRecovery"],
+    ["schedule-category-learning", "Learning / Research", "Reading, research, synthesis, and skill-building time.", "Learning", "#0969da", 60, 30, 90, "deepWork"],
+  ];
+  for (const [categoryId, name, description, prefix, color, defaultMinutes, minMinutes, maxMinutes, leverageCategory] of planningCategories) {
+    run(`INSERT INTO calendar_planning_categories (id, name, description, calendar_title_prefix, color, default_minutes, min_minutes, max_minutes, leverage_category, enabled, protected, created_at, updated_at)
+         VALUES ($id, $name, $description, $prefix, $color, $defaultMinutes, $minMinutes, $maxMinutes, $leverageCategory, 1, 1, $t, $t)
+         ON CONFLICT(id) DO NOTHING`, {
+      $id: categoryId,
+      $name: name,
+      $description: description,
+      $prefix: prefix,
+      $color: color,
+      $defaultMinutes: defaultMinutes,
+      $minMinutes: minMinutes,
+      $maxMinutes: maxMinutes,
+      $leverageCategory: leverageCategory,
+      $t: t,
+    });
+  }
 }
 
 function audit(action, entityType, entityId, note = "", diff = {}, actor = "operator") {
@@ -3422,6 +3385,24 @@ function audit(action, entityType, entityId, note = "", diff = {}, actor = "oper
     $entityType: entityType, $entityId: entityId, $note: note || "", $diff: json(diff || {}),
   });
 }
+
+const DEFAULT_EXECUTIVE_SELF_STATEMENT = [
+  "I carry a lot at once, move fast, and want my hours spent on what compounds: building, writing, important relationships, and the few commitments that actually move the work.",
+  "I can over-rely on my own reasoning and make a plan sound airtight even when it is avoiding the hard, undramatic next action.",
+  "Pillar Time should not become a cheerleader or mirror. It should point my time at what is true and what counts.",
+  "Talk to me straight. Tell me plainly when my plan does not match my stated priorities, when I am overcommitting, when something important has quietly slipped, or when I am dressing up procrastination as strategy.",
+  "Default to candor over comfort and specifics over reassurance. If unsure, say so instead of smoothing it over. Do not perform confidence.",
+  "The useful morning output is a clear read on where my time is actually going versus where I said it should go, plus the one question I am least likely to ask myself.",
+].join("\n");
+
+const DEFAULT_EXECUTIVE_COACHING_VOICE = [
+  "Speak like a precise executive coach who has permission to be candid.",
+  "Be warm enough to be usable, but never flattering, vague, or performatively positive.",
+  "Make the brief feel like a coaching session: explain why the top work is highest leverage, what tension it relieves, what it protects, and what would be avoidance.",
+  "Prefer direct second-person language, concrete tradeoffs, and a small number of sharp moves over formal lists.",
+  "Call out mismatch between calendar reality, Linear commitments, stated priorities, and proposed actions.",
+  "Ask one uncomfortable question the brief owner is least likely to ask today.",
+].join(" ");
 
 function defaultTrustedContextConstitution() {
   return {
@@ -3477,8 +3458,9 @@ function seedTrustedContextDefaults() {
     ["identity.profile", "preferredName", config.ownerName || "You", "verified_canonical_profile", "verified", "workspace"],
     ["identity.profile", "productName", config.productName || "Pillar Time", "application_default", "system_verified", "workspace"],
     ["identity.role", "primaryTimezone", prefs.timezone || config.deliveryTimezone || "America/Denver", "verified_canonical_profile", "verified", "workspace"],
-    ["profile.communication", "briefVoice", config.voiceRules || "Concise, strategic, candid, approval-safe, specific, and plain-English.", "verified_canonical_profile", "verified", "assistant"],
-    ["profile.timePolicy", "operatingManual", prefs.operatingManual || "", "verified_canonical_profile", "verified", "assistant"],
+    ["profile.communication", "briefVoice", config.voiceRules || DEFAULT_EXECUTIVE_COACHING_VOICE, "verified_canonical_profile", "verified", "assistant"],
+    ["profile.timePolicy", "operatingManual", prefs.operatingManual || DEFAULT_EXECUTIVE_SELF_STATEMENT, "verified_canonical_profile", "verified", "assistant"],
+    ["profile.timePolicy", "selfStatement", prefs.operatingManual || DEFAULT_EXECUTIVE_SELF_STATEMENT, "verified_canonical_profile", "verified", "assistant"],
   ];
   for (const [resourceType, fieldKey, value, trustLevel, verificationStatus, visibility] of seedFacts) {
     if (!String(value || "").trim()) continue;
@@ -3573,8 +3555,8 @@ function seed() {
          VALUES (1, $owner, $product, $audience, $voice, 'Daily', '08:00', 'America/Denver', 'Monday', $sections, $analyzers, $behavior, '[]', 1, $t)`, {
       $owner: "You",
       $product: "Pillar Time",
-      $audience: "A private daily intelligence brief for the brief owner. Explain sources, entities, mechanisms, or technical terms when useful.",
-      $voice: "Concise, strategic, candid, approval-safe, specific, and plain-English. Avoid generic corporate language.",
+      $audience: "A private executive operating system for the brief owner. Help the owner spend hours on compounding work, important relationships, and the few commitments that actually move the work. Check urgency theater, overcommitment, and polished self-justification against calendar reality, Linear commitments, and stated priorities.",
+      $voice: DEFAULT_EXECUTIVE_COACHING_VOICE,
       $sections: json([
         { key: "executiveRead", label: "Executive Read", enabled: true, instruction: "2-3 concise paragraphs that explain the situation without unexplained jargon." },
         { key: "backgroundContext", label: "Plain-English Context", enabled: true, instruction: "3-7 bullets explaining key terms, entities, mechanisms, and jargon." },
@@ -3683,6 +3665,24 @@ function timeTasks() {
   }));
 }
 
+function calendarPlanningCategories() {
+  return all("SELECT * FROM calendar_planning_categories ORDER BY name ASC").map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    calendarTitlePrefix: r.calendar_title_prefix,
+    color: r.color,
+    defaultMinutes: Number(r.default_minutes || 60),
+    minMinutes: Number(r.min_minutes || 25),
+    maxMinutes: Number(r.max_minutes || 120),
+    leverageCategory: r.leverage_category,
+    enabled: !!r.enabled,
+    protected: !!r.protected,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
 function dailyCommitments(dateKey = localDateKey(new Date(), timePreferences().timezone)) {
   return all("SELECT * FROM daily_commitments WHERE local_date=$date AND status!='removed' ORDER BY rank ASC, created_at ASC", { $date: dateKey }).map((r) => ({
     id: r.id,
@@ -3694,6 +3694,37 @@ function dailyCommitments(dateKey = localDateKey(new Date(), timePreferences().t
     rank: r.rank,
     status: r.status,
     completedAt: r.completed_at,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+function commitments() {
+  return all("SELECT * FROM commitments WHERE status NOT IN ('done','canceled','removed') ORDER BY COALESCE(due_at, '9999'), updated_at DESC").map((r) => ({
+    id: r.id,
+    title: r.title,
+    description: r.description,
+    status: r.status,
+    owner: r.owner,
+    requestedBy: r.requested_by,
+    dueAt: r.due_at,
+    priority: r.priority,
+    leverageCategory: r.leverage_category,
+    sourceSystem: r.source_system,
+    sourceId: r.source_id,
+    relatedPeople: parse(r.related_people_json, []),
+    relatedProjects: parse(r.related_projects_json, []),
+    relatedEvents: parse(r.related_events_json, []),
+    nextAction: r.next_action,
+    estimateMinutes: r.estimate_minutes,
+    waitingOn: r.waiting_on,
+    blockers: r.blockers,
+    partition: r.partition,
+    confidence: r.confidence,
+    verificationState: r.verification_state,
+    authoritativeSystem: r.authoritative_system,
+    externalRefs: parse(r.external_refs_json, []),
+    evidence: parse(r.evidence_json, []),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }));
@@ -3849,28 +3880,19 @@ async function runTimeReminderSchedulerTick(trigger = "tick") {
   timeSchedulerState.running = true;
   timeSchedulerState.lastTickAt = now();
   try {
-    if (!prefs.reminderMasterEnabled) return;
+    await processDueScheduledReminderOccurrences(prefs);
     for (const reminder of reminders()) {
-      if (!reminder.enabled) continue;
-      if (reminder.type === "regular" && !prefs.regularRemindersEnabled) continue;
-      if (reminder.type === "sporadic" && !prefs.sporadicRemindersEnabled) continue;
-      if (reminder.pausedUntil && new Date(reminder.pausedUntil) > new Date()) continue;
-      const next = reminder.nextOccurrence;
-      if (!next) continue;
-      const dueKey = next.dedupeKey;
-      if (reminder.skippedDedupeKey === dueKey) continue;
-      const occurrenceId = `occ-${createHash("sha1").update(dueKey).digest("hex").slice(0, 16)}`;
+      const decision = reminderSchedulerDecision({ reminder, prefs });
+      if (decision.action !== "schedule") continue;
+      const next = decision.occurrence;
+      const occurrenceId = decision.occurrenceId;
       const dueAt = new Date().toISOString();
       run(`INSERT INTO reminder_occurrences (id, reminder_id, intended_local_date, intended_local_time, dedupe_key, status, due_at, created_at)
            VALUES ($id, $reminderId, $date, $time, $dedupe, 'scheduled', $dueAt, $t)
-           ON CONFLICT(dedupe_key) DO NOTHING`, { $id: occurrenceId, $reminderId: reminder.id, $date: next.dateKey, $time: next.localTime, $dedupe: dueKey, $dueAt: dueAt, $t: now() });
-      if (!shouldDeliverLocalOccurrence(next, reminder.timezone)) continue;
-      const channels = reminder.channels || {};
-      if (channels.telegramText && prefs.channels.telegramText) {
-        await deliverTimeReminder({ reminder, occurrenceId, channel: "telegram", mode: "text" });
-      }
-      if (channels.desktopText && prefs.channels.desktopText) {
-        recordReminderAttempt({ occurrenceId, channel: "desktop", mode: "text", status: "skipped", error: "Desktop notification adapter pending Tauri notification permission wiring." });
+           ON CONFLICT(dedupe_key) DO NOTHING`, { $id: occurrenceId, $reminderId: reminder.id, $date: next.dateKey, $time: next.localTime, $dedupe: decision.dedupeKey, $dueAt: dueAt, $t: now() });
+      for (const delivery of decision.deliveries) {
+        if (delivery.status === "send") await deliverTimeReminder({ reminder, occurrenceId, channel: delivery.channel, mode: delivery.mode });
+        else recordReminderAttempt({ occurrenceId, channel: delivery.channel, mode: delivery.mode, status: delivery.status, error: delivery.error || "" });
       }
     }
     timeSchedulerState.lastError = "";
@@ -3880,17 +3902,34 @@ async function runTimeReminderSchedulerTick(trigger = "tick") {
   }
 }
 
+async function processDueScheduledReminderOccurrences(prefs) {
+  const reminderRows = new Map(reminders().map((reminder) => [reminder.id, reminder]));
+  const scheduledRows = all("SELECT * FROM reminder_occurrences WHERE status='scheduled' ORDER BY due_at ASC");
+  for (const row of scheduledRows) {
+    const reminder = reminderRows.get(row.reminder_id);
+    if (!reminder) continue;
+    const occurrence = {
+      dateKey: row.intended_local_date,
+      localTime: row.intended_local_time,
+      dedupeKey: row.dedupe_key,
+    };
+    const attempted = all("SELECT channel, mode FROM reminder_delivery_attempts WHERE occurrence_id=$occurrenceId", { $occurrenceId: row.id });
+    const decision = scheduledOccurrenceDeliveryPlan({ reminder, prefs, occurrence, attempted });
+    if (decision.action !== "schedule" || !decision.due) continue;
+    for (const delivery of decision.deliveries) {
+      if (delivery.status === "send") await deliverTimeReminder({ reminder, occurrenceId: row.id, channel: delivery.channel, mode: delivery.mode });
+      else recordReminderAttempt({ occurrenceId: row.id, channel: delivery.channel, mode: delivery.mode, status: delivery.status, error: delivery.error || "" });
+    }
+  }
+}
+
 function startTimeReminderScheduler() {
   runTimeReminderSchedulerTick("launch").catch(() => {});
   setInterval(() => runTimeReminderSchedulerTick("interval").catch(() => {}), 60000).unref?.();
 }
 
 function shouldDeliverLocalOccurrence(occurrence, timezone = "America/Denver") {
-  const nowDate = new Date();
-  const dateKey = localDateKey(nowDate, timezone);
-  if (occurrence.dateKey !== dateKey) return false;
-  const currentTime = nowDate.toLocaleTimeString("en-US", { timeZone: timezone, hour12: false, hour: "2-digit", minute: "2-digit" });
-  return occurrence.localTime <= currentTime;
+  return shouldDeliverLocalOccurrencePure(occurrence, timezone);
 }
 
 function recordReminderAttempt({ occurrenceId, channel, mode = "text", status = "pending", error = "", response = {} }) {
@@ -3953,29 +3992,7 @@ function trustedContextConstitution() {
 }
 
 function profileFactFromRow(r) {
-  return {
-    id: r.id,
-    resourceType: r.resource_type,
-    fieldKey: r.field_key,
-    value: r.value,
-    valueJson: parse(r.value_json, {}),
-    partition: r.partition,
-    visibility: r.visibility,
-    trustLevel: r.trust_level,
-    verificationStatus: r.verification_status,
-    status: r.status,
-    validFrom: r.valid_from,
-    validTo: r.valid_to,
-    learnedAt: r.learned_at,
-    provenanceId: r.provenance_id,
-    sourceLabel: r.source_label,
-    confidence: Number(r.confidence || 0),
-    createdBy: r.created_by,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at,
-    allowedAudiences: parse(r.value_json, {})?.allowedAudiences,
-    fieldAuthorityRank: parse(r.value_json, {})?.fieldAuthorityRank,
-  };
+  return trustedProfileFactFromRow(r, parse);
 }
 
 function profileFacts({ includeInactive = false } = {}) {
@@ -4093,16 +4110,12 @@ function trustedContextState() {
 
 function workflowRuns() {
   return all("SELECT * FROM workflow_runs ORDER BY started_at DESC").map((r) => ({
-    id: r.id, label: r.label, trigger: r.trigger, status: r.status, startedAt: r.started_at,
+    id: r.id, label: r.label, trigger: r.trigger, runType: r.run_type || "intelligence", status: r.status, startedAt: r.started_at,
     completedAt: r.completed_at, steps: parse(r.steps_json, []), artifact: hydrateArtifact(parse(r.artifact_json, {})), error: r.error,
   }));
 }
 function approvals() {
-  return all("SELECT * FROM approval_items ORDER BY created_at DESC").map((r) => ({
-    id: r.id, title: r.title, kind: r.kind, risk: r.risk, status: r.status, runId: r.run_id,
-    entityType: r.entity_type, entityId: r.entity_id, payload: parse(r.payload_json, {}),
-    createdAt: r.created_at, resolvedBy: r.resolved_by, resolvedAt: r.resolved_at, resolutionNote: r.resolution_note,
-  }));
+  return all("SELECT * FROM approval_items ORDER BY created_at DESC").map((r) => approvalView(r, parse));
 }
 function audits() {
   return all("SELECT * FROM audit_logs ORDER BY ts DESC LIMIT 250").map((r) => ({
@@ -4112,18 +4125,11 @@ function audits() {
 }
 function telegramSettings() {
   const r = get("SELECT * FROM telegram_settings WHERE id = 1");
-  return {
-    enabled: !!r.enabled, botToken: r.bot_token ? "configured" : "", chatId: r.chat_id,
-    allowedUsers: parse(r.allowed_users, []), lastCheckedAt: r.last_checked_at, lastError: r.last_error,
-    recentCommands: parse(r.recent_commands, []), updatedAt: r.updated_at,
-    commands: ["/brief", "/sources", "/lenses", "/deliberate", "/review", "/approve", "/reject", "/analyze"],
-  };
+  return telegramPublicSettingsView(r, parse);
 }
 function modelSettings() {
   const r = get("SELECT * FROM model_settings WHERE id = 1");
   const activeProviderKey = savedModelProviderKey(r.provider, r);
-  const credentialStatus = providerCredentialStatus(r.provider, activeProviderKey);
-  const customReady = r.provider !== "custom" || !!r.base_url;
   const providerCredentials = Object.fromEntries(modelProviders.map((provider) => {
     const savedKey = savedModelProviderKey(provider, r);
     return [provider, {
@@ -4131,19 +4137,7 @@ function modelSettings() {
       credentialStatus: providerCredentialStatus(provider, savedKey),
     }];
   }));
-  return {
-    provider: r.provider,
-    model: r.model,
-    apiKeySaved: !!activeProviderKey,
-    baseUrl: r.provider === "custom" ? r.base_url : "",
-    enabled: !!r.enabled,
-    credentialStatus,
-    status: r.enabled && r.model && customReady && credentialStatus !== "missing" ? "ready" : "pending credentials",
-    providerCredentials,
-    lastCheckedAt: r.last_checked_at,
-    lastError: r.last_error,
-    updatedAt: r.updated_at,
-  };
+  return modelSettingsView({ row: r, activeProviderKey, providerCredentials });
 }
 function connectorSettings() {
   const rows = all("SELECT * FROM connector_credentials ORDER BY provider");
@@ -4151,17 +4145,7 @@ function connectorSettings() {
     if (r.provider === GOOGLE_CALENDAR_PROVIDER) return [r.provider, googleCalendarPublicConnector({ row: r, data: parse(r.api_key, {}), enabled: !!r.enabled })];
     if (r.provider === REDDIT_PROVIDER) return [r.provider, redditPublicConnector({ row: r, data: parse(r.api_key, {}), enabled: !!r.enabled })];
     if (r.provider === LINEAR_PROVIDER) return [r.provider, linearPublicConnector(r)];
-    const hasKey = !!r.api_key;
-    return [r.provider, {
-      provider: r.provider,
-      enabled: !!r.enabled,
-      apiKeySaved: hasKey,
-      credentialStatus: hasKey ? "saved" : "missing",
-      status: r.enabled && hasKey ? "ready" : "pending credentials",
-      lastCheckedAt: r.last_checked_at,
-      lastError: r.last_error,
-      updatedAt: r.updated_at,
-    }];
+    return [r.provider, storedApiKeyConnectorView(r)];
   }));
   return {
     x: connectors.x || {
@@ -4219,6 +4203,20 @@ function onboardingState() {
   };
 }
 function workflowTemplate(config = briefConfig()) {
+  const runType = typeof config === "string" ? config : arguments[1] || "executive_day";
+  if (runType === "executive_day") {
+    return [
+      ["context", "Load executive context", "retrieve"],
+      ["calendar", "Read calendar and meeting prep", "retrieve"],
+      ["linear", "Read Linear work and blockers", "retrieve"],
+      ["commitments", "Normalize commitments", "organize"],
+      ["risks", "Detect risks and prep gaps", "organize"],
+      ["rank", "Rank highest-leverage day", "decide"],
+      ["synthesize", "Render executive day brief", "generate"],
+      ["approvals", "Create approval-gated actions", "act"],
+      ["deliver", "Save artifact and optional outputs", "deliver"],
+    ];
+  }
   const enabledSections = (config.sections || []).filter((section) => section.enabled !== false && section.key !== "sourceEvidence");
   const synthesizeName = enabledSections.length
     ? `Synthesize ${enabledSections.length} configured section${enabledSections.length === 1 ? "" : "s"}`
@@ -4236,8 +4234,8 @@ function workflowTemplate(config = briefConfig()) {
   ];
 }
 
-function workflowPlan(config = briefConfig()) {
-  return workflowTemplate(config).map(([key, name, group], index) => ({
+function workflowPlan(config = briefConfig(), runType = "executive_day") {
+  return workflowTemplate(config, runType).map(([key, name, group], index) => ({
     key,
     name,
     group,
@@ -4245,9 +4243,9 @@ function workflowPlan(config = briefConfig()) {
   }));
 }
 
-function workflowProgressSteps({ activeKey = "fetch", completed = new Set(), outputs = {}, config = briefConfig() } = {}) {
+function workflowProgressSteps({ activeKey = "context", completed = new Set(), outputs = {}, config = briefConfig(), runType = "executive_day" } = {}) {
   const completedSet = completed instanceof Set ? completed : new Set(completed || []);
-  return workflowTemplate(config).map(([key, name, group], index) => ({
+  return workflowTemplate(config, runType).map(([key, name, group], index) => ({
     n: index + 1,
     key,
     name,
@@ -4262,7 +4260,7 @@ function workflowProgressSteps({ activeKey = "fetch", completed = new Set(), out
 function state() {
   const prefs = timePreferences();
   const todayKey = localDateKey(new Date(), prefs.timezone);
-  return { sources: sources(), lenses: lenses(), councils: councils(), documents: documents(), workflowRuns: workflowRuns(), approvals: approvals(), auditLogs: audits(), telegram: telegramSettings(), model: modelSettings(), tts: ttsSettings(), connectors: connectorSettings(), briefConfig: briefConfig(), onboarding: onboardingState(), trustedContext: trustedContextState(), time: { preferences: prefs, todayKey, suggestions: timeSuggestions(), commitments: dailyCommitments(todayKey), tasks: timeTasks(), reminders: reminders(), reviews: reviewTemplates(), importantDates: importantDates(), meetings: meetingRecords(), scheduler: schedulerHealth() }, runtime: { mode: appMode, isDesktop, dataDir, workflowSteps: workflowPlan() } };
+  return { sources: sources(), lenses: lenses(), councils: councils(), documents: documents(), workflowRuns: workflowRuns(), approvals: approvals(), auditLogs: audits(), telegram: telegramSettings(), model: modelSettings(), tts: ttsSettings(), connectors: connectorSettings(), briefConfig: briefConfig(), onboarding: onboardingState(), trustedContext: trustedContextState(), time: { preferences: prefs, todayKey, suggestions: timeSuggestions(), commitments: dailyCommitments(todayKey), canonicalCommitments: commitments(), tasks: timeTasks(), reminders: reminders(), reviews: reviewTemplates(), importantDates: importantDates(), meetings: meetingRecords(), calendarPlanningCategories: calendarPlanningCategories(), scheduler: schedulerHealth() }, runtime: { mode: appMode, isDesktop, dataDir, workflowSteps: workflowPlan() } };
 }
 function briefConfig() {
   const r = get("SELECT * FROM brief_config WHERE id = 1");
@@ -4522,66 +4520,6 @@ function dedupeCalendarAgenda(agenda = []) {
   return deduped;
 }
 
-function coverageForResults(type, results = []) {
-  const rows = Array.isArray(results) ? results : [];
-  return {
-    type,
-    attempted: rows.length,
-    succeeded: rows.filter((result) => result.ok !== false && !result.skipped).length,
-    failed: rows.filter((result) => result.ok === false).length,
-    skipped: rows.filter((result) => result.skipped).length,
-    fetched: rows.reduce((sum, result) => sum + Number(result.seen || result.today || result.fetched || 0), 0),
-    today: rows.reduce((sum, result) => sum + Number(result.today || 0), 0),
-    inserted: rows.reduce((sum, result) => sum + Number(result.inserted || 0), 0),
-    reused: rows.reduce((sum, result) => sum + Number(result.reused || result.preflight || 0), 0),
-  };
-}
-
-function buildCoverageDiagnostics({ activeSources = [], sourceResults = {}, itemCount = 0, candidateCount = 0, calendarAgenda = [] } = {}) {
-  const groups = {
-    x: coverageForResults("X", sourceResults.xFetches),
-    rss: coverageForResults("RSS/YouTube", sourceResults.rssFetches),
-    reddit: coverageForResults("Reddit", sourceResults.redditFetches),
-    web: coverageForResults("Web", sourceResults.webFetches),
-    calendar: coverageForResults("Calendar", sourceResults.calendarFetches),
-    podcast: coverageForResults("Podcast", sourceResults.podcastTranscriptions),
-  };
-  const topFailures = [];
-  for (const [type, rows] of Object.entries({
-    x: sourceResults.xFetches || [],
-    rss: sourceResults.rssFetches || [],
-    reddit: sourceResults.redditFetches || [],
-    web: sourceResults.webFetches || [],
-    calendar: sourceResults.calendarFetches || [],
-    podcast: sourceResults.podcastTranscriptions || [],
-  })) {
-    for (const result of rows) {
-      if (result?.ok === false) topFailures.push({
-        type,
-        source: result.sourceName || result.source || result.name || result.url || result.sourceId || "Unknown source",
-        error: String(result.error || result.reason || "Unknown failure").slice(0, 260),
-      });
-    }
-  }
-  const warnings = [];
-  if (groups.reddit.failed) warnings.push(`Reddit coverage degraded: ${groups.reddit.failed} source${groups.reddit.failed === 1 ? "" : "s"} failed, often due to 403/429 access limits.`);
-  const unsupportedX = topFailures.filter((failure) => failure.type === "x" && /(min_faves|filter:news|unsupported)/i.test(failure.error));
-  if (unsupportedX.length) warnings.push(`Some X searches used unsupported operators and were not counted as reliable coverage: ${unsupportedX.map((failure) => failure.source).slice(0, 4).join(", ")}.`);
-  if (groups.x.failed) warnings.push(`X coverage degraded: ${groups.x.failed} search${groups.x.failed === 1 ? "" : "es"} failed.`);
-  if (groups.rss.failed) warnings.push(`RSS/YouTube coverage degraded: ${groups.rss.failed} feed${groups.rss.failed === 1 ? "" : "s"} failed or blocked.`);
-  if (!candidateCount && itemCount) warnings.push("Sources fetched items, but no same-day non-calendar news candidates qualified for ranking.");
-  return {
-    generatedAt: now(),
-    activeSourceCount: activeSources.length,
-    itemCount,
-    candidateCount,
-    calendarAgendaCount: calendarAgenda.length,
-    byType: groups,
-    topFailures: topFailures.slice(0, 18),
-    warnings,
-  };
-}
-
 function articleTextFromHtml(html = "") {
   const withoutNoise = String(html || "")
     .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
@@ -4710,41 +4648,6 @@ function clusterCandidates(candidates = []) {
   }).sort((a, b) => b.score - a.score);
 }
 
-function selectIssueClusters(clusters = [], min = 12, max = 18) {
-  const selected = [];
-  const selectedIds = new Set();
-  const addBestForTag = (tag, count = 1) => {
-    for (const cluster of clusters) {
-      if (selected.length >= max) return;
-      if (selectedIds.has(cluster.id) || !cluster.sectionTags.includes(tag)) continue;
-      selected.push(cluster);
-      selectedIds.add(cluster.id);
-      if (selected.filter((item) => item.sectionTags.includes(tag)).length >= count) return;
-    }
-  };
-  addBestForTag("politicalNational", 2);
-  addBestForTag("financialMarkets", 2);
-  addBestForTag("boulderLocal", 1);
-  addBestForTag("coloradoRegional", 1);
-  addBestForTag("worldGeopolitics", 1);
-  for (const cluster of clusters) {
-    if (selected.length >= max) break;
-    if (selectedIds.has(cluster.id)) continue;
-    const techScienceCount = selected.filter((item) => item.sectionTags.includes("techAi") || item.sectionTags.includes("scienceHealth")).length;
-    if (techScienceCount < 2 && (cluster.sectionTags.includes("techAi") || cluster.sectionTags.includes("scienceHealth"))) {
-      selected.push(cluster);
-      selectedIds.add(cluster.id);
-    }
-  }
-  for (const cluster of clusters) {
-    if (selected.length >= Math.min(max, Math.max(min, clusters.length))) break;
-    if (selectedIds.has(cluster.id)) continue;
-    selected.push(cluster);
-    selectedIds.add(cluster.id);
-  }
-  return selected.sort((a, b) => b.score - a.score).slice(0, max);
-}
-
 function issueFromCluster(cluster, evidencePacketsById = new Map(), reference = new Date()) {
   const lead = cluster.items.find((item) => item.id === cluster.leadItemId) || cluster.items[0] || {};
   const evidence = evidencePacketsById.get(lead.id);
@@ -4818,7 +4721,7 @@ async function buildRigorousBriefInputs({ activeSources = [], sourceResults = {}
       summary: candidate.summary,
     })),
   };
-  const coverageDiagnostics = buildCoverageDiagnostics({ activeSources, sourceResults, itemCount, candidateCount: candidates.length, calendarAgenda });
+  const coverageDiagnostics = buildCoverageDiagnostics({ activeSources, sourceResults, itemCount, candidateCount: candidates.length, calendarAgenda, generatedAt: now() });
   return { selectedIssues, selectedIssueClusters, evidencePackets, candidateScan, coverageDiagnostics, calendarAgenda };
 }
 
@@ -4968,6 +4871,7 @@ async function synthesizeStrategicBrief({ selectedIssues, sourceResults, selecte
   const owner = config.ownerName || "the brief owner";
   const calendarAgenda = Array.isArray(explicitCalendarAgenda) ? explicitCalendarAgenda : (Array.isArray(sourceResults?.calendarAgenda) ? sourceResults.calendarAgenda : []);
   if (!selectedIssues.length && !calendarAgenda.length) throw new Error("No usable source items or calendar events from today were selected. Add or fix sources, then generate again.");
+  const noNewsPolicy = noNewsClaimPolicy({ coverageDiagnostics, candidateScan });
   const enabledAnalyzers = sanitizeAnalyzerList(config.analyzers, defaultAnalyzers()).filter((analyzer) => analyzer.enabled !== false);
   const enabledSections = (config.sections || []).filter((section) => section.enabled !== false).map((section) => {
     return {
@@ -5041,6 +4945,7 @@ async function synthesizeStrategicBrief({ selectedIssues, sourceResults, selecte
     candidateScan,
     calendarAgenda,
     coverageDiagnostics,
+    noNewsPolicy,
     trustedContextEnvelope: trustedContextEnvelope ? {
       temporalFrame: trustedContextEnvelope.temporalFrame,
       constitution: trustedContextEnvelope.constitution,
@@ -5048,7 +4953,7 @@ async function synthesizeStrategicBrief({ selectedIssues, sourceResults, selecte
       facts: (trustedContextEnvelope.facts || []).slice(0, 24),
       quality: trustedContextEnvelope.quality,
     } : null,
-    sourceFreshnessPolicy: "Selected issue clusters have publishedAt dates from today only. Calendar is agenda only. Never say 'no news' for a section when coverageDiagnostics shows relevant coverage was degraded or relevant unselected candidates existed.",
+    sourceFreshnessPolicy: NO_NEWS_FRESHNESS_POLICY,
     sourceResultsSummary: {
       xFetches: sourceResults?.xFetches?.length || 0,
       rssFetches: sourceResults?.rssFetches?.length || 0,
@@ -5113,113 +5018,13 @@ function hydrateArtifact(artifact = {}) {
 
 function renderOnePageBrief(artifact = {}) {
   const issues = artifact.selectedIssues || [];
-  const issueClusters = artifact.selectedIssueClusters || [];
-  const coverageDiagnostics = artifact.coverageDiagnostics || {};
   const config = briefConfig();
-  const sections = (config.sections || []).filter((section) => section.enabled !== false);
-  const brief = artifact.strategicBrief || deterministicStrategicBrief({ selectedIssues: issues, lenses: [], council: artifact.council, config });
-  const lines = [
-    `# ${artifact.title || brief.headline || "Daily Brief"}`,
-    `Generated: ${artifact.generatedAt ? new Date(artifact.generatedAt).toLocaleString() : new Date().toLocaleString()}`,
-  ];
-  const bullets = (items) => Array.isArray(items) && items.length ? items.forEach((item) => lines.push(`- ${typeof item === "string" ? item : JSON.stringify(item)}`)) : lines.push("- No read generated.");
-  const renderContent = (content) => {
-    if (Array.isArray(content)) {
-      if (!content.length) lines.push("- No read generated.");
-      content.forEach((item) => {
-        if (typeof item === "string") lines.push(`- ${item}`);
-        else if (item?.lens || item?.read) {
-          lines.push(`- ${item.lens ? `${item.lens}: ` : ""}${item.read || JSON.stringify(item)}`);
-          if (item.implication) lines.push(`  Implication: ${item.implication}`);
-        } else {
-          lines.push(`- ${JSON.stringify(item)}`);
-        }
-      });
-      return;
-    }
-    lines.push(String(content || "No read generated."));
-  };
-  const renderSourceEvidence = (section) => {
-    lines.push("", `## ${section.label || "Source Evidence"}`);
-    if (!issues.length) lines.push("No selected issues yet. The workflow completed but did not ingest enough source items to compile a brief.");
-    else {
-      issues.slice(0, 18).forEach((issue, index) => {
-        const sources = Array.isArray(issue.corroboratingSources) && issue.corroboratingSources.length ? issue.corroboratingSources.join(", ") : issue.sourceName;
-        lines.push(`${index + 1}. ${issue.title} (${sources}${issue.publishedAt ? `, ${new Date(issue.publishedAt).toLocaleString()}` : ""})`);
-        if (issue.summary) lines.push(`   ${issue.summary}`);
-        if (issue.sectionTags?.length) lines.push(`   Sections: ${issue.sectionTags.join(", ")}`);
-        if (issue.evidenceStatus) lines.push(`   Evidence: ${issue.evidenceStatus}${issue.clusterItemCount ? `; ${issue.clusterItemCount} clustered item${issue.clusterItemCount === 1 ? "" : "s"}` : ""}`);
-        if (issue.cacheContext?.framing) lines.push(`   Context: ${issue.cacheContext.framing}`);
-        if (issue.url) lines.push(`   ${issue.url}`);
-      });
-    }
-  };
-  const renderTopIssues = () => {
-    const topIssues = Array.isArray(brief.topIssues) && brief.topIssues.length
-      ? brief.topIssues
-      : issueClusters.slice(0, 18).map((cluster, index) => ({
-        rank: index + 1,
-        title: cluster.title,
-        read: cluster.summary,
-        sources: cluster.sourceNames,
-        whyItMatters: cluster.sectionTags?.join(", "),
-      }));
-    lines.push("", "## Top Issues");
-    if (!topIssues.length) {
-      lines.push("No selected news issue clusters were available. See Coverage Notes for source health.");
-      return;
-    }
-    topIssues.slice(0, 18).forEach((issue, index) => {
-      const rank = issue.rank || index + 1;
-      const sources = Array.isArray(issue.sources) ? issue.sources.join(", ") : "";
-      lines.push(`${rank}. ${issue.title || "Untitled issue"}${sources ? ` (${sources})` : ""}`);
-      if (issue.read) lines.push(`   ${issue.read}`);
-      if (issue.whyItMatters) lines.push(`   Why it matters: ${issue.whyItMatters}`);
-    });
-  };
-  const renderCoverageNotes = () => {
-    const notes = Array.isArray(brief.coverageNotes) && brief.coverageNotes.length
-      ? brief.coverageNotes
-      : (Array.isArray(coverageDiagnostics.warnings) ? coverageDiagnostics.warnings : []);
-    lines.push("", "## Coverage Notes");
-    if (!notes.length) {
-      lines.push("- No major source coverage degradation reported by the fetch layer.");
-      return;
-    }
-    notes.forEach((note) => lines.push(`- ${typeof note === "string" ? note : JSON.stringify(note)}`));
-    const failures = Array.isArray(coverageDiagnostics.topFailures) ? coverageDiagnostics.topFailures.slice(0, 6) : [];
-    failures.forEach((failure) => lines.push(`- ${failure.source || failure.type}: ${failure.error || "Fetch failed"}`));
-  };
-  const renderConfiguredSection = (section) => {
-    if (section.key === "sourceEvidence") {
-      renderSourceEvidence(section);
-      return;
-    }
-    lines.push("", `## ${section.label || section.key}`);
-    const content = brief.sectionResponses?.[section.key]
-      ?? knownSectionContent(brief, section.key)
-      ?? fallbackSectionContent(section, issues, config);
-    renderContent(content);
-  };
-  renderTopIssues();
-  if (sections.length) {
-    sections.forEach(renderConfiguredSection);
-  } else {
-    [
-      { key: "executiveRead", label: "Executive Read" },
-      { key: "backgroundContext", label: "Plain-English Context" },
-      { key: "whyJackShouldCare", label: config.ownerName && config.ownerName !== "You" ? `Why ${config.ownerName} Should Care` : "Why It Matters" },
-      { key: "futureImplications", label: "Future Implications" },
-      { key: "doctrineProjectImpact", label: "Doctrine / Project Impact" },
-      { key: "councilRead", label: "Analyzer Read" },
-      { key: "councilSynthesis", label: "Analyzer Synthesis" },
-      { key: "jackPov", label: config.ownerName && config.ownerName !== "You" ? `${config.ownerName} POV` : "POV" },
-      { key: "sourceEvidence", label: "Source Evidence" },
-      { key: "openQuestions", label: "Open Questions Before Approval" },
-    ].forEach(renderConfiguredSection);
-  }
-  renderCoverageNotes();
-  return lines.join("\n");
+  return renderOnePageBriefPure(artifact, {
+    config,
+    strategicBriefFallback: () => deterministicStrategicBrief({ selectedIssues: issues, lenses: [], council: artifact.council, config }),
+    knownSectionContentFn: knownSectionContent,
+    fallbackSectionContentFn: fallbackSectionContent,
+  });
 }
 
 function formatDeliberation(deliberation = {}) {
@@ -5264,39 +5069,10 @@ async function deliberateWorkflowRun(runId, { regenerate = false } = {}) {
   if (modelSettings().status !== "ready") throw new Error("Set up a working model before deliberating a brief.");
   const briefText = String(artifact.onePageBrief || renderOnePageBrief(artifact) || "").trim();
   if (!briefText) throw new Error("This run does not have a saved brief to deliberate.");
-  const system = [
-    "You deliberate over a saved private intelligence brief using user-created perspective lenses.",
-    "Each lens should give a distinct, useful take grounded in the saved brief text.",
-    "Do not introduce new factual claims unless you clearly mark them as questions or hypotheses.",
-    "Return only valid JSON.",
-  ].join(" ");
-  const prompt = JSON.stringify({
-    task: "Run a perspective deliberation over this saved brief.",
-    requiredJsonShape: {
-      perspectives: [{ name: "lens name", role: "lens role", take: "specific read on the brief", implication: "what this perspective would do or watch next" }],
-      synthesis: "where the perspectives agree, disagree, what matters most, and a practical next move",
-    },
-    brief: briefText.slice(0, 18000),
-    perspectiveLenses: perspectiveLenses.map((lens) => ({
-      name: lens.name,
-      role: lens.role,
-      description: lens.description,
-      instructions: lens.instructions,
-    })),
-  });
+  const { system, prompt } = perspectiveDeliberationRequest({ briefText, perspectiveLenses });
   const text = await callTextModel({ system, prompt });
   const payload = parseModelJson(text);
-  const deliberation = {
-    perspectives: (Array.isArray(payload.perspectives) ? payload.perspectives : []).slice(0, 12).map((item, index) => ({
-      name: String(item.name || perspectiveLenses[index]?.name || `Perspective ${index + 1}`).trim(),
-      role: String(item.role || perspectiveLenses[index]?.role || "").trim(),
-      take: String(item.take || item.read || "").trim(),
-      implication: String(item.implication || item.nextMove || "").trim(),
-    })).filter((item) => item.name && item.take),
-    synthesis: String(payload.synthesis || payload.summary || "").trim(),
-    generatedAt: now(),
-  };
-  if (!deliberation.perspectives.length && !deliberation.synthesis) throw new Error("The model did not return a usable deliberation.");
+  const deliberation = normalizedPerspectiveDeliberation({ payload, perspectiveLenses, generatedAt: now() });
   const nextArtifact = { ...artifact, deliberation };
   run("UPDATE workflow_runs SET artifact_json=$artifact WHERE id=$id", { $id: runId, $artifact: json(nextArtifact) });
   audit("brief.deliberated", "workflow_run", runId, `Generated deliberation with ${deliberation.perspectives.length} perspective lens${deliberation.perspectives.length === 1 ? "" : "es"}`, {}, "system");
@@ -5411,6 +5187,446 @@ function saveBriefDocument({ runId, artifact }) {
   return docId;
 }
 
+function daysUntilLocalDate(dateKey, timezone = "America/Denver") {
+  const today = localDateKey(new Date(), timezone);
+  return Math.round((new Date(`${dateKey}T12:00:00Z`).getTime() - new Date(`${today}T12:00:00Z`).getTime()) / 86400000);
+}
+
+async function fetchExecutiveCalendarAgenda({ timezone = "America/Denver" } = {}) {
+  const connector = googleCalendarCredential();
+  const data = connector.data || {};
+  const diagnostics = { provider: "googleCalendar", status: "not_connected", attempted: false, succeeded: false, eventCount: 0, error: "" };
+  if (!connector.enabled || !data.refreshToken) {
+    diagnostics.error = "Google Calendar is not connected.";
+    return { agenda: [], diagnostics };
+  }
+  diagnostics.attempted = true;
+  try {
+    const accessToken = await refreshGoogleCalendarAccessToken();
+    const selectedCalendarIds = Array.isArray(data.selectedCalendarIds) && data.selectedCalendarIds.length ? data.selectedCalendarIds : ["primary"];
+    const config = { calendarId: "selected", calendarIds: selectedCalendarIds, includeAttendees: true, includeDescriptions: false, includeDeclined: false, maxResults: 50 };
+    const source = { id: "google-calendar", name: "Google Calendar", config };
+    const rawEventsByCalendar = [];
+    for (const calendarId of selectedCalendarIds) {
+      const events = await fetchGoogleCalendarEventsForCalendar({ source, calendarId, accessToken, config });
+      rawEventsByCalendar.push(...events.map((event) => ({ ...event, pillarCalendarId: calendarId })));
+    }
+    const events = rawEventsByCalendar
+      .filter((event) => {
+        if (event.status === "cancelled") return false;
+        const selfAttendee = (event.attendees || []).find((attendee) => attendee.self);
+        return selfAttendee?.responseStatus !== "declined";
+      })
+      .sort((a, b) => String(eventDateTimeValue(a.start)).localeCompare(String(eventDateTimeValue(b.start))));
+    diagnostics.status = "ready";
+    diagnostics.succeeded = true;
+    diagnostics.eventCount = events.length;
+    diagnostics.calendarIds = selectedCalendarIds;
+    diagnostics.primaryCalendarIds = selectedCalendarIds.filter((calendarId) => calendarRoleForId(calendarId) === "primary");
+    diagnostics.contextCalendarIds = selectedCalendarIds.filter((calendarId) => calendarRoleForId(calendarId) !== "primary");
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now() });
+    return { agenda: dedupeCalendarAgenda(calendarAgendaFromEvents(events, source, config)), diagnostics };
+  } catch (error) {
+    diagnostics.status = "failed";
+    diagnostics.error = error.message || "Google Calendar fetch failed";
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now(), $err: diagnostics.error });
+    return { agenda: [], diagnostics };
+  }
+}
+
+async function fetchExecutiveLinearContext() {
+  const connector = linearPublicConnector();
+  const diagnostics = { provider: LINEAR_PROVIDER, status: connector.status, attempted: false, succeeded: false, issueCount: 0, error: "" };
+  if (connector.status !== "ready") {
+    diagnostics.error = connector.credentialStatus === "missing" ? "LINEAR_API_KEY is not configured." : "Linear connector is disabled.";
+    return { issues: [], groups: [], viewer: null, diagnostics };
+  }
+  diagnostics.attempted = true;
+  try {
+    const result = await linearClient().issues({ teamKey: DEFAULT_LINEAR_TEAM_KEY, assignee: "me", stateTypes: ["backlog", "unstarted", "started"], first: 50, pages: 3 });
+    diagnostics.status = "ready";
+    diagnostics.succeeded = true;
+    diagnostics.issueCount = result.issues.length;
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now() });
+    return { issues: result.issues, groups: groupIssuesByProject(result.issues), viewer: result.viewer, diagnostics };
+  } catch (error) {
+    diagnostics.status = "failed";
+    diagnostics.error = error.message || "Linear issue fetch failed";
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now(), $err: diagnostics.error });
+    return { issues: [], groups: [], viewer: null, diagnostics };
+  }
+}
+
+function commitmentRowsForExecutiveDay({ dateKey }) {
+  const canonical = commitments().map((item) => ({ ...item, source: item.sourceSystem || "commitment", kind: "canonical" }));
+  const daily = dailyCommitments(dateKey).map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: item.notes,
+    status: item.status,
+    dueAt: `${item.localDate}T23:59:00`,
+    priority: item.rank <= 3 ? "high" : "normal",
+    leverageCategory: "leadership",
+    source: "today",
+    kind: "daily",
+    evidence: [{ type: "daily_commitment", id: item.id }],
+  }));
+  return [...daily, ...canonical];
+}
+
+function buildExecutiveCandidates({ calendarAgenda = [], linearContext = {}, local = {}, dateKey, timezone }) {
+  const feedback = all("SELECT feedback_key AS key, feedback FROM suggestion_feedback");
+  return buildExecutiveCandidatesPure({ calendarAgenda, linearContext, local, dateKey, timezone, feedback });
+}
+
+function detectExecutiveRisks({ calendarAgenda = [], linearContext = {}, local = {}, connectorDiagnostics = {}, dateKey, timezone }) {
+  return detectExecutiveRisksPure({ calendarAgenda, linearContext, local, connectorDiagnostics, dateKey, timezone });
+}
+
+function buildCoverageNotes({ connectorDiagnostics = {}, sourceCount = 0 }) {
+  const notes = [];
+  if (connectorDiagnostics.googleCalendar?.succeeded) notes.push(`Calendar connected: ${connectorDiagnostics.googleCalendar.eventCount || 0} event${connectorDiagnostics.googleCalendar.eventCount === 1 ? "" : "s"} read for today.`);
+  else notes.push(`Calendar degraded: ${connectorDiagnostics.googleCalendar?.error || "not connected"}`);
+  if (connectorDiagnostics.linear?.succeeded) notes.push(`Linear connected: ${connectorDiagnostics.linear.issueCount || 0} assigned open issue${connectorDiagnostics.linear.issueCount === 1 ? "" : "s"} read.`);
+  else notes.push(`Linear degraded: ${connectorDiagnostics.linear?.error || "not connected"}`);
+  notes.push(connectorDiagnostics.model?.status === "ready" ? `Model ready: ${connectorDiagnostics.model.provider}/${connectorDiagnostics.model.model}.` : "Model degraded: deterministic fallback rendered; no LLM prose was required.");
+  if (!sourceCount) notes.push("No active intelligence sources are required for this executive day brief.");
+  return notes;
+}
+
+function deterministicExecutiveDayBrief({ dateKey, calendarAgenda, linearContext, local, todaysThree, risks, connectorDiagnostics, coverageNotes }) {
+  const nextEvent = calendarAgenda.find((event) => toDateMs(event.end || event.start) >= Date.now());
+  const highRisk = risks.filter((risk) => risk.severity === "high");
+  const topMove = todaysThree[0];
+  return {
+    mode: "deterministic",
+    headline: `Here is the day as it actually looks: ${dateKey}`,
+    coachingOpen: [
+      nextEvent ? `Your next calendar anchor is ${nextEvent.time} ${nextEvent.title}. Treat the space around it as contested, not free-floating.` : "No remaining calendar anchor is doing the organizing for you, which means the first protected block matters more.",
+      topMove ? `The highest-leverage move is ${topMove.title}. It matters because ${topMove.reason || "it is the clearest commitment signal in the connected systems"}.` : "The connected systems did not produce a clear top move, so the first job is choosing one instead of letting the day choose for you.",
+    ],
+    executiveRead: [
+      nextEvent ? `Next calendar anchor: ${nextEvent.time} ${nextEvent.title}.` : "No remaining calendar anchors were found for today.",
+      todaysThree.length ? `Protect Today's Three: ${todaysThree.map((item) => item.title).join("; ")}.` : "Choose Today's Three before the day gets noisy.",
+      highRisk.length ? `${highRisk.length} high-priority risk${highRisk.length === 1 ? "" : "s"} need attention.` : "No high-priority schedule or commitment risk was detected from connected systems.",
+    ],
+    leverageRead: todaysThree.length ? todaysThree.map((item) => `${item.title}: high leverage because ${item.reason || item.source || "it is near the top of the ranked day candidates"}.`) : ["Pick one concrete compounding move before doing reactive work."],
+    tensionRelief: topMove ? [`Doing ${topMove.title} relieves the tension between what is visible in Linear/calendar and the temptation to spend the day on easier urgency.`] : ["The tension to resolve is ambiguity: without a named move, urgency will substitute itself for priority."],
+    avoidanceCheck: highRisk.length ? highRisk.map((risk) => `Do not route around this: ${risk.title}`) : ["Watch for polished procrastination: planning, researching, or messaging that avoids the hard next action."],
+    hardQuestion: "What is the useful, undramatic thing you are most tempted to postpone today?",
+    calendarRead: calendarAgenda.length ? calendarAgenda.map((event) => `${event.time}: ${event.title}${event.location ? ` (${event.location})` : ""}`) : ["No calendar events available from connected calendars."],
+    linearRead: (linearContext.groups || []).length ? linearContext.groups.map((group) => `${group.name}: ${group.issues.length} open assigned issue${group.issues.length === 1 ? "" : "s"}`) : ["No assigned Linear issues were available, or Linear is not connected."],
+    commitmentRead: (local.commitments || []).length ? local.commitments.slice(0, 8).map((item) => `${item.title}${item.dueAt ? ` due ${item.dueAt}` : ""}`) : ["No canonical commitments are currently stored."],
+    approvalRead: (local.approvals || []).filter((item) => item.status === "pending").slice(0, 8).map((item) => item.title),
+    coverageNotes,
+    connectorDiagnostics,
+  };
+}
+
+async function synthesizeExecutiveDayBrief(context) {
+  const fallback = deterministicExecutiveDayBrief(context);
+  if (modelSettings().status !== "ready") return fallback;
+  try {
+    const config = briefConfig();
+    const ownerName = config.ownerName && config.ownerName !== "You" ? config.ownerName : "the brief owner";
+    const selfStatement = context.local?.preferences?.operatingManual || DEFAULT_EXECUTIVE_SELF_STATEMENT;
+    const system = [
+      "You are Pillar Time, a private executive operating system.",
+      "Produce a concise executive coaching session grounded only in the provided JSON.",
+      `Speak directly to ${ownerName} in second person. This is not a news report and not a formal memo.`,
+      DEFAULT_EXECUTIVE_COACHING_VOICE,
+      "If additionalContext is present, treat it as the owner's live correction for this run and adjust the plan accordingly.",
+      "Separate verified facts, inferred risks, suggested actions, pending approvals, and missing information.",
+      "Do not write a news report. Do not introduce external news unless explicitly present in the input.",
+      "For each top recommendation, explain why it is highest leverage and what tension it relieves.",
+      "Name avoidance patterns plainly when the data supports it, but do not invent motives.",
+      "End with one uncomfortable question the owner is least likely to ask today.",
+      "Return only valid JSON.",
+    ].join(" ");
+    const prompt = JSON.stringify(executiveSynthesisPayload({
+      context,
+      ownerName,
+      selfStatement,
+      voiceRules: config.voiceRules || DEFAULT_EXECUTIVE_COACHING_VOICE,
+    }));
+    const parsed = JSON.parse(await callTextModel({ system, prompt }));
+    return { ...fallback, ...parsed, mode: "model" };
+  } catch (error) {
+    return { ...fallback, mode: "deterministic", modelError: error.message || "Model synthesis failed; deterministic fallback rendered." };
+  }
+}
+
+function renderExecutiveDayBrief(artifact = {}) {
+  const brief = artifact.executiveDayBrief || {};
+  const lines = [
+    `# ${artifact.title || brief.headline || "Executive Day Brief"}`,
+    `Generated: ${artifact.generatedAt ? new Date(artifact.generatedAt).toLocaleString() : new Date().toLocaleString()}`,
+  ];
+  const addList = (heading, items, empty = "No items.") => {
+    lines.push("", `## ${heading}`);
+    const list = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (!list.length) lines.push(`- ${empty}`);
+    else list.forEach((item) => lines.push(`- ${typeof item === "string" ? item : JSON.stringify(item)}`));
+  };
+  addList("Straight Read", brief.coachingOpen || brief.executiveRead);
+  addList("Added Context", addedContextItemsForRender(artifact), "No user correction added for this run.");
+  addList("Why This Is Highest Leverage", brief.leverageRead || brief.highestLeverageRead || (artifact.rankedDayCandidates || []).slice(0, 5).map((item) => `${item.title} - ${item.reason || item.source || ""}`));
+  addList("The Tension This Relieves", brief.tensionRelief, "No specific tension identified from connected systems.");
+  addList("Avoidance Check", brief.avoidanceCheck, "No obvious avoidance pattern detected. Stay honest anyway.");
+  if (brief.hardQuestion) lines.push("", "## The Question", `- ${brief.hardQuestion}`);
+  addList("Today's Calendar & Prep", brief.calendarRead || (artifact.calendarAgenda || []).map((event) => `${event.time}: ${event.title}`));
+  addList("Today's Three", brief.todaysThreeRead || (artifact.todaysThree || []).map((item) => `${item.title} - ${item.reason || item.source || "selected"}`), "No top-three commitments selected yet.");
+  addList("Proposed Calendar", (artifact.proposedCalendarSchedule?.blocks || []).map((block) => `${new Date(block.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}-${new Date(block.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${block.summary}`), "No calendar fill blocks proposed.");
+  addList("Linear Focus", brief.linearRead);
+  addList("Commitments & Follow-ups", brief.commitmentRead);
+  addList("Approval Queue", approvalQueueItemsForRender({ brief, artifact }), "No approval-gated actions are pending from this run.");
+  addList("Schedule Protection", brief.scheduleProtection || (artifact.risks || []).filter((risk) => risk.type?.includes("calendar") || risk.type === "meeting_load").map((risk) => risk.title), "No schedule protection warnings detected.");
+  addList("Missing Info / Watchouts", brief.missingInfo || (artifact.risks || []).map((risk) => risk.title));
+  addList("Coverage Notes", brief.coverageNotes || artifact.coverageNotes);
+  return lines.join("\n");
+}
+
+function proposedLinearActionsFromContext({ rankedDayCandidates = [], linearContext = {} }) {
+  const issuesById = new Map((linearContext.issues || []).map((issue) => [issue.id, issue]));
+  return rankedDayCandidates
+    .filter((candidate) => candidate.linearIssueId && issuesById.has(candidate.linearIssueId))
+    .filter((candidate) => /stale|due|unblock|blocked|waiting/i.test(`${candidate.reason || ""} ${candidate.status || ""} ${candidate.leverageCategory || ""}`))
+    .slice(0, 3)
+    .map((candidate) => {
+      const issue = issuesById.get(candidate.linearIssueId);
+      return {
+        title: `Ask for Linear status on ${issue.identifier}`,
+        kind: "linear_action",
+        risk: "low",
+        entityType: "linear_issue",
+        entityId: issue.id,
+        payload: {
+          operation: "addComment",
+          issueId: issue.id,
+          body: `Pillar Time suggested check-in: this issue surfaced in today's executive brief as "${candidate.reason}". What is the next unblock or decision needed?`,
+          verification: { refetchIssue: true, identifier: issue.identifier, url: issue.url },
+        },
+      };
+    });
+}
+
+function calendarBusyIntervals({ calendarAgenda = [], dateKey, timezone = "America/Denver", bufferMinutes = 0 }) {
+  return buildCalendarBusyIntervals({ calendarAgenda, dateKey, timezone, bufferMinutes });
+}
+
+function calendarFreeWindows({ calendarAgenda = [], dateKey, timezone = "America/Denver", preferences = {} }) {
+  return buildCalendarFreeWindows({ calendarAgenda, dateKey, timezone, preferences });
+}
+
+function proposedCalendarScheduleFromContext(context = {}) {
+  const categories = calendarPlanningCategories().filter((category) => category.enabled);
+  return buildProposedCalendarScheduleFromContext(context, {
+    categories,
+    calendarId: googleCalendarWriteCalendarId(),
+    idFactory: () => id("cal-block"),
+  });
+}
+
+function createApprovalItemsForRun(runId, proposedActions = []) {
+  const created = [];
+  for (const action of proposedActions) {
+    const approvalId = id("approval");
+    run(`INSERT INTO approval_items (id, title, kind, risk, status, run_id, entity_type, entity_id, payload_json, created_at)
+         VALUES ($id, $title, $kind, $risk, 'pending', $runId, $entityType, $entityId, $payload, $t)`, {
+      $id: approvalId,
+      $title: action.title,
+      $kind: action.kind,
+      $risk: action.risk || "low",
+      $runId: runId,
+      $entityType: action.entityType || "",
+      $entityId: action.entityId || "",
+      $payload: json(action.payload || {}),
+      $t: now(),
+    });
+    created.push({ id: approvalId, ...action, status: "pending", runId });
+  }
+  return created;
+}
+
+async function buildExecutiveDayContext({ dateKey, timezone, additionalContext = "", basedOnRunId = "" } = {}) {
+  const prefs = timePreferences();
+  const effectiveTimezone = timezone || prefs.timezone || "America/Denver";
+  const effectiveDateKey = dateKey || localDateKey(new Date(), effectiveTimezone);
+  const regeneration = executiveRegenerationContext({ additionalContext, basedOnRunId });
+  const [calendar, linearContext] = await Promise.all([fetchExecutiveCalendarAgenda({ timezone: effectiveTimezone }), fetchExecutiveLinearContext()]);
+  const model = modelSettings();
+  const sourceCount = sources().filter((source) => source.status === "active" && source.type !== "Calendar").length;
+  const local = {
+    preferences: prefs,
+    additionalContext: regeneration.additionalContext,
+    basedOnRunId: regeneration.basedOnRunId,
+    tasks: timeTasks(),
+    commitments: commitmentRowsForExecutiveDay({ dateKey: effectiveDateKey }),
+    dailyCommitments: dailyCommitments(effectiveDateKey),
+    canonicalCommitments: commitments(),
+    reminders: reminders(),
+    reviews: reviewTemplates(),
+    importantDates: importantDates(),
+    meetings: meetingRecords(),
+    approvals: approvals(),
+    trustedContextEnvelope: createTrustedContextEnvelope({
+      mode: "internal_administrative_action",
+      task: "executive day planning and commitment management",
+      requestedActionType: "analysis",
+      requestedHorizon: "today",
+    }, { persist: true }),
+  };
+  const connectorDiagnostics = {
+    googleCalendar: calendar.diagnostics,
+    linear: linearContext.diagnostics,
+    model: { provider: model.provider, model: model.model, status: model.status, credentialStatus: model.credentialStatus },
+    intelligenceSources: { active: sourceCount, status: sourceCount ? "available_for_intelligence_mode" : "not_required_for_executive_day" },
+  };
+  const rankedDayCandidates = buildExecutiveCandidates({ calendarAgenda: calendar.agenda, linearContext, local, dateKey: effectiveDateKey, timezone: effectiveTimezone });
+  const todaysThree = rankedDayCandidates.slice(0, 3);
+  const risks = detectExecutiveRisks({ calendarAgenda: calendar.agenda, linearContext, local, connectorDiagnostics, dateKey: effectiveDateKey, timezone: effectiveTimezone });
+  const coverageNotes = buildCoverageNotes({ connectorDiagnostics, sourceCount });
+  return { dateKey: effectiveDateKey, timezone: effectiveTimezone, additionalContext: local.additionalContext, basedOnRunId: local.basedOnRunId, calendarAgenda: calendar.agenda, linearContext, local, commitments: local.commitments, rankedDayCandidates, todaysThree, risks, connectorDiagnostics, coverageNotes };
+}
+
+async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
+  const runId = options.runId || id("run");
+  const started = now();
+  const configAtStart = briefConfig();
+  const completedKeys = new Set();
+  const stepOutputs = {};
+  const progressDelay = (ms = 220) => new Promise((resolve) => setTimeout(resolve, ms));
+  const writeProgress = (activeKey) => {
+    run("UPDATE workflow_runs SET steps_json=$steps, artifact_json=$artifact WHERE id=$id", {
+      $id: runId,
+      $steps: json(workflowProgressSteps({ activeKey, completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "executive_day" })),
+      $artifact: json({ progressUpdatedAt: now(), activeStep: activeKey, runType: "executive_day" }),
+    });
+  };
+  const finishProgress = (key, output = "Done", detail = "") => {
+    completedKeys.add(key);
+    stepOutputs[key] = { output, detail };
+  };
+  run(`INSERT INTO workflow_runs (id, label, trigger, run_type, status, started_at, completed_at, steps_json, artifact_json)
+       VALUES ($id, $label, $trigger, 'executive_day', 'running', $started, NULL, $steps, '{}')`, {
+    $id: runId,
+    $label: "Generating executive day brief",
+    $trigger: trigger,
+    $started: started,
+    $steps: json(workflowProgressSteps({ activeKey: "context", completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "executive_day" })),
+  });
+  audit("run.started", "workflow_run", runId, `Trigger: ${trigger}`, { runType: "executive_day" }, "system");
+  try {
+    writeProgress("context");
+    await progressDelay();
+    const context = await buildExecutiveDayContext(options);
+    finishProgress("context", "Executive context loaded", `${context.timezone} · ${context.dateKey}`);
+    writeProgress("calendar");
+    await progressDelay();
+    finishProgress("calendar", `${context.calendarAgenda.length} calendar event${context.calendarAgenda.length === 1 ? "" : "s"} read`, context.connectorDiagnostics.googleCalendar?.error || "Calendar context ready.");
+    writeProgress("linear");
+    await progressDelay();
+    finishProgress("linear", `${context.linearContext.issues.length} Linear issue${context.linearContext.issues.length === 1 ? "" : "s"} read`, context.connectorDiagnostics.linear?.error || "Linear context ready.");
+    writeProgress("commitments");
+    await progressDelay();
+    finishProgress("commitments", `${context.commitments.length} commitment candidate${context.commitments.length === 1 ? "" : "s"} normalized`);
+    writeProgress("risks");
+    await progressDelay();
+    finishProgress("risks", `${context.risks.length} risk/watchout${context.risks.length === 1 ? "" : "s"} detected`);
+    writeProgress("rank");
+    await progressDelay();
+    finishProgress("rank", `${context.rankedDayCandidates.length} day candidate${context.rankedDayCandidates.length === 1 ? "" : "s"} ranked`);
+    const proposedCalendarSchedule = proposedCalendarScheduleFromContext(context);
+    writeProgress("synthesize");
+    await progressDelay();
+    const executiveDayBrief = await synthesizeExecutiveDayBrief({ ...context, proposedCalendarSchedule });
+    finishProgress("synthesize", executiveDayBrief.mode === "model" ? "Executive day brief synthesized" : "Deterministic executive brief rendered", executiveDayBrief.modelError || "");
+    writeProgress("approvals");
+    await progressDelay();
+    const proposedActions = [
+      ...proposedLinearActionsFromContext(context),
+      ...(proposedCalendarSchedule.blocks?.length ? [{
+        title: `Fill ${proposedCalendarSchedule.blocks.length} Pillar Time calendar block${proposedCalendarSchedule.blocks.length === 1 ? "" : "s"} for ${context.dateKey}`,
+        kind: "calendar_schedule",
+        risk: "medium",
+        entityType: "calendar",
+        entityId: proposedCalendarSchedule.calendarId || "primary",
+        payload: {
+          operation: "createScheduleBlocks",
+          dateKey: context.dateKey,
+          timezone: context.timezone,
+          calendarId: proposedCalendarSchedule.calendarId || "primary",
+          blocks: proposedCalendarSchedule.blocks,
+        },
+      }] : []),
+    ];
+    const approvalItems = createApprovalItemsForRun(runId, proposedActions);
+    finishProgress("approvals", `${approvalItems.length} approval-gated action${approvalItems.length === 1 ? "" : "s"} created`, "Generated connector writes require explicit approval.");
+    writeProgress("deliver");
+    await progressDelay();
+    const generatedAt = now();
+    const artifact = {
+      title: executiveDayBrief.headline || `Executive day brief for ${context.dateKey}`,
+      generatedAt,
+      runType: "executive_day",
+      dateKey: context.dateKey,
+      timezone: context.timezone,
+      additionalContext: context.additionalContext,
+      basedOnRunId: context.basedOnRunId,
+      calendarAgenda: context.calendarAgenda,
+      linearContext: context.linearContext,
+      commitments: context.commitments,
+      rankedDayCandidates: context.rankedDayCandidates,
+      todaysThree: context.todaysThree,
+      risks: context.risks,
+      proposedActions,
+      proposedCalendarSchedule,
+      approvalItems,
+      connectorDiagnostics: context.connectorDiagnostics,
+      coverageNotes: context.coverageNotes,
+      trustedContextEnvelope: context.local.trustedContextEnvelope,
+      executiveDayBrief,
+    };
+    artifact.renderedBrief = renderExecutiveDayBrief(artifact);
+    artifact.onePageBrief = artifact.renderedBrief;
+    artifact.briefDocumentId = saveBriefDocument({ runId, artifact });
+    let telegramDelivery;
+    try {
+      telegramDelivery = await deliverBriefToTelegram({ runId, artifact });
+    } catch (error) {
+      telegramDelivery = { ok: false, error: error.message || "Telegram delivery failed", failedAt: now() };
+      run("UPDATE telegram_settings SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE id=1", { $t: now(), $err: telegramDelivery.error });
+      audit("telegram.delivery_failed", "workflow_run", runId, telegramDelivery.error, {}, "system");
+    }
+    artifact.telegramDelivery = telegramDelivery;
+    finishProgress("deliver", artifact.briefDocumentId ? "Executive artifact and document saved" : "Executive artifact saved", telegramDelivery?.ok ? "Telegram delivered." : telegramDelivery?.reason || telegramDelivery?.error || "Telegram skipped.");
+    const steps = workflowTemplate(configAtStart, "executive_day").map(([key, name, group], index) => ({ n: index + 1, key, name, group, status: "done", ms: 25 + index * 7, output: stepOutputs[key]?.output || "Done", detail: stepOutputs[key]?.detail || "" }));
+    const completed = now();
+    run(`INSERT INTO workflow_runs (id, label, trigger, run_type, status, started_at, completed_at, steps_json, artifact_json)
+         VALUES ($id, $label, $trigger, 'executive_day', 'completed', $started, $completed, $steps, $artifact)
+         ON CONFLICT(id) DO UPDATE SET label=excluded.label, run_type='executive_day', status='completed', completed_at=excluded.completed_at, steps_json=excluded.steps_json, artifact_json=excluded.artifact_json`, {
+      $id: runId, $trigger: trigger, $started: started, $completed: completed, $steps: json(steps), $artifact: json(artifact), $label: artifact.title,
+    });
+    audit("artifact.saved", "workflow_run", runId, "Executive day artifact persisted", { runType: "executive_day" }, "system");
+    return workflowRuns().find((r) => r.id === runId);
+  } catch (error) {
+    const completed = now();
+    const failedSteps = workflowProgressSteps({ activeKey: "", completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "executive_day" });
+    const failedIndex = Math.max(0, failedSteps.findIndex((step) => step.status !== "done"));
+    failedSteps[failedIndex] = { ...failedSteps[failedIndex], status: "error", output: error.message || "Workflow failed", detail: "Executive day generation stopped before saving or delivering a brief." };
+    run(`UPDATE workflow_runs
+         SET status='failed', completed_at=$completed, error=$error, steps_json=$steps, artifact_json=$artifact
+         WHERE id=$id`, {
+      $id: runId,
+      $completed: completed,
+      $error: error.message || "Workflow failed",
+      $steps: json(failedSteps),
+      $artifact: json({ error: error.message || "Workflow failed", failedAt: completed, runType: "executive_day" }),
+    });
+    throw error;
+  }
+}
+
 async function executeWorkflow(trigger = "Manual", options = {}) {
   const runId = options.runId || id("run");
   const started = now();
@@ -5421,21 +5637,21 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
   const writeProgress = (activeKey) => {
     run("UPDATE workflow_runs SET steps_json=$steps, artifact_json=$artifact WHERE id=$id", {
       $id: runId,
-      $steps: json(workflowProgressSteps({ activeKey, completed: completedKeys, outputs: stepOutputs, config: configAtStart })),
-      $artifact: json({ progressUpdatedAt: now(), activeStep: activeKey }),
+      $steps: json(workflowProgressSteps({ activeKey, completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "intelligence" })),
+      $artifact: json({ progressUpdatedAt: now(), activeStep: activeKey, runType: "intelligence" }),
     });
   };
   const finishProgress = (key, output = "Done", detail = "") => {
     completedKeys.add(key);
     stepOutputs[key] = { output, detail };
   };
-  run(`INSERT INTO workflow_runs (id, label, trigger, status, started_at, completed_at, steps_json, artifact_json)
-       VALUES ($id, $label, $trigger, 'running', $started, NULL, $steps, '{}')`, {
+  run(`INSERT INTO workflow_runs (id, label, trigger, run_type, status, started_at, completed_at, steps_json, artifact_json)
+       VALUES ($id, $label, $trigger, 'intelligence', 'running', $started, NULL, $steps, '{}')`, {
     $id: runId,
     $label: "Generating brief",
     $trigger: trigger,
     $started: started,
-    $steps: json(workflowProgressSteps({ activeKey: "fetch", completed: completedKeys, outputs: stepOutputs, config: configAtStart })),
+    $steps: json(workflowProgressSteps({ activeKey: "fetch", completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "intelligence" })),
   });
   audit("run.started", "workflow_run", runId, `Trigger: ${trigger}`, {}, "system");
   try {
@@ -5547,7 +5763,7 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
     : telegramDelivery?.skipped
       ? telegramDelivery.reason
       : telegramDelivery?.error || "Telegram delivery failed");
-  const steps = workflowTemplate().map(([key, name, group], index) => {
+  const steps = workflowTemplate(configAtStart, "intelligence").map(([key, name, group], index) => {
     let output = "Completed with no external mutation";
     let detail = "Deterministic step completed and persisted.";
     if (key === "fetch") {
@@ -5593,9 +5809,9 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
   });
   markItemsUsedInBrief(selectedIssues);
   const completed = now();
-  run(`INSERT INTO workflow_runs (id, label, trigger, status, started_at, completed_at, steps_json, artifact_json)
-       VALUES ($id, $label, $trigger, 'completed', $started, $completed, $steps, $artifact)
-       ON CONFLICT(id) DO UPDATE SET label=excluded.label, status='completed', completed_at=excluded.completed_at, steps_json=excluded.steps_json, artifact_json=excluded.artifact_json`, {
+  run(`INSERT INTO workflow_runs (id, label, trigger, run_type, status, started_at, completed_at, steps_json, artifact_json)
+       VALUES ($id, $label, $trigger, 'intelligence', 'completed', $started, $completed, $steps, $artifact)
+       ON CONFLICT(id) DO UPDATE SET label=excluded.label, run_type='intelligence', status='completed', completed_at=excluded.completed_at, steps_json=excluded.steps_json, artifact_json=excluded.artifact_json`, {
     $id: runId, $trigger: trigger, $started: started, $completed: completed, $steps: json(steps), $artifact: json(artifact),
     $label: artifact.title,
   });
@@ -5603,7 +5819,7 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
   return workflowRuns().find((r) => r.id === runId);
   } catch (error) {
     const completed = now();
-    const failedSteps = workflowProgressSteps({ activeKey: "", completed: completedKeys, outputs: stepOutputs, config: configAtStart });
+    const failedSteps = workflowProgressSteps({ activeKey: "", completed: completedKeys, outputs: stepOutputs, config: configAtStart, runType: "intelligence" });
     const failedIndex = Math.max(0, failedSteps.findIndex((step) => step.status !== "done"));
     failedSteps[failedIndex] = {
       ...failedSteps[failedIndex],
@@ -5618,7 +5834,7 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
       $completed: completed,
       $error: error.message || "Workflow failed",
       $steps: json(failedSteps),
-      $artifact: json({ error: error.message || "Workflow failed", failedAt: completed }),
+      $artifact: json({ error: error.message || "Workflow failed", failedAt: completed, runType: "intelligence" }),
     });
     throw error;
   }
@@ -5835,12 +6051,16 @@ app.get("/api/runtime/stt", async (req, res) => {
 });
 
 app.get("/api/audio/:fileName", (req, res) => {
-  const fileName = path.basename(String(req.params.fileName || ""));
-  const filePath = path.join(audioDir, fileName);
-  if (!fileName.endsWith(".mp3") || !fs.existsSync(filePath)) return res.status(404).json({ error: "Audio file not found", state: state() });
+  const audioFile = briefAudioFilePath({
+    audioDir,
+    fileName: req.params.fileName,
+    exists: (filePath) => fs.existsSync(filePath),
+    pathApi: path,
+  });
+  if (!audioFile) return res.status(404).json({ error: "Audio file not found", state: state() });
   res.setHeader("Content-Type", "audio/mpeg");
   res.setHeader("Cache-Control", "private, max-age=86400");
-  fs.createReadStream(filePath).pipe(res);
+  fs.createReadStream(audioFile.filePath).pipe(res);
 });
 
 app.get("/api/trusted-context", (req, res) => {
@@ -5854,40 +6074,33 @@ app.post("/api/trusted-context/envelope-preview", (req, res) => {
 
 app.post("/api/trusted-context/constitution", (req, res) => {
   const current = trustedContextConstitution();
-  const body = req.body?.body && typeof req.body.body === "object" ? req.body.body : current.body;
-  const editor = String(req.body?.editor || "local-user").trim() || "local-user";
-  const reason = String(req.body?.reason || "Updated Trusted Context constitution").trim();
-  const version = Number(current.version || 0) + 1;
-  const t = now();
-  const rowId = id("ctx-constitution");
+  const plan = constitutionUpdatePlan({
+    current,
+    input: req.body || {},
+    now: new Date(),
+    idFactory: () => id("ctx-constitution"),
+  });
   run(`INSERT INTO context_constitution_versions (id, version, body_json, editor, reason, created_at)
        VALUES ($id, $version, $body, $editor, $reason, $t)`, {
-    $id: rowId,
-    $version: version,
-    $body: json(body),
-    $editor: editor,
-    $reason: reason,
-    $t: t,
+    $id: plan.row.id,
+    $version: plan.row.version,
+    $body: json(plan.row.body),
+    $editor: plan.row.editor,
+    $reason: plan.row.reason,
+    $t: plan.row.createdAt,
   });
-  audit("trusted_context.constitution_updated", "context_constitution", rowId, reason, { fromVersion: current.version, toVersion: version }, editor);
+  audit(plan.audit.action, plan.audit.entityType, plan.audit.entityId, plan.audit.note, plan.audit.diff, plan.audit.actor);
   res.json({ trustedContext: trustedContextState(), state: state() });
 });
 
 app.post("/api/trusted-context/facts", (req, res) => {
-  const b = req.body || {};
-  const resourceType = String(b.resourceType || "profile.fact").trim();
-  const fieldKey = String(b.fieldKey || "").trim();
-  if (!fieldKey) return res.status(400).json({ error: "fieldKey is required", state: state() });
-  const partition = partitions.includes(b.partition) ? b.partition : "professional";
-  const visibility = visibilityLevels.includes(b.visibility) ? b.visibility : "assistant";
-  const trustLevel = Object.prototype.hasOwnProperty.call(trustLevels, b.trustLevel) ? b.trustLevel : "imported_unverified";
-  const verificationStatus = String(b.verificationStatus || (trustLevel === "verified_canonical_profile" ? "verified" : "unverified"));
   const t = now();
-  const factId = b.id || id("fact");
-  const meta = {
-    allowedAudiences: Array.isArray(b.allowedAudiences) ? b.allowedAudiences.map(String).filter(Boolean) : undefined,
-    fieldAuthorityRank: Number.isFinite(Number(b.fieldAuthorityRank)) ? Number(b.fieldAuthorityRank) : undefined,
-  };
+  let fact;
+  try {
+    fact = profileFactInput(req.body || {}, { now: new Date(t), idFactory: () => id("fact") });
+  } catch (error) {
+    return res.status(400).json(profileFactValidationErrorResponse(error));
+  }
   run(`INSERT INTO profile_facts (id, resource_type, field_key, value, value_json, partition, visibility, trust_level,
          verification_status, status, valid_from, valid_to, learned_at, provenance_id, source_label, confidence, created_by, created_at, updated_at)
        VALUES ($id, $resourceType, $fieldKey, $value, $valueJson, $partition, $visibility, $trustLevel,
@@ -5896,26 +6109,26 @@ app.post("/api/trusted-context/facts", (req, res) => {
          partition=$partition, visibility=$visibility, trust_level=$trustLevel, verification_status=$verificationStatus,
          status=$status, valid_from=$validFrom, valid_to=$validTo, learned_at=$learnedAt, provenance_id=$provenanceId,
          source_label=$sourceLabel, confidence=$confidence, updated_at=$t`, {
-    $id: factId,
-    $resourceType: resourceType,
-    $fieldKey: fieldKey,
-    $value: String(b.value || ""),
-    $valueJson: json(meta),
-    $partition: partition,
-    $visibility: visibility,
-    $trustLevel: trustLevel,
-    $verificationStatus: verificationStatus,
-    $status: ["active", "proposed", "disputed", "superseded", "expired"].includes(b.status) ? b.status : "active",
-    $validFrom: b.validFrom || null,
-    $validTo: b.validTo || null,
-    $learnedAt: b.learnedAt || t,
-    $provenanceId: b.provenanceId || null,
-    $sourceLabel: String(b.sourceLabel || "Manual entry"),
-    $confidence: Math.max(0, Math.min(1, Number(b.confidence ?? 0.75))),
-    $createdBy: String(b.createdBy || "local-user"),
+    $id: fact.id,
+    $resourceType: fact.resourceType,
+    $fieldKey: fact.fieldKey,
+    $value: fact.value,
+    $valueJson: json(fact.valueJson),
+    $partition: fact.partition,
+    $visibility: fact.visibility,
+    $trustLevel: fact.trustLevel,
+    $verificationStatus: fact.verificationStatus,
+    $status: fact.status,
+    $validFrom: fact.validFrom,
+    $validTo: fact.validTo,
+    $learnedAt: fact.learnedAt,
+    $provenanceId: fact.provenanceId,
+    $sourceLabel: fact.sourceLabel,
+    $confidence: fact.confidence,
+    $createdBy: fact.createdBy,
     $t: t,
   });
-  audit("trusted_context.fact_saved", "profile_fact", factId, `${resourceType}.${fieldKey}`, {}, "local-user");
+  audit("trusted_context.fact_saved", "profile_fact", fact.id, `${fact.resourceType}.${fact.fieldKey}`, {}, "local-user");
   res.json({ trustedContext: trustedContextState(), state: state() });
 });
 
@@ -6020,16 +6233,17 @@ app.post("/api/runtime/stt/model/install", async (req, res) => {
 });
 
 app.post("/api/runtime/ffmpeg/install", async (req, res) => {
-  if (!isDesktop || process.platform !== "darwin") {
-    return res.status(400).json({ error: "One-click FFmpeg install is only available in the macOS desktop app. Install FFmpeg with your system package manager.", ffmpeg: await ffmpegStatus(), state: state() });
-  }
   const status = await ffmpegStatus();
-  if (status.available) return res.json({ ok: true, message: "FFmpeg is already installed.", ffmpeg: status, state: state() });
-  if (!status.homebrewAvailable) {
+  const decision = ffmpegInstallDecision({ status, isDesktop, platform: process.platform });
+  if (decision.action === "unsupported") {
+    return res.status(400).json({ error: decision.message, ffmpeg: status, state: state() });
+  }
+  if (decision.action === "alreadyInstalled") return res.json({ ok: true, message: decision.message, ffmpeg: status, state: state() });
+  if (decision.action === "openHomebrewInstaller") {
     const scriptPath = await openHomebrewBootstrapInstaller();
     return res.json({
       ok: true,
-      message: "Opened the Homebrew and FFmpeg installer in Terminal. Return here and click Re-check when it finishes.",
+      message: decision.message,
       installerScriptPath: scriptPath,
       ffmpeg: await ffmpegStatus(),
       state: state(),
@@ -6245,52 +6459,20 @@ app.patch("/api/brief-config", (req, res) => {
   res.json(state());
 });
 
-function requestedPerspectiveLensLimit(promptText) {
-  const text = promptText.toLowerCase();
-  if (/\b(one|single|a lens|one lens|single lens|one perspective|single perspective)\b/.test(text)) return 1;
-  const digit = /\b([2-6])\b/.exec(text);
-  if (digit) return Number(digit[1]);
-  const wordCounts = { two: 2, three: 3, four: 4, five: 5, six: 6 };
-  for (const [word, count] of Object.entries(wordCounts)) {
-    if (new RegExp(`\\b${word}\\b`).test(text)) return count;
-  }
-  if (/\b(multiple|several|different perspectives|range of perspectives|set of perspectives|set of lenses|lenses|perspectives)\b/.test(text)) return 4;
-  return 1;
-}
-
 app.post("/api/perspective-lenses/generate", async (req, res) => {
   const promptText = String(req.body?.prompt || "").trim();
   if (promptText.length < 8) return res.status(400).json({ error: "Describe the perspectives you want first.", state: state() });
   if (modelSettings().status !== "ready") return res.status(400).json({ error: "Set up a working model before generating perspective lenses.", state: state() });
-  const lensLimit = requestedPerspectiveLensLimit(promptText);
-  const system = [
-    "You turn natural-language perspective requests into editable perspective lenses for a brief deliberation feature.",
-    "Infer how many lenses the user wants from the request.",
-    "Default to exactly one comprehensive lens when the user asks for one persona, one named thinker, one role, or one viewpoint.",
-    "Generate multiple lenses only when the user clearly asks for multiple, several, a set, a range, or names multiple viewpoints.",
-    "When a user references a real person, create an inspired analytical viewpoint, not a claim to represent that person's actual current opinions.",
-    "Each lens must be practical, source-grounded, and safe for a private intelligence brief.",
-    "Return only valid JSON.",
-  ].join(" ");
-  const modelPrompt = JSON.stringify({
-    task: `Generate exactly ${lensLimit} perspective lens${lensLimit === 1 ? "" : "es"} from the user's request.`,
-    request: promptText,
-    countRules: {
-      singularDefault: "If the request describes one persona or viewpoint, create one comprehensive lens with a rich role, description, and instructions.",
-      multipleOnlyWhenExplicit: "Only create multiple lenses when the user explicitly asks for multiple perspectives or names more than one viewpoint.",
-    },
-    requiredJsonShape: {
-      lenses: [{ name: "short name", role: "perspective role", description: "what it notices", instructions: "how it should evaluate a saved brief", enabled: true }],
-    },
-  });
+  const { lensLimit, system, prompt } = perspectiveLensGenerationPrompt(promptText);
   try {
-    const text = await callTextModel({ system, prompt: modelPrompt });
-    const payload = parseModelJson(text);
-    const lenses = sanitizePerspectiveLenses((Array.isArray(payload.lenses) ? payload.lenses : []).map((lens, index) => ({
-      ...lens,
-      id: lens.id || id(`perspective-${index + 1}`),
-    }))).slice(0, lensLimit);
-    if (!lenses.length) throw new Error("The model did not return usable perspective lenses.");
+    const text = await callTextModel({ system, prompt });
+    const lenses = generatedPerspectiveLensDrafts({
+      modelText: text,
+      lensLimit,
+      parseJson: parseModelJson,
+      sanitizeLenses: sanitizePerspectiveLenses,
+      createId: id,
+    });
     audit("perspectives.generated", "brief_config", "1", `Generated ${lenses.length} perspective lenses from onboarding prompt`, {}, "system");
     res.json({ lenses, state: state() });
   } catch (error) {
@@ -6465,9 +6647,17 @@ app.patch("/api/documents/:id", (req, res) => {
 
 app.post("/api/workflow-runs", async (req, res) => {
   const trigger = req.body?.trigger || "Manual";
+  const runType = req.body?.runType === "intelligence" ? "intelligence" : "executive_day";
   const runId = id("run");
+  const executiveOptions = {
+    runId,
+    dateKey: req.body?.dateKey,
+    timezone: req.body?.timezone,
+    additionalContext: req.body?.additionalContext,
+    basedOnRunId: req.body?.basedOnRunId,
+  };
   try {
-    const promise = executeWorkflow(trigger, { runId });
+    const promise = runType === "intelligence" ? executeWorkflow(trigger, { runId }) : executeExecutiveDayWorkflow(trigger, executiveOptions);
     if (req.body?.wait === true) {
       const run = await promise;
       return res.json({ state: state(), run });
@@ -6481,6 +6671,30 @@ app.post("/api/workflow-runs", async (req, res) => {
   }
 });
 
+app.post("/api/day-briefs", async (req, res) => {
+  const trigger = req.body?.trigger || "Manual · Executive day brief";
+  const runId = id("run");
+  try {
+    const promise = executeExecutiveDayWorkflow(trigger, { runId, dateKey: req.body?.dateKey, timezone: req.body?.timezone, additionalContext: req.body?.additionalContext, basedOnRunId: req.body?.basedOnRunId });
+    if (req.body?.wait === true) {
+      const run = await promise;
+      return res.json({ state: state(), run });
+    }
+    promise.catch((error) => {
+      audit("run.failed", "workflow_run", runId, error.message || "Executive day workflow failed", {}, "system");
+    });
+    res.status(202).json({ state: state(), run: workflowRuns().find((r) => r.id === runId) });
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Executive day workflow failed", state: state() });
+  }
+});
+
+app.get("/api/day-briefs/:id", (req, res) => {
+  const run = workflowRuns().find((item) => item.id === req.params.id && item.runType === "executive_day");
+  if (!run) return res.status(404).json({ error: "Executive day brief not found", state: state() });
+  res.json({ state: state(), run });
+});
+
 app.get("/api/workflow-runs/:id", (req, res) => {
   const run = workflowRuns().find((item) => item.id === req.params.id);
   if (!run) return res.status(404).json({ error: "Workflow run not found", state: state() });
@@ -6490,12 +6704,11 @@ app.get("/api/workflow-runs/:id", (req, res) => {
 app.post("/api/workflow-runs/:id/audio", async (req, res) => {
   try {
     const workflowRun = workflowRuns().find((item) => item.id === req.params.id);
-    if (!workflowRun) return res.status(404).json({ error: "Workflow run not found", state: state() });
-    if (workflowRun.artifact?.audio?.url && workflowRun.artifact?.audio?.fileName) {
-      return res.json({ audio: workflowRun.artifact.audio, state: state() });
-    }
-    const audio = await synthesizeElevenLabsAudio({ text: briefAudioText(workflowRun.artifact), filenamePrefix: `brief-${workflowRun.id}` });
-    const nextArtifact = { ...(workflowRun.artifact || {}), audio };
+    const plan = briefAudioGenerationPlan(workflowRun, renderOnePageBrief);
+    if (plan.status === "not-found") return res.status(404).json({ error: plan.error, state: state() });
+    if (plan.status === "cached") return res.json({ audio: plan.audio, state: state() });
+    const audio = await synthesizeElevenLabsAudio({ text: plan.text, filenamePrefix: plan.filenamePrefix });
+    const nextArtifact = briefAudioArtifact(workflowRun.artifact, audio);
     run("UPDATE workflow_runs SET artifact_json=$artifact WHERE id=$id", { $id: workflowRun.id, $artifact: json(nextArtifact) });
     audit("brief.audio_generated", "workflow_run", workflowRun.id, "Generated ElevenLabs audio for saved brief", { bytes: audio.bytes }, "system");
     res.json({ audio, state: state() });
@@ -6507,37 +6720,72 @@ app.post("/api/workflow-runs/:id/audio", async (req, res) => {
 app.patch("/api/approvals/:id", (req, res) => {
   const current = get("SELECT * FROM approval_items WHERE id=$id", { $id: req.params.id });
   if (!current) return res.status(404).json({ error: "Approval not found" });
-  const status = req.body?.status;
-  if (!["approved", "rejected"].includes(status)) return res.status(400).json({ error: "Invalid status" });
+  let update;
+  try {
+    update = approvalStatusUpdate({ id: req.params.id, status: req.body?.status, by: req.body?.by || "operator", note: req.body?.note || "", resolvedAt: now() });
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Invalid status" });
+  }
   run("UPDATE approval_items SET status=$status, resolved_by=$by, resolved_at=$t, resolution_note=$note WHERE id=$id", {
-    $id: req.params.id, $status: status, $by: req.body?.by || "operator", $t: now(), $note: req.body?.note || "",
+    $id: update.id, $status: update.status, $by: update.resolvedBy, $t: update.resolvedAt, $note: update.resolutionNote,
   });
-  audit(`approval.${status}`, "approval", req.params.id, req.body?.note || status);
+  audit(update.auditAction, "approval", update.id, update.auditNote);
   res.json(state());
+});
+
+async function executeApprovalItem(current, { by = "operator" } = {}) {
+  const payload = parse(current.payload_json, {});
+  const executed = await executeApprovalAction(current, {
+    payload,
+    by,
+    createGoogleCalendarEvent,
+    linearClient,
+  });
+  run("UPDATE approval_items SET status='executed', resolved_by=$by, resolved_at=$t, resolution_note=$note WHERE id=$id", {
+    $id: current.id,
+    $by: by,
+    $t: now(),
+    $note: executed.resolutionNote,
+  });
+  audit(executed.auditEvent, "approval", current.id, executed.auditSummary, executed.auditPayload, by);
+  return executed.result;
+}
+
+app.post("/api/approvals/:id/execute", async (req, res) => {
+  const current = get("SELECT * FROM approval_items WHERE id=$id", { $id: req.params.id });
+  if (!current) return res.status(404).json({ error: "Approval not found", state: state() });
+  try {
+    const result = await executeApprovalItem(current, { by: req.body?.by || "operator" });
+    res.json({ result, state: state() });
+  } catch (error) {
+    const payload = parse(current.payload_json, {});
+    run("UPDATE approval_items SET resolution_note=$note WHERE id=$id", { $id: req.params.id, $note: error.message || "Linear approval execution failed" });
+    audit("approval.execute_failed", "approval", req.params.id, error.message || "Approval execution failed", { payload, kind: current.kind }, req.body?.by || "operator");
+    res.status(400).json({ error: error.message || "Approval execution failed", state: state() });
+  }
 });
 
 app.patch("/api/telegram", (req, res) => {
   const b = req.body || {};
   const current = get("SELECT * FROM telegram_settings WHERE id=1");
-  const nextToken = b.botToken === "configured" ? current.bot_token : String(b.botToken || "").trim();
-  const nextChat = String(b.chatId || "").trim();
-  const allowedUsers = Array.isArray(b.allowedUsers) ? b.allowedUsers.map((user) => String(user).trim()).filter(Boolean) : [];
+  const plan = telegramSettingsPatchPlan(b, current);
   run(`UPDATE telegram_settings SET bot_token=$token, chat_id=$chat, allowed_users=$users, enabled=$enabled,
        last_error=$err, updated_at=$t WHERE id=1`, {
-    $token: nextToken,
-    $chat: nextChat,
-    $users: json(allowedUsers),
-    $enabled: b.enabled ? 1 : 0,
-    $err: b.enabled && !nextToken ? "Missing bot token" : b.enabled && !nextChat ? "Missing chat ID" : "",
+    $token: plan.botToken,
+    $chat: plan.chatId,
+    $users: json(plan.allowedUsers),
+    $enabled: plan.enabled ? 1 : 0,
+    $err: plan.lastError,
     $t: now(),
   });
-  audit("telegram.settings_updated", "telegram_settings", "1", b.enabled ? "Telegram enabled/updated" : "Telegram disabled/updated");
+  audit("telegram.settings_updated", "telegram_settings", "1", plan.auditNote);
   res.json(state());
 });
 
 app.post("/api/telegram/token/validate", async (req, res) => {
   try {
-    const { token, bot } = await validateTelegramToken(req.body?.botToken);
+    const current = get("SELECT * FROM telegram_settings WHERE id=1");
+    const { token, bot } = await validateTelegramToken(resolveTelegramBotTokenInput(req.body?.botToken, current));
     run("UPDATE telegram_settings SET bot_token=$token, last_checked_at=$t, last_error='', updated_at=$t WHERE id=1", { $token: token, $t: now() });
     audit("telegram.token_validated", "telegram_settings", "1", `Validated @${bot.username}`, {}, "system");
     res.json({ ok: true, botUsername: bot.username, botName: bot.first_name || bot.username, state: state() });
@@ -6549,9 +6797,8 @@ app.post("/api/telegram/token/validate", async (req, res) => {
 
 app.post("/api/telegram/pairing/start", async (req, res) => {
   try {
-    const requestedToken = String(req.body?.botToken || "").trim();
     const current = get("SELECT * FROM telegram_settings WHERE id=1");
-    const botToken = requestedToken && requestedToken !== "configured" ? requestedToken : current.bot_token;
+    const botToken = resolveTelegramBotTokenInput(req.body?.botToken || "configured", current);
     const { token, bot, base } = await validateTelegramToken(botToken);
     const webhook = await fetchWithTimeout(`${base}/getWebhookInfo`);
     const webhookPayload = await webhook.json().catch(() => ({}));
@@ -6654,8 +6901,8 @@ app.post("/api/telegram/pairing/:id/poll", async (req, res) => {
 
 app.post("/api/telegram/test", async (req, res) => {
   const tg = get("SELECT * FROM telegram_settings WHERE id=1");
-  if (!tg?.bot_token) return res.status(400).json({ error: "Missing bot token", state: state() });
-  if (!tg?.chat_id) return res.status(400).json({ error: "Missing chat ID", state: state() });
+  const readiness = telegramSettingsReadiness(tg);
+  if (!readiness.ok) return res.status(400).json({ error: readiness.error, state: state() });
   const base = `https://api.telegram.org/bot${tg.bot_token}`;
   try {
     const me = await fetchWithTimeout(`${base}/getMe`);
@@ -6663,7 +6910,8 @@ app.post("/api/telegram/test", async (req, res) => {
     if (!me.ok || !mePayload.ok) {
       throw new Error(mePayload.description || `Telegram getMe failed: ${me.status} ${me.statusText}`);
     }
-    const text = `Pillar Time test message.\nBot: @${mePayload.result?.username || "unknown"}\nTime: ${new Date().toLocaleString()}`;
+    const botUsername = mePayload.result?.username || "";
+    const text = telegramTestText({ botUsername });
     const send = await fetchWithTimeout(`${base}/sendMessage`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -6674,8 +6922,8 @@ app.post("/api/telegram/test", async (req, res) => {
       throw new Error(sendPayload.description || `Telegram sendMessage failed: ${send.status} ${send.statusText}`);
     }
     run("UPDATE telegram_settings SET enabled=1, last_checked_at=$t, last_error='', updated_at=$t WHERE id=1", { $t: now() });
-    audit("telegram.test_sent", "telegram_settings", "1", `Sent test message to chat ${tg.chat_id}`, { botUsername: mePayload.result?.username || "" }, "system");
-    res.json({ ok: true, botUsername: mePayload.result?.username || "", chatId: tg.chat_id, state: state() });
+    audit("telegram.test_sent", "telegram_settings", "1", `Sent test message to chat ${tg.chat_id}`, { botUsername }, "system");
+    res.json({ ...telegramTestResponse({ botUsername, chatId: tg.chat_id }), state: state() });
   } catch (error) {
     run("UPDATE telegram_settings SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE id=1", { $t: now(), $err: error.message || "Telegram test failed" });
     audit("telegram.test_failed", "telegram_settings", "1", error.message || "Telegram test failed", {}, "system");
@@ -6686,20 +6934,25 @@ app.post("/api/telegram/test", async (req, res) => {
 app.patch("/api/model", (req, res) => {
   const b = req.body || {};
   const current = get("SELECT * FROM model_settings WHERE id=1");
-  const provider = modelProviders.includes(b.provider) ? b.provider : "openai";
-  const baseUrl = provider === "custom" ? (b.baseUrl || "") : "";
+  const provider = normalizeModelProvider(b.provider);
   if (b.apiKey) saveModelProviderKey(provider, b.apiKey);
-  const apiKey = b.apiKey || savedModelProviderKey(provider, current);
-  const modelName = b.model || defaultModelForProvider(provider);
-  const missing = b.enabled && (!modelName || providerCredentialStatus(provider, apiKey) === "missing" || (provider === "custom" && !baseUrl));
+  const plan = modelSavePlan({
+    provider,
+    model: b.model || "",
+    apiKey: b.apiKey || "",
+    savedApiKey: savedModelProviderKey(provider, current),
+    envApiKey: providerEnvKey(provider),
+    enabled: !!b.enabled,
+    baseUrl: b.baseUrl || "",
+  });
   run(`UPDATE model_settings SET provider=$provider, model=$model, api_key=$apiKey, base_url=$baseUrl,
        enabled=$enabled, last_error=$err, updated_at=$t WHERE id=1`, {
-    $provider: provider,
-    $model: modelName,
-    $apiKey: apiKey,
-    $baseUrl: baseUrl,
-    $enabled: b.enabled ? 1 : 0,
-    $err: missing ? "Missing runtime provider key, model name, or custom Base URL" : "",
+    $provider: plan.provider,
+    $model: plan.model,
+    $apiKey: plan.apiKey,
+    $baseUrl: plan.baseUrl,
+    $enabled: plan.enabled ? 1 : 0,
+    $err: plan.lastError,
     $t: now(),
   });
   audit("model.settings_updated", "model_settings", "1", b.enabled ? "Model connector enabled/updated" : "Model connector disabled/updated");
@@ -6709,7 +6962,7 @@ app.patch("/api/model", (req, res) => {
 app.post("/api/model/models", async (req, res) => {
   const b = req.body || {};
   const current = get("SELECT * FROM model_settings WHERE id=1");
-  const provider = modelProviders.includes(b.provider) ? b.provider : "openai";
+  const provider = normalizeModelProvider(b.provider);
   const result = await fetchProviderModels({ provider, apiKey: b.apiKey || "", savedApiKey: savedModelProviderKey(provider, current), baseUrl: b.baseUrl || "" });
   run("UPDATE model_settings SET last_checked_at=$t, last_error=$err WHERE id=1", { $t: now(), $err: result.error || "" });
   res.json({ ...result, state: state() });
@@ -6717,42 +6970,32 @@ app.post("/api/model/models", async (req, res) => {
 
 app.post("/api/google-calendar/oauth/start", (req, res) => {
   const b = req.body || {};
-  const clientId = String(b.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID).trim();
-  const clientSecret = String(b.clientSecret || GOOGLE_CALENDAR_CLIENT_SECRET || "").trim();
-  if (!clientId) return res.status(400).json({ error: "Google Calendar OAuth client ID is not configured.", state: state() });
   const redirectUri = googleCalendarRedirectUri(req);
   const stateToken = id("gcal");
   const pkce = googleCalendarPkcePair();
-  const data = {
-    ...googleCalendarCredential().data,
-    clientId,
-    clientSecret: clientSecret || "",
-    redirectUri,
-    oauthState: stateToken,
-    codeVerifier: pkce.verifier,
-    scope: GOOGLE_CALENDAR_SCOPE,
-    calendarId: "selected",
-    selectedCalendarIds: googleCalendarCredential().data.selectedCalendarIds || ["primary"],
-  };
-  saveGoogleCalendarCredential(data, { enabled: !!data.refreshToken });
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    scope: GOOGLE_CALENDAR_SCOPE,
-    access_type: "offline",
-    prompt: "consent",
-    state: stateToken,
-    code_challenge: pkce.challenge,
-    code_challenge_method: "S256",
-  })}`;
+  let plan;
+  try {
+    plan = googleCalendarOAuthStartPlan({
+      body: b,
+      currentData: googleCalendarCredential().data,
+      defaultClientId: GOOGLE_CALENDAR_DESKTOP_CLIENT_ID,
+      defaultClientSecret: GOOGLE_CALENDAR_CLIENT_SECRET,
+      redirectUri,
+      stateToken,
+      pkce,
+      scope: GOOGLE_CALENDAR_SCOPE,
+    });
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Google Calendar OAuth failed", state: state() });
+  }
+  saveGoogleCalendarCredential(plan.data, { enabled: !!plan.data.refreshToken });
   audit("google_calendar.oauth_started", "connector", GOOGLE_CALENDAR_PROVIDER, "Started Google Calendar OAuth consent", { redirectUri }, "system");
   if (isDesktop && process.platform === "darwin") {
-    execFile("/usr/bin/open", ["-a", "Google Chrome", authUrl], (error) => {
+    execFile("/usr/bin/open", ["-a", "Google Chrome", plan.authUrl], (error) => {
       if (error) console.error("Failed to open Google Calendar OAuth in Chrome:", error.message || error);
     });
   }
-  res.json({ authUrl, redirectUri, state: state() });
+  res.json({ authUrl: plan.authUrl, redirectUri, state: state() });
 });
 
 app.get("/api/google-calendar/oauth/callback", async (req, res) => {
@@ -6778,16 +7021,7 @@ app.get("/api/google-calendar/oauth/callback", async (req, res) => {
       redirectUri: data.redirectUri,
       codeVerifier: data.codeVerifier,
     });
-    const nextData = {
-      ...data,
-      refreshToken: token.refresh_token || data.refreshToken || "",
-      accessToken: token.access_token || "",
-      expiresAt: Date.now() + Number(token.expires_in || 3600) * 1000,
-      tokenType: token.token_type || "Bearer",
-      oauthState: "",
-      codeVerifier: "",
-    };
-    if (!nextData.refreshToken) throw new Error("Google did not return a refresh token. Try connecting again and approve offline access.");
+    const nextData = googleCalendarConnectedData({ currentData: data, token });
     saveGoogleCalendarCredential(nextData, { enabled: true });
     ensureGoogleCalendarBriefSetup();
     run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now() });
@@ -6830,15 +7064,7 @@ app.post("/api/google-calendar/calendars", async (req, res) => {
   try {
     const calendars = await fetchGoogleCalendarList();
     const credential = googleCalendarCredential();
-    const currentSelected = Array.isArray(credential.data.selectedCalendarIds) && credential.data.selectedCalendarIds.length
-      ? credential.data.selectedCalendarIds
-      : calendars.filter((calendar) => calendar.primary || calendar.selected).map((calendar) => calendar.id);
-    const nextData = {
-      ...credential.data,
-      calendars,
-      selectedCalendarIds: currentSelected.length ? currentSelected : ["primary"],
-      calendarId: "selected",
-    };
+    const nextData = googleCalendarListData({ credentialData: credential.data, calendars });
     saveGoogleCalendarCredential(nextData, { enabled: true });
     ensureGoogleCalendarBriefSetup();
     run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $t: now() });
@@ -6852,10 +7078,12 @@ app.post("/api/google-calendar/calendars", async (req, res) => {
 app.patch("/api/google-calendar/calendars", (req, res) => {
   const credential = googleCalendarCredential();
   if (!credential.enabled || !credential.data.refreshToken) return res.status(400).json({ error: "Connect Google Calendar before choosing calendars.", state: state() });
-  const selectedCalendarIds = Array.from(new Set((Array.isArray(req.body?.selectedCalendarIds) ? req.body.selectedCalendarIds : [])
-    .map((item) => String(item || "").trim())
-    .filter(Boolean)));
-  if (!selectedCalendarIds.length) return res.status(400).json({ error: "Choose at least one calendar.", state: state() });
+  let selectedCalendarIds;
+  try {
+    selectedCalendarIds = googleCalendarSelectedCalendarIds(req.body?.selectedCalendarIds);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Choose at least one calendar.", state: state() });
+  }
   const nextData = { ...credential.data, selectedCalendarIds, calendarId: "selected" };
   saveGoogleCalendarCredential(nextData, { enabled: true });
   audit("google_calendar.calendars_updated", "connector", GOOGLE_CALENDAR_PROVIDER, `Selected ${selectedCalendarIds.length} calendar${selectedCalendarIds.length === 1 ? "" : "s"}`, {}, "system");
@@ -7084,24 +7312,18 @@ app.patch("/api/tts", (req, res) => {
          ON CONFLICT(provider) DO UPDATE SET api_key=$apiKey, enabled=1, last_error='', updated_at=$t`, { $apiKey: apiKey, $t: now() });
   }
   const current = get("SELECT * FROM tts_settings WHERE id=1");
-  const enabled = b.enabled === undefined ? !!current.enabled : !!b.enabled;
-  const voiceId = String(b.voiceId ?? current.voice_id ?? "").trim();
-  const voiceName = String(b.voiceName ?? current.voice_name ?? "").trim();
-  const modelId = String(b.modelId ?? current.model_id ?? "eleven_multilingual_v2").trim() || "eleven_multilingual_v2";
-  const telegramAutoSend = b.telegramAutoSend === undefined ? !!current.telegram_auto_send : !!b.telegramAutoSend;
-  const hasKey = !!elevenLabsKey(apiKey);
-  const lastError = enabled && (!hasKey || !voiceId) ? "Missing ElevenLabs API key or voice" : "";
+  const plan = ttsSettingsPatchPlan(b, current, { hasKey: !!elevenLabsKey(apiKey) });
   run(`UPDATE tts_settings SET provider='elevenlabs', voice_id=$voiceId, voice_name=$voiceName, model_id=$modelId,
        telegram_auto_send=$telegramAutoSend, enabled=$enabled, last_error=$lastError, updated_at=$t WHERE id=1`, {
-    $voiceId: voiceId,
-    $voiceName: voiceName,
-    $modelId: modelId,
-    $telegramAutoSend: telegramAutoSend ? 1 : 0,
-    $enabled: enabled ? 1 : 0,
-    $lastError: lastError,
+    $voiceId: plan.voiceId,
+    $voiceName: plan.voiceName,
+    $modelId: plan.modelId,
+    $telegramAutoSend: plan.telegramAutoSend ? 1 : 0,
+    $enabled: plan.enabled ? 1 : 0,
+    $lastError: plan.lastError,
     $t: now(),
   });
-  audit("tts.settings_updated", "tts", "elevenlabs", enabled ? "ElevenLabs TTS enabled/updated" : "ElevenLabs TTS disabled/updated");
+  audit("tts.settings_updated", "tts", "elevenlabs", plan.auditNote);
   res.json(state());
 });
 
@@ -7121,24 +7343,53 @@ app.post("/api/tts/preview", async (req, res) => {
 });
 
 app.post("/api/telegram/commands", async (req, res) => {
-  const command = String(req.body?.command || "").trim();
+  const parsedCommand = parseTelegramCommand(req.body?.command);
+  const command = parsedCommand.raw;
   const tg = get("SELECT * FROM telegram_settings WHERE id=1");
   const recent = parse(tg.recent_commands, []);
   let result = "Unsupported command";
   try {
-    if (command === "/brief") result = workflowRuns()[0]?.id ? `Latest run: ${workflowRuns()[0].id}` : "No briefs have been generated yet.";
-    if (command === "/sources") result = `${sources().length} configured source(s).`;
-    if (command === "/lenses") result = `${briefConfig().perspectiveLenses.filter((l) => l.enabled !== false).length} perspective lens(es) configured.`;
-    if (command === "/councils") result = "Councils have been replaced by Brief Setup analyzers and optional perspective deliberation.";
-    if (command === "/review") result = `${approvals().filter((a) => a.status === "pending").length} pending approval(s).`;
-    if (command.startsWith("/deliberate")) {
-      const [, requestedRunId] = command.split(/\s+/);
+    if (parsedCommand.command === "/brief") result = workflowRuns()[0]?.id ? `Latest run: ${workflowRuns()[0].id}` : "No briefs have been generated yet.";
+    if (parsedCommand.command === "/sources") result = `${sources().length} configured source(s).`;
+    if (parsedCommand.command === "/lenses") result = `${briefConfig().perspectiveLenses.filter((l) => l.enabled !== false).length} perspective lens(es) configured.`;
+    if (parsedCommand.command === "/councils") result = "Councils have been replaced by Brief Setup analyzers and optional perspective deliberation.";
+    if (parsedCommand.command === "/review") result = `${approvals().filter((a) => a.status === "pending").length} pending approval(s).`;
+    if (parsedCommand.command === "/deliberate") {
+      const [requestedRunId] = parsedCommand.args;
       const runId = requestedRunId || workflowRuns()[0]?.id;
       result = runId ? formatDeliberation(await deliberateWorkflowRun(runId)) : "No briefs have been generated yet.";
     }
-    if (command.startsWith("/analyze")) result = `Ad-hoc analysis requires configured model credentials. Request recorded: ${command}`;
-    if (command.startsWith("/approve") || command.startsWith("/reject") || command.startsWith("/add_source") || command.startsWith("/add_lens")) result = "State-changing Telegram commands are adapter-backed and require authenticated Telegram user context.";
-    const next = [{ command, result, ts: now() }, ...recent].slice(0, 20);
+    if (parsedCommand.command === "/analyze") result = `Ad-hoc analysis requires configured model credentials. Request recorded: ${command}`;
+    if (parsedCommand.command === "/approve") {
+      const current = parsedCommand.requestedId
+        ? get("SELECT * FROM approval_items WHERE id=$id AND status='pending'", { $id: parsedCommand.requestedId })
+        : get("SELECT * FROM approval_items WHERE status='pending' ORDER BY created_at ASC LIMIT 1");
+      if (!current) result = "No pending approval found.";
+      else {
+        run("UPDATE approval_items SET status='approved', resolved_by='telegram', resolved_at=$t, resolution_note='Approved from Telegram command.' WHERE id=$id", { $id: current.id, $t: now() });
+        audit("approval.approved", "approval", current.id, "Approved from Telegram command.", {}, "telegram");
+        const approved = get("SELECT * FROM approval_items WHERE id=$id", { $id: current.id });
+        if (approved.kind === "calendar_schedule") {
+          const executed = await executeApprovalItem(approved, { by: "telegram" });
+          result = `Approved and filled calendar: ${executed.createdEvents?.length || 0} event(s) created.`;
+        } else {
+          result = `Approved ${approved.title}. Execute it from Pillar Time when ready.`;
+        }
+      }
+    }
+    if (parsedCommand.command === "/reject") {
+      const current = parsedCommand.requestedId
+        ? get("SELECT * FROM approval_items WHERE id=$id AND status='pending'", { $id: parsedCommand.requestedId })
+        : get("SELECT * FROM approval_items WHERE status='pending' ORDER BY created_at ASC LIMIT 1");
+      if (!current) result = "No pending approval found.";
+      else {
+        run("UPDATE approval_items SET status='rejected', resolved_by='telegram', resolved_at=$t, resolution_note='Rejected from Telegram command.' WHERE id=$id", { $id: current.id, $t: now() });
+        audit("approval.rejected", "approval", current.id, "Rejected from Telegram command.", {}, "telegram");
+        result = `Rejected ${current.title}.`;
+      }
+    }
+    if (telegramCommandAvailability(parsedCommand) === "unavailable") result = "That Telegram command is not available yet.";
+    const next = recentTelegramCommands(recent, { command, result, ts: now() });
     run("UPDATE telegram_settings SET recent_commands=$recent, last_checked_at=$t WHERE id=1", { $recent: json(next), $t: now() });
     audit("telegram.command", "telegram_settings", "1", command, { result });
     res.json({ result, state: state() });

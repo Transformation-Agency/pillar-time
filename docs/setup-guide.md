@@ -54,4 +54,4 @@ ElevenLabs is optional and enables text-to-speech playback and Telegram audio de
 - ElevenLabs API keys: https://elevenlabs.io/app/settings/api-keys
 - ElevenLabs text-to-speech API docs: https://elevenlabs.io/docs/api-reference/text-to-speech/stream
 
-Local voice input uses the bundled whisper.cpp command and tiny English model in desktop builds. Self-hosted web deployments can configure their own whisper.cpp path and model path with `WHISPER_CPP_PATH` and `WHISPER_MODEL_PATH`.
+Local voice input can use whisper.cpp when you install it separately. Set `WHISPER_CPP_PATH` and `WHISPER_MODEL_PATH` to enable private local speech-to-text, or configure an OpenAI-compatible transcription endpoint as the fallback. Desktop builds do not bundle Whisper or a model by default.

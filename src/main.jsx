@@ -1,6 +1,152 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import {
+  briefAudioButtonState,
+  briefAudioPlayingForEvent,
+  briefAudioRestartPlan,
+  briefAudioSelectionState,
+} from "./briefAudio.js";
+import {
+  briefSetupApplyFallbackRequests,
+  briefSetupApplyRequest,
+  briefSetupDraftMessage,
+  briefSetupDraftRequest,
+  localBriefSetupDraft,
+  localBriefSetupDraftMessage,
+  shouldUseLocalBriefSetupFallback,
+} from "./briefSetupDraft.js";
+import {
+  calendarSetupMessageTone,
+  refreshCalendarStatusFlow,
+  startCalendarOAuthFlow,
+} from "./calendarOnboarding.js";
 import { desktopRuntime } from "./desktopRuntime.js";
+import {
+  desktopUpdateBannerVisible,
+  desktopUpdateCheckErrorState,
+  desktopUpdateCheckingState,
+  desktopUpdateDownloadProgress,
+  desktopUpdateHelpMessage,
+  desktopUpdateInstalledState,
+  desktopUpdateInstallErrorState,
+  desktopUpdateInstallStartState,
+  desktopUpdateIsBusy,
+  desktopUpdateResultState,
+  desktopUpdateSettingsLabel,
+  desktopUpdateSettingsNoticeTitle,
+  desktopUpdateSettingsTone,
+  desktopUpdateStatusIcon,
+} from "./desktopUpdates.js";
+import {
+  ELEVENLABS_DEFAULT_MODEL,
+  ELEVENLABS_PREVIEW_TEXT,
+  elevenLabsInitialVoices,
+  elevenLabsSaveReadiness,
+  elevenLabsSetupMessageTone,
+  elevenLabsSetupRequest,
+  elevenLabsVoiceName,
+  nextElevenLabsVoiceId,
+} from "./elevenLabsSetup.js";
+import {
+  localDependencyRuntimeRequest,
+  localDependencySettingsView,
+} from "./localDependencies.js";
+import {
+  appendPerspectiveTranscript,
+  perspectiveGenerationFailure,
+  perspectiveGenerationRequest,
+  perspectiveGenerationSuccess,
+  perspectiveVoiceFailure,
+} from "./perspectiveLensGeneration.js";
+import { generationProgressViewModel } from "./progressViewModel.js";
+import {
+  activePerspectiveLensCount,
+  addPerspectiveLens,
+  editPerspectiveLenses,
+  filterPerspectiveLenses,
+  newPerspectiveLens,
+  perspectiveLensMessageTone,
+  removePerspectiveLens,
+  savePerspectiveLensesFlow,
+  updatePerspectiveLens,
+} from "./perspectiveLenses.js";
+import {
+  canCompleteOnboarding,
+  deliverySaveRequest,
+  firstIncompleteOnboardingStep,
+  initialOnboardingStep,
+  isDefaultOwnerName,
+  onboardingCompleteRequest,
+  onboardingReviewReadiness,
+  onboardingStepLabels,
+  onboardingSteps,
+} from "./onboardingCompletion.js";
+import {
+  energyStateOptions,
+  timeWindowOptions,
+  whatShouldIDoNow,
+} from "./nowRecommendation.js";
+import { submitQuickTaskCapture } from "./quickTaskCapture.js";
+import { todayAgendaRows } from "./todayAgenda.js";
+import {
+  reminderDefaultPatch,
+  saveReminderDefaultsFlow,
+} from "./reminderDefaults.js";
+import { todayReminderRows } from "./todayReminders.js";
+import {
+  reviewMessageTone,
+  toggleReviewTemplateFlow,
+} from "./reviewTemplates.js";
+import {
+  connectorMessageTone,
+  connectorModalTarget,
+  connectorRequest,
+  settingsResearchRows,
+  toggleCalendarSelection,
+} from "./settingsConnectors.js";
+import { settingsAuditVisibility } from "./settingsAudit.js";
+import {
+  addSelectedSourcesDecision,
+  continueAfterAccessDecision,
+  skipPrerequisiteSelection,
+  sourceCreateRequest,
+  sourcePrerequisiteKeys,
+  sourcePrerequisites,
+  sourceReadyForOnboarding,
+} from "./sourceSuggestions.js";
+import {
+  defaultConfig,
+  sourceDefinitions,
+  sourceSubmitRequest,
+} from "./sourceForm.js";
+import {
+  podcastResolvePatch,
+  podcastTranscriptionAvailable,
+  podcastTranscriptionNotice,
+} from "./podcastSource.js";
+import {
+  starterCommitmentMessageTone,
+  submitStarterCommitmentFlow,
+} from "./starterCommitment.js";
+import {
+  telegramPaired,
+  telegramPairingMessageTone,
+  telegramPairingPollMessage,
+  telegramPairingPollRequest,
+  telegramPairingStartMessage,
+  telegramPairingStartRequests,
+  telegramPairingStatusView,
+} from "./telegramPairing.js";
+import {
+  telegramSaveMessage,
+  telegramSettingsForm,
+  telegramSettingsMessageTone,
+  telegramSettingsRequest,
+  telegramTestMessage,
+  telegramTestRequest,
+} from "./telegramSettings.js";
+import { trustedContextConstitutionView } from "./trustedContextConstitution.js";
+import { trustedContextFactAfterSave, trustedContextFactDefaultForm, trustedContextFactSavePlan } from "./trustedContextFactForm.js";
 import {
   BookOpen,
   Bot,
@@ -46,7 +192,7 @@ import "./styles.css";
 
 const nav = [
   ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
-  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"]]],
+  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["linear", "Linear"], ["approvals", "Approvals"], ["trustedContext", "Trusted Context"], ["documents", "Documents"]]],
   ["Configure", [["briefSetup", "Brief Setup"], ["lenses", "Perspective Lenses"]]],
   ["System", [["settings", "Settings"]]],
 ];
@@ -77,135 +223,6 @@ const workflowLabels = {
   save: "save artifact/run outputs",
   telegram: "deliver Telegram brief",
 };
-
-const sourceDefinitions = {
-  Web: {
-    credential: "No API key. Use for public pages; the fetch adapter should use readability/extraction.",
-    modes: {
-      page: { label: "Single page", fields: [["url", "URL", "https://example.com/report"]] },
-      search: { label: "Site/topic search", fields: [["url", "Site URL", "https://example.com"], ["query", "Search/topic terms", "AI policy OR compute"]] },
-    },
-  },
-  RSS: {
-    credential: "No API key. Watches a feed URL and filters optional keywords.",
-    modes: {
-      feed: { label: "Feed URL", fields: [["feedUrl", "Feed URL", "https://site.com/feed.xml"], ["keywords", "Optional keywords", "compute, policy, AI"]] },
-    },
-  },
-  Reddit: {
-    credential: "No key is usually needed for public subreddit/user/page reads via public web or JSON-style collectors. Reddit OAuth is the more durable path for higher-volume, private, or policy-compliant API use.",
-    modes: {
-      subreddit: { label: "Public subreddit posts", fields: [["subreddits", "Subreddits", "geopolitics, MachineLearning"], ["sort", "Sort", "new | hot | top"], ["keywords", "Optional keywords", "AI chips OR China"]] },
-      user: { label: "Public user posts/comments", fields: [["username", "Username", "spez"], ["include", "Include", "posts | comments | both"]] },
-      search: { label: "Public Reddit search", fields: [["query", "Search query", "\"frontier model\" OR compute"], ["scope", "Scope", "all Reddit or subreddit list"], ["sort", "Sort", "relevance | new | top"]] },
-    },
-  },
-  X: {
-    credential: "Official X API access requires a token. X sources always run in locked quick mode: max 10 posts, no replies, no retweets, and a 1-hour cache to avoid burning credits.",
-    modes: {
-      search: { label: "Quick recent search", fields: [["query", "Search query", "(AI OR compute) lang:en"]] },
-    },
-  },
-  YouTube: {
-    credential: "No key is needed for channel RSS/public page watching. The YouTube Data API key is useful for official search, richer metadata, playlist details, and quota-managed reliability.",
-    modes: {
-      channel: { label: "Channel RSS/public uploads", fields: [["channel", "Channel ID or handle", "@lexfridman"], ["keywords", "Optional keywords", "AI, geopolitics"]] },
-      playlist: { label: "Public playlist / API playlist", fields: [["playlistId", "Playlist ID", "PL..."]] },
-      search: { label: "YouTube keyword search", fields: [["query", "Search query", "AI infrastructure"], ["order", "Order", "date | relevance | viewCount"]] },
-    },
-  },
-  Podcast: {
-    credential: "No API key for standard podcast RSS. Spotify links are resolved to the show's public RSS feed when possible; transcription uses local Whisper STT when available or an OpenAI-compatible fallback.",
-    modes: {
-      feed: { label: "Podcast RSS", fields: [["feedUrl", "RSS feed URL", "https://podcast.com/feed.xml"], ["keywords", "Optional episode keywords", "AI, strategy"]] },
-      spotify: { label: "Spotify link → RSS", fields: [["spotifyUrl", "Spotify episode/show URL", "https://open.spotify.com/episode/..."], ["feedUrl", "Resolved RSS feed", "Click Resolve RSS"], ["keywords", "Optional episode keywords", "AI, strategy"]] },
-    },
-  },
-  Calendar: {
-    credential: "Requires Google Calendar OAuth. Pillar Time uses read-only access to include today's agenda in your brief.",
-    modes: {
-      google: { label: "Selected Google calendars", fields: [] },
-    },
-  },
-  Newsletter: {
-    credential: "Usually RSS/archive URL based. Private inbox newsletters need a separate email integration, not a generic locator.",
-    modes: {
-      feed: { label: "RSS/archive", fields: [["feedUrl", "Feed or archive URL", "https://newsletter.com/feed"], ["keywords", "Optional keywords", "markets, compute"]] },
-      archive: { label: "Public archive page", fields: [["url", "Archive URL", "https://newsletter.com/archive"], ["keywords", "Optional keywords", "China, AI"]] },
-    },
-  },
-  TikTok: {
-    credential: "Official TikTok research/content APIs are gated. Public/browser collection may work for visible accounts/search pages, but expect fragility, login walls, and rate limiting.",
-    modes: {
-      research_search: { label: "Public/API keyword search", fields: [["query", "Search query", "AI regulation"], ["region", "Region", "US | EU"]] },
-      account: { label: "Public account watch", fields: [["username", "Username", "@creator"]] },
-    },
-  },
-};
-
-function defaultConfig(type) {
-  const mode = Object.keys(sourceDefinitions[type].modes)[0];
-  return { mode };
-}
-
-function sourceLocator(type, config) {
-  const mode = config.mode;
-  if (type === "Calendar") return config.calendarId === "primary" ? "primary" : "selected";
-  if (type === "Reddit") {
-    if (mode === "subreddit") return `subreddits:${config.subreddits || ""}`;
-    if (mode === "user") return `u/${config.username || ""}`;
-    return `search:${config.query || ""}`;
-  }
-  if (type === "X") return mode === "search" ? `search:${config.query || ""}` : config.handle || "";
-  if (type === "YouTube") return config.channel || config.playlistId || `search:${config.query || ""}`;
-  if (type === "Podcast" && mode === "spotify") return config.feedUrl || config.spotifyUrl || "";
-  return config.feedUrl || config.url || config.query || config.username || "";
-}
-
-function sourcePrerequisites(source, state) {
-  const notes = [];
-  if (source.type === "Calendar" && state.connectors?.googleCalendar?.status !== "ready") {
-    notes.push({
-      key: "googleCalendar",
-      blocking: true,
-      label: "Needs Google Calendar",
-      body: "Connect Google Calendar before this source can fetch today's agenda.",
-    });
-  }
-  if (source.type === "X" && state.connectors?.x?.status !== "ready") {
-    notes.push({
-      key: "x",
-      blocking: true,
-      label: "Needs X API token",
-      body: "Set up an X developer Bearer Token before this source can fetch posts.",
-    });
-  }
-  if (source.type === "Podcast" && source.config?.transcribeNewEpisodes !== false) {
-    if (state.runtime?.ffmpeg?.available === false) {
-      notes.push({
-        key: "ffmpeg",
-        blocking: true,
-        label: "Needs FFmpeg",
-        body: "Install FFmpeg before long podcast audio can be split and converted for transcription.",
-      });
-    }
-    const localSttReady = state.runtime?.stt?.available;
-    const transcriptionModelReady = localSttReady || (["openai", "custom"].includes(state.model?.provider) && state.model?.status === "ready");
-    if (!transcriptionModelReady) {
-      notes.push({
-        key: "transcriptionModel",
-        blocking: true,
-        label: "Needs speech-to-text",
-        body: "Podcast transcription needs local Whisper STT or an OpenAI-compatible transcription endpoint.",
-      });
-    }
-  }
-  return notes;
-}
-
-function sourceReadyForOnboarding(source, state) {
-  return sourcePrerequisites(source, state).every((note) => !note.blocking);
-}
 
 function encodeMonoWav(chunks, sampleRate) {
   const totalSamples = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
@@ -238,10 +255,6 @@ function encodeMonoWav(chunks, sampleRate) {
   view.setUint32(40, pcm.length * 2, true);
   for (let i = 0; i < pcm.length; i += 1) view.setInt16(44 + i * 2, pcm[i], true);
   return new Blob([buffer], { type: "audio/wav" });
-}
-
-function sourcePrerequisiteKeys(source, state) {
-  return [...new Set(sourcePrerequisites(source, state).filter((note) => note.blocking).map((note) => note.key))];
 }
 
 function safeDecodeText(value) {
@@ -315,6 +328,7 @@ function Icon({ name }) {
     councils: Users,
     telegram: Send,
     audit: ShieldCheck,
+    approvals: Check,
     settings: SettingsIcon,
     plus: Plus,
     run: Sparkles,
@@ -468,36 +482,16 @@ function useDesktopUpdates() {
       setUpdateState((current) => ({ ...current, isDesktop: false, status: "idle" }));
       return null;
     }
-    setUpdateState((current) => ({
-      ...current,
-      isDesktop: true,
-      status: silent ? "checking-silent" : "checking",
-      message: silent ? current.message : "Checking for updates...",
-      progress: "",
-    }));
+    setUpdateState((current) => desktopUpdateCheckingState(current, { silent }));
     try {
       const [version, update] = await Promise.all([
         desktopRuntime.appVersion(),
         desktopRuntime.checkForUpdates(),
       ]);
-      setUpdateState((current) => ({
-        ...current,
-        isDesktop: true,
-        version,
-        status: update ? "available" : "current",
-        update,
-        message: update ? `Version ${update.version} is ready to install.` : "Pillar Time is up to date.",
-        progress: "",
-      }));
+      setUpdateState((current) => desktopUpdateResultState(current, { version, update }));
       return update;
     } catch (error) {
-      setUpdateState((current) => ({
-        ...current,
-        isDesktop: true,
-        status: silent ? "idle" : "error",
-        message: silent ? current.message : error.message,
-        progress: "",
-      }));
+      setUpdateState((current) => desktopUpdateCheckErrorState(current, error, { silent }));
       return null;
     }
   }, []);
@@ -505,45 +499,16 @@ function useDesktopUpdates() {
   const installUpdate = React.useCallback(async () => {
     if (!updateState.update) return;
     let downloaded = 0;
-    setUpdateState((current) => ({
-      ...current,
-      status: "installing",
-      message: `Downloading version ${current.update?.version || "update"}...`,
-      progress: "",
-    }));
+    setUpdateState(desktopUpdateInstallStartState);
     try {
       await desktopRuntime.downloadAndInstallUpdate(updateState.update, (event) => {
-        if (event.event === "Started") {
-          downloaded = 0;
-          setUpdateState((current) => ({
-            ...current,
-            progress: event.data?.contentLength ? `0 of ${Math.round(event.data.contentLength / 1024 / 1024)} MB` : "Download started",
-          }));
-        }
-        if (event.event === "Progress") {
-          downloaded += event.data?.chunkLength || 0;
-          setUpdateState((current) => ({
-            ...current,
-            progress: `${Math.max(1, Math.round(downloaded / 1024 / 1024))} MB downloaded`,
-          }));
-        }
-        if (event.event === "Finished") {
-          setUpdateState((current) => ({ ...current, progress: "Download complete" }));
-        }
+        const nextProgress = desktopUpdateDownloadProgress(event, downloaded);
+        downloaded = nextProgress.downloaded;
+        if (nextProgress.progress) setUpdateState((current) => ({ ...current, progress: nextProgress.progress }));
       });
-      setUpdateState((current) => ({
-        ...current,
-        status: "installed",
-        message: "Update installed. Restart Pillar Time to finish.",
-        progress: "",
-      }));
+      setUpdateState(desktopUpdateInstalledState);
     } catch (error) {
-      setUpdateState((current) => ({
-        ...current,
-        status: "error",
-        message: error.message,
-        progress: "",
-      }));
+      setUpdateState((current) => desktopUpdateInstallErrorState(current, error));
     }
   }, [updateState.update]);
 
@@ -571,18 +536,9 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
   const [helpOpen, setHelpOpen] = React.useState(false);
   const helpRef = React.useRef(null);
   const activeSources = state?.sources?.filter((s) => s.status === "active").length || 0;
-  const counts = { sources: activeSources, lenses: state?.briefConfig?.perspectiveLenses?.filter((l) => l.enabled !== false).length || 0 };
-  const updateVisible = desktopUpdate?.isDesktop && ["available", "installed"].includes(desktopUpdate.status);
-  const updateBusy = ["checking", "checking-silent", "installing"].includes(desktopUpdate?.status);
-  const updateStatus = desktopUpdate?.status === "available"
-    ? `Update ${desktopUpdate.update?.version ? `v${desktopUpdate.update.version}` : ""} available`
-    : desktopUpdate?.status === "installed"
-      ? "Restart to finish updating"
-      : desktopUpdate?.status === "current"
-        ? "Pillar Time is up to date"
-        : desktopUpdate?.status === "error"
-          ? "Update check failed"
-          : "Check for signed desktop updates";
+  const counts = { sources: activeSources, lenses: activePerspectiveLensCount(state?.briefConfig?.perspectiveLenses || []) };
+  const updateVisible = desktopUpdateBannerVisible(desktopUpdate);
+  const updateBusy = desktopUpdateIsBusy(desktopUpdate);
   React.useEffect(() => {
     if (!helpOpen) return;
     const onPointerDown = (event) => {
@@ -611,8 +567,8 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
             <span>{desktopUpdate?.version ? `Version ${desktopUpdate.version}` : "Desktop app"}</span>
           </div>
           <div className={`help-update-status ${desktopUpdate?.status === "error" ? "warn" : ""}`}>
-            <Icon name={desktopUpdate?.status === "available" ? "download" : desktopUpdate?.status === "installed" ? "restart" : desktopUpdate?.status === "error" ? "x" : "check"} />
-            <span>{desktopUpdate?.isDesktop ? (desktopUpdate.progress || desktopUpdate.message || updateStatus) : "Updates are available in the desktop app."}</span>
+            <Icon name={desktopUpdateStatusIcon(desktopUpdate)} />
+            <span>{desktopUpdateHelpMessage(desktopUpdate)}</span>
           </div>
           {desktopUpdate?.isDesktop && <div className="help-menu-actions">
             <Button type="button" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={updateBusy}>{desktopUpdate?.status === "checking" ? "Checking..." : "Check for Updates"}</Button>
@@ -720,11 +676,6 @@ const fallbackTimezones = [
   "Asia/Tokyo",
   "Australia/Sydney",
 ];
-
-function isDefaultOwnerName(name) {
-  const normalized = String(name || "").trim().toLowerCase();
-  return !normalized || ["you", "brief owner", "the brief owner"].includes(normalized);
-}
 
 function timezoneOptions(current) {
   const supported = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : fallbackTimezones;
@@ -867,11 +818,6 @@ function ListRow({ title, sub, right }) {
   return <div className="list-row"><div><strong>{title}</strong><small>{sub}</small></div>{right}</div>;
 }
 
-function latestCalendarAgenda(state) {
-  const completed = state.workflowRuns?.find((run) => run.status === "completed" && run.artifact);
-  return completed?.artifact?.calendarAgenda || completed?.artifact?.calendarFetches?.flatMap((fetch) => fetch.events || []) || [];
-}
-
 function todayTime(state) {
   return state.time || { preferences: {}, suggestions: [], commitments: [], tasks: [], reminders: [], reviews: [], importantDates: [], meetings: [], scheduler: {} };
 }
@@ -900,15 +846,19 @@ function TimeSuggestionCard({ suggestion, mutate }) {
 function Today({ state, mutate, runWorkflow, setRoute }) {
   const time = todayTime(state);
   const [capture, setCapture] = React.useState("");
-  const agenda = latestCalendarAgenda(state).slice(0, 8);
+  const [windowMinutes, setWindowMinutes] = React.useState(30);
+  const [energyState, setEnergyState] = React.useState("clear");
+  const agenda = todayAgendaRows(state);
+  const reminderRows = todayReminderRows(time);
   const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
   const suggestions = (time.suggestions || []).slice(0, 6);
-  const addTask = (event) => {
+  const nowRecommendation = whatShouldIDoNow(state, { windowMinutes, energyState });
+  const addTask = async (event) => {
     event.preventDefault();
-    if (!capture.trim()) return;
-    mutate("/api/time/tasks", { title: capture.trim(), source: "quick-capture" }).then(() => setCapture(""));
+    const result = await submitQuickTaskCapture({ value: capture, mutate });
+    if (result.clearInput) setCapture("");
   };
-  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, and the intelligence brief." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate Intelligence</Button>}>
+  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, and executive day planning." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Brief</Button>}>
     <div className="metric-grid">
       <Metric label="Today" value={time.todayKey || "-"} sub={time.preferences?.timezone || "local"} />
       <Metric label="Today’s Three" value={activeCommitments.filter((item) => item.status === "active").length} sub="accepted commitments" />
@@ -916,6 +866,38 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
       <Metric label="Reminders" value={(time.reminders || []).filter((item) => item.enabled).length} sub={time.scheduler?.active ? "scheduler active" : "scheduler idle"} alert={!time.scheduler?.active} />
     </div>
     <div className="time-layout">
+      <section className="panel now-panel">
+        <PanelTitle icon="today" title="What Should I Do Now?" sub="A Contact Lens recommendation. It ranks and explains; it does not decide or execute for you." />
+        <div className="now-controls">
+          <label><span>Window</span><select value={windowMinutes} onChange={(event) => setWindowMinutes(Number(event.target.value))}>{timeWindowOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <label><span>Energy</span><select value={energyState} onChange={(event) => setEnergyState(event.target.value)}>{energyStateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <Button icon="briefs" onClick={() => nowRecommendation.morningBrief.available ? setRoute("briefs") : runWorkflow()}>{nowRecommendation.morningBrief.available ? "Open morning brief" : "Generate morning brief"}</Button>
+        </div>
+        {nowRecommendation.morningBrief.available ? <div className="brief-signal">
+          <Icon name="briefs" /><span><strong>Morning brief input:</strong> {nowRecommendation.morningBrief.title}{nowRecommendation.morningBrief.generatedAt ? ` · ${new Date(nowRecommendation.morningBrief.generatedAt).toLocaleString()}` : ""}</span>
+        </div> : <div className="brief-signal warn-signal"><Icon name="briefs" /><span><strong>No morning brief yet.</strong> Generate the brief so Today can use the operating plan, focus blocks, risks, and missing information.</span></div>}
+        {nowRecommendation.primary ? <div className="now-recommendation">
+          <div className="now-primary">
+            <span className="eyebrow">Recommended</span>
+            <h2>{nowRecommendation.primary.title}</h2>
+            <p>{nowRecommendation.primary.reason || "This is currently the highest-ranked candidate."}</p>
+            <div className="chips"><span>score {Math.round(nowRecommendation.primary.constitutionalScore)}</span><span>{nowRecommendation.primary.leverageCategory || "admin"}</span><span>{nowRecommendation.primary.estimateMinutes || 30} min</span><span>{Math.round((nowRecommendation.primary.confidence || 0) * 100)}% confidence</span></div>
+          </div>
+          <div className="now-next-action"><strong>Exact next action</strong><p>{nowRecommendation.nextAction}</p></div>
+          <div className="now-grid">
+            <div><strong>Fallback</strong><p>{nowRecommendation.fallback?.title || "No fallback ranked yet."}</p></div>
+            <div><strong>Avoid right now</strong><p>{nowRecommendation.avoid?.title || "Avoid opening a new loop until one candidate is captured or briefed."}</p></div>
+          </div>
+          <details className="score-details"><summary>Why this ranked here</summary><div className="score-list">{nowRecommendation.primary.scoreBreakdown.map((factor) => <div key={factor.key}><span>{factor.label}</span><b>{factor.score > 0 ? "+" : ""}{factor.score}</b></div>)}</div></details>
+          <div className="authority-note"><Icon name="trustedContext" /><span><strong>{nowRecommendation.authorityBoundary.label}:</strong> {nowRecommendation.authorityBoundary.detail}</span></div>
+          {nowRecommendation.wip.warnings.length ? <div className="authority-note warn-signal"><Icon name="audit" /><span><strong>WIP pressure:</strong> {nowRecommendation.wip.warnings.join(" ")}</span></div> : null}
+          <div className="row tight-row">
+            <Button icon="check" onClick={() => mutate(`/api/time/suggestions/${encodeURIComponent(nowRecommendation.primary.feedbackKey || nowRecommendation.primary.id || nowRecommendation.primary.title)}/feedback`, { feedback: "useful" })}>Useful</Button>
+            <Button icon="x" onClick={() => mutate(`/api/time/suggestions/${encodeURIComponent(nowRecommendation.primary.feedbackKey || nowRecommendation.primary.id || nowRecommendation.primary.title)}/feedback`, { feedback: "wrongPriority" })}>Wrong priority</Button>
+            <Button icon="clock" onClick={() => mutate(`/api/time/suggestions/${encodeURIComponent(nowRecommendation.primary.feedbackKey || nowRecommendation.primary.id || nowRecommendation.primary.title)}/feedback`, { feedback: "blocked" })}>Blocked</Button>
+          </div>
+        </div> : <Empty icon="today" title="No recommendation yet" body={nowRecommendation.nextAction} action={<Button icon="run" kind="primary" onClick={runWorkflow}>Generate Day Brief</Button>} />}
+      </section>
       <section className="panel">
         <PanelTitle icon="today" title="Highest Leverage Today" sub="These are offerings, not orders. Change them until they fit the day." />
         <div className="time-card-list">{suggestions.length ? suggestions.map((suggestion) => <TimeSuggestionCard key={suggestion.id || suggestion.feedbackKey || suggestion.title} suggestion={suggestion} mutate={mutate} />) : <Empty icon="planner" title="No ranked suggestions yet" body="Capture a task or connect calendar and intelligence sources." />}</div>
@@ -930,11 +912,11 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
       </section>
       <section className="panel">
         <PanelTitle icon="calendar" title="Timeline" sub="Calendar context from the latest successful intelligence run." />
-        {agenda.length ? agenda.map((event, index) => <ListRow key={`${event.title || event.summary}-${index}`} title={event.title || event.summary || "Calendar event"} sub={[event.start, event.end].filter(Boolean).join(" to ") || event.when || "Today"} right={event.calendarUrl && <Button icon="calendar" onClick={() => openExternalUrl(event.calendarUrl)}>Open</Button>} />) : <Empty icon="calendar" title="No agenda loaded" body="Connect Google Calendar and generate intelligence to bring today’s events into this view." />}
+        {agenda.length ? agenda.map((event) => <ListRow key={event.key} title={event.title} sub={event.sub} right={event.calendarUrl && <Button icon="calendar" onClick={() => openExternalUrl(event.calendarUrl)}>Open</Button>} />) : <Empty icon="calendar" title="No agenda loaded" body="Connect Google Calendar and generate intelligence to bring today’s events into this view." />}
       </section>
       <section className="panel">
         <PanelTitle icon="reminders" title="Next Reminders" sub="Regular and sporadic nudges, paused by default until you enable them." />
-        {(time.reminders || []).slice(0, 6).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.nextOccurrence.dateKey} at ${formatDeliveryTime(reminder.nextOccurrence.localTime)}` : "No next occurrence"} right={<div className="row tight-row"><Badge tone={reminder.enabled ? "ok" : "muted"}>{reminder.enabled ? "On" : "Off"}</Badge><Button icon="settings" onClick={() => setRoute("reminders")}>Edit</Button></div>} />)}
+        {reminderRows.map((reminder) => <ListRow key={reminder.key} title={reminder.title} sub={reminder.sub} right={<div className="row tight-row"><Badge tone={reminder.statusTone}>{reminder.statusLabel}</Badge><Button icon="settings" onClick={() => setRoute(reminder.editRoute)}>Edit</Button></div>} />)}
       </section>
     </div>
   </Page>;
@@ -1075,16 +1057,9 @@ function Meetings({ state, mutate }) {
 
 function TrustedContext({ state, mutate }) {
   const context = state.trustedContext || {};
+  const constitutionView = trustedContextConstitutionView(context);
   const health = context.health || {};
-  const [factForm, setFactForm] = React.useState({
-    resourceType: "identity.profile",
-    fieldKey: "preferredName",
-    value: "",
-    partition: "professional",
-    visibility: "assistant",
-    trustLevel: "verified_canonical_profile",
-    verificationStatus: "verified",
-  });
+  const [factForm, setFactForm] = React.useState(trustedContextFactDefaultForm);
   const [previewRequest, setPreviewRequest] = React.useState({
     mode: "speaking_to_subject",
     partition: "professional",
@@ -1097,9 +1072,14 @@ function TrustedContext({ state, mutate }) {
   const saveFact = async (event) => {
     event.preventDefault();
     setMessage("");
+    const plan = trustedContextFactSavePlan(factForm);
+    if (!plan.ok) {
+      setMessage(plan.message);
+      return;
+    }
     try {
-      await mutate("/api/trusted-context/facts", factForm, "POST");
-      setFactForm((current) => ({ ...current, value: "" }));
+      await mutate("/api/trusted-context/facts", plan.body, "POST");
+      setFactForm((current) => trustedContextFactAfterSave(current));
       setMessage("Fact saved.");
     } catch (error) {
       setMessage(error.message);
@@ -1195,8 +1175,8 @@ function TrustedContext({ state, mutate }) {
       </tr>)}</tbody></table> : <Empty icon="trustedContext" title="No facts yet" body="Add a profile fact to seed Trusted Context." />}
     </section>
     <section className="panel">
-      <PanelTitle icon="trustedContext" title="Workspace Constitution" sub={`Version ${context.constitution?.version || 0}`} />
-      <details className="raw-json"><summary>Current constitution</summary><pre>{JSON.stringify(context.constitution?.body || {}, null, 2)}</pre></details>
+      <PanelTitle icon="trustedContext" title="Workspace Constitution" sub={constitutionView.versionLabel} />
+      <details className="raw-json"><summary>Current constitution</summary><pre>{constitutionView.bodyText}</pre></details>
     </section>
   </Page>;
 }
@@ -1211,8 +1191,8 @@ function Sources({ state, mutate }) {
   const [transcribeMessage, setTranscribeMessage] = React.useState("");
   const ffmpeg = state.runtime?.ffmpeg;
   const stt = state.runtime?.stt;
-  const cloudTranscriptionReady = ["openai", "custom"].includes(state.model?.provider) && state.model?.status === "ready";
-  const transcriptionAvailable = ffmpeg?.available !== false && (stt?.available || cloudTranscriptionReady);
+  const transcriptionAvailable = podcastTranscriptionAvailable({ ffmpeg, stt, model: state.model });
+  const transcriptionNotice = podcastTranscriptionNotice(transcriptionAvailable);
   const definition = sourceDefinitions[form.type];
   const mode = definition.modes[form.config.mode] ? form.config.mode : Object.keys(definition.modes)[0];
   const modeDefinition = definition.modes[mode];
@@ -1265,20 +1245,7 @@ function Sources({ state, mutate }) {
         setSpotifyResolve({ loading: false, message: result.error || "Could not resolve RSS feed.", tone: "warn" });
         return;
       }
-      setForm((current) => ({
-        ...current,
-        name: current.name || result.podcastTitle || "",
-        config: {
-          ...current.config,
-          mode: "spotify",
-          feedUrl: result.feedUrl,
-          podcastTitle: result.podcastTitle,
-          podcastAuthor: result.author,
-          spotifyTitle: result.spotifyTitle,
-          resolverConfidence: result.confidence,
-          transcribeNewEpisodes: current.config.transcribeNewEpisodes ?? true,
-        },
-      }));
+      setForm((current) => podcastResolvePatch({ currentForm: current, result }));
       setSpotifyResolve({ loading: false, message: `Resolved ${result.podcastTitle} RSS feed (${result.confidence} confidence).`, tone: "ok" });
     } catch (error) {
       setSpotifyResolve({ loading: false, message: error.message, tone: "warn" });
@@ -1286,11 +1253,8 @@ function Sources({ state, mutate }) {
   };
   const submit = (e) => {
     e.preventDefault();
-    const locator = sourceLocator(form.type, { ...form.config, mode });
-    const payload = { ...form, locator, config: { ...form.config, mode } };
-    const endpoint = editingSource ? `/api/sources/${editingSource.id}` : "/api/sources";
-    const method = editingSource ? "PATCH" : "POST";
-    mutate(endpoint, payload, method)
+    const request = sourceSubmitRequest({ form, editingSource, mode });
+    mutate(request.endpoint, request.payload, request.method)
       .then(() => {
         resetSourceForm();
       });
@@ -1384,8 +1348,8 @@ function Sources({ state, mutate }) {
             {spotifyResolve.message && <Badge tone={spotifyResolve.tone}>{spotifyResolve.message}</Badge>}
           </div>}
           {form.type === "Podcast" && <div className={`notice ${transcriptionAvailable ? "" : "notice-warn"}`}>
-            <strong>{transcriptionAvailable ? "Podcast transcription available" : "Podcast transcription unavailable"}</strong>
-            <span>{transcriptionAvailable ? "Podcast audio can be split with FFmpeg and transcribed with local Whisper or your configured cloud fallback." : "Set up FFmpeg plus local Whisper STT or an OpenAI-compatible transcription endpoint before podcast audio can be transcribed."}</span>
+            <strong>{transcriptionNotice.title}</strong>
+            <span>{transcriptionNotice.body}</span>
           </div>}
           {form.type === "Podcast" && <label className="check"><input type="checkbox" checked={form.config.transcribeNewEpisodes !== false && transcriptionAvailable} disabled={!transcriptionAvailable} onChange={(event) => updateConfig("transcribeNewEpisodes", event.target.checked)} /> Transcribe new episodes for briefs</label>}
         </div>
@@ -1404,24 +1368,23 @@ function Lenses({ state, mutate }) {
     if (!dirty) setLenses(state.briefConfig?.perspectiveLenses || []);
   }, [state.briefConfig?.perspectiveLenses, dirty]);
   const editLenses = (updater) => {
-    setDirty(true);
-    setMessage("Unsaved changes.");
-    setLenses(updater);
+    setLenses((current) => {
+      const next = editPerspectiveLenses(current, updater);
+      setDirty(next.dirty);
+      setMessage(next.message);
+      return next.lenses;
+    });
   };
-  const updateLens = (index, patch) => editLenses((current) => current.map((lens, i) => i === index ? { ...lens, ...patch } : lens));
-  const addLens = () => editLenses((current) => [...current, { id: `perspective-${Date.now()}`, name: "New Perspective", role: "Point of view", description: "", instructions: "Read the saved brief from this perspective and name what it notices, worries about, and would do next.", enabled: true }]);
-  const removeLens = (index) => editLenses((current) => current.filter((_, i) => i !== index));
+  const updateLens = (index, patch) => editLenses((current) => updatePerspectiveLens(current, index, patch));
+  const addLens = () => editLenses((current) => addPerspectiveLens(current, newPerspectiveLens()));
+  const removeLens = (index) => editLenses((current) => removePerspectiveLens(current, index));
   const save = async () => {
     setMessage("");
-    try {
-      await mutate("/api/brief-config", { ...state.briefConfig, perspectiveLenses: lenses }, "PATCH");
-      setDirty(false);
-      setMessage("Perspective lenses saved.");
-    } catch (error) {
-      setMessage(error.message || "Could not save perspective lenses.");
-    }
+    const result = await savePerspectiveLensesFlow({ currentConfig: state.briefConfig, lenses, mutate });
+    setDirty(result.dirty);
+    setMessage(result.message);
   };
-  const filtered = lenses.filter((lens) => `${lens.name} ${lens.role} ${lens.description}`.toLowerCase().includes(query.toLowerCase()));
+  const filtered = filterPerspectiveLenses(lenses, query);
   return <Page
     title="Perspective Lenses"
     desc="Optional viewpoints used only when you deliberate a saved brief."
@@ -1444,7 +1407,7 @@ function Lenses({ state, mutate }) {
         })}
       </div>
       {!filtered.length && <Empty icon="lenses" title="No perspective lenses" body="Add lenses here, or generate them during onboarding from natural language." />}
-      {message && <p className={message.includes("saved") ? "ok-text" : message.includes("Unsaved") ? "hint" : "warn-text"}>{message}</p>}
+      {message && <p className={perspectiveLensMessageTone(message)}>{message}</p>}
     </section>
   </Page>;
 }
@@ -1783,8 +1746,30 @@ function Workflow({ state, runWorkflow }) {
 }
 
 function Approvals({ state, mutate }) {
+  const [busyId, setBusyId] = React.useState("");
+  const approveAndExecute = async (approval) => {
+    setBusyId(approval.id);
+    try {
+      await api(`/api/approvals/${approval.id}`, { method: "PATCH", body: JSON.stringify({ status: "approved" }) });
+      await mutate(`/api/approvals/${approval.id}/execute`, { by: "operator" });
+    } catch (error) {
+      alert(error.message || "Approval execution failed");
+    } finally {
+      setBusyId("");
+    }
+  };
+  const executeApproved = async (approval) => {
+    setBusyId(approval.id);
+    try {
+      await mutate(`/api/approvals/${approval.id}/execute`, { by: "operator" });
+    } catch (error) {
+      alert(error.message || "Approval execution failed");
+    } finally {
+      setBusyId("");
+    }
+  };
   return <Page title="Approvals" desc="Human review is the center of the console. No public posting or document mutation happens automatically." wide>
-    <div className="card table-card">{state.approvals.length ? <table><thead><tr><th>Item</th><th>Risk</th><th>Status</th><th>Run</th><th></th></tr></thead><tbody>{state.approvals.map((a) => <tr key={a.id}><td><strong>{a.title}</strong><small>{a.kind}</small></td><td><Badge tone={a.risk === "high" ? "err" : a.risk === "medium" ? "warn" : "muted"}>{a.risk}</Badge></td><td><Badge tone={a.status === "approved" ? "ok" : a.status === "rejected" ? "err" : "warn"}>{a.status}</Badge></td><td className="mono">{a.runId || "manual"}</td><td>{a.status === "pending" && <div className="row"><Button icon="check" onClick={() => mutate(`/api/approvals/${a.id}`, { status: "approved" }, "PATCH")}>Approve</Button><Button icon="x" onClick={() => mutate(`/api/approvals/${a.id}`, { status: "rejected" }, "PATCH")}>Reject</Button></div>}</td></tr>)}</tbody></table> : <Empty icon="approvals" title="No approvals yet" body="Run the workflow or submit state-changing Telegram requests to create reviewable items." />}</div>
+    <div className="card table-card">{state.approvals.length ? <table><thead><tr><th>Item</th><th>Risk</th><th>Status</th><th>Run</th><th></th></tr></thead><tbody>{state.approvals.map((a) => <tr key={a.id}><td><strong>{a.title}</strong><small>{a.kind}</small></td><td><Badge tone={a.risk === "high" ? "err" : a.risk === "medium" ? "warn" : "muted"}>{a.risk}</Badge></td><td><Badge tone={a.status === "approved" ? "ok" : a.status === "rejected" ? "err" : a.status === "executed" ? "ok" : "warn"}>{a.status}</Badge></td><td className="mono">{a.runId || "manual"}</td><td>{a.status === "pending" && <div className="row">{a.kind === "calendar_schedule" ? <Button icon="calendar" kind="primary" disabled={busyId === a.id} onClick={() => approveAndExecute(a)}>{busyId === a.id ? "Filling..." : "Approve & Fill"}</Button> : <Button icon="check" disabled={busyId === a.id} onClick={() => mutate(`/api/approvals/${a.id}`, { status: "approved" }, "PATCH")}>Approve</Button>}<Button icon="x" disabled={busyId === a.id} onClick={() => mutate(`/api/approvals/${a.id}`, { status: "rejected" }, "PATCH")}>Reject</Button></div>}{a.status === "approved" && <Button icon={a.kind === "calendar_schedule" ? "calendar" : "check"} disabled={busyId === a.id} onClick={() => executeApproved(a)}>{busyId === a.id ? "Executing..." : "Execute"}</Button>}</td></tr>)}</tbody></table> : <Empty icon="approvals" title="No approvals yet" body="Run the workflow or submit state-changing Telegram requests to create reviewable items." />}</div>
   </Page>;
 }
 
@@ -1810,6 +1795,47 @@ function BriefGenerationProgress({ run }) {
   </div>;
 }
 
+function ProposedCalendarStrip({ artifact = {}, refresh }) {
+  const [busy, setBusy] = React.useState(false);
+  const [message, setMessage] = React.useState("");
+  const blocks = artifact.proposedCalendarSchedule?.blocks || [];
+  const approval = (artifact.approvalItems || []).find((item) => item.kind === "calendar_schedule");
+  if (!blocks.length) return null;
+  const approveCalendar = async () => {
+    if (!approval?.id) {
+      setMessage("No calendar approval item was saved for this schedule.");
+      return;
+    }
+    setBusy(true);
+    setMessage("");
+    try {
+      await api(`/api/approvals/${approval.id}`, { method: "PATCH", body: JSON.stringify({ status: "approved" }) });
+      await api(`/api/approvals/${approval.id}/execute`, { method: "POST", body: JSON.stringify({ by: "operator" }) });
+      await refresh?.();
+      setMessage("Calendar filled.");
+    } catch (error) {
+      setMessage(error.message || "Could not fill the calendar.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const fmt = (value) => value ? new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+  return <section className="proposed-calendar-strip" aria-label="Proposed calendar">
+    <div className="proposed-calendar-head">
+      <div><strong>Proposed calendar</strong><span>{blocks.length} protected block{blocks.length === 1 ? "" : "s"} ready to place around your real events.</span></div>
+      <Button icon="calendar" kind="primary" onClick={approveCalendar} disabled={busy || approval?.status === "executed"}>{busy ? "Filling..." : approval?.status === "executed" ? "Filled" : "Approve Calendar"}</Button>
+    </div>
+    <div className="calendar-tile-row">
+      {blocks.map((block) => <div className="calendar-tile" key={block.id || `${block.start}-${block.summary}`}>
+        <small>{fmt(block.start)}-{fmt(block.end)}</small>
+        <strong>{block.categoryName || "Focus block"}</strong>
+        <span>{block.title || block.summary}</span>
+      </div>)}
+    </div>
+    {message && <p className={message.includes("filled") ? "ok-text" : "warn-text"}>{message}</p>}
+  </section>;
+}
+
 function Briefs({ state, runWorkflow, refresh }) {
   const [selectedId, setSelectedId] = React.useState(state.workflowRuns[0]?.id || "");
   const [query, setQuery] = React.useState("");
@@ -1819,6 +1845,11 @@ function Briefs({ state, runWorkflow, refresh }) {
   const [audioPlaying, setAudioPlaying] = React.useState(false);
   const [deliberationBusy, setDeliberationBusy] = React.useState(false);
   const [deliberationMessage, setDeliberationMessage] = React.useState("");
+  const [contextOpen, setContextOpen] = React.useState(false);
+  const [contextText, setContextText] = React.useState("");
+  const [contextBusy, setContextBusy] = React.useState(false);
+  const [contextMessage, setContextMessage] = React.useState("");
+  const [voiceBusy, setVoiceBusy] = React.useState(false);
   const audioRef = React.useRef(null);
   React.useEffect(() => {
     if (!selectedId && state.workflowRuns[0]) setSelectedId(state.workflowRuns[0].id);
@@ -1826,21 +1857,23 @@ function Briefs({ state, runWorkflow, refresh }) {
   const filtered = state.workflowRuns.filter((run) => briefDisplayTitle(run).toLowerCase().includes(query.toLowerCase()));
   const selected = state.workflowRuns.find((run) => run.id === selectedId) || filtered[0] || state.workflowRuns[0];
   React.useEffect(() => {
+    const audioState = briefAudioSelectionState(selected);
     audioRef.current?.pause();
     audioRef.current = null;
-    setAudioUrl(selected?.artifact?.audio?.url || "");
-    setAudioMessage("");
-    setAudioPlaying(false);
+    setAudioUrl(audioState.audioUrl);
+    setAudioMessage(audioState.audioMessage);
+    setAudioPlaying(audioState.audioPlaying);
     setDeliberationMessage("");
+    setContextMessage("");
   }, [selected?.id, selected?.artifact?.audio?.url]);
   React.useEffect(() => () => audioRef.current?.pause(), []);
   const playAudioUrl = async (url) => {
     if (!audioRef.current || audioRef.current.src !== new URL(url, window.location.href).href) {
       audioRef.current?.pause();
       const audio = new Audio(url);
-      audio.addEventListener("ended", () => setAudioPlaying(false));
-      audio.addEventListener("pause", () => setAudioPlaying(false));
-      audio.addEventListener("play", () => setAudioPlaying(true));
+      audio.addEventListener("ended", () => setAudioPlaying((current) => briefAudioPlayingForEvent("ended", current)));
+      audio.addEventListener("pause", () => setAudioPlaying((current) => briefAudioPlayingForEvent("pause", current)));
+      audio.addEventListener("play", () => setAudioPlaying((current) => briefAudioPlayingForEvent("play", current)));
       audioRef.current = audio;
     }
     await audioRef.current.play();
@@ -1870,9 +1903,10 @@ function Briefs({ state, runWorkflow, refresh }) {
     }
   };
   const restartBriefAudio = () => {
-    if (!audioUrl) return;
-    if (audioRef.current) audioRef.current.currentTime = 0;
-    playAudioUrl(audioUrl).catch((error) => setAudioMessage(error.message || "Could not restart audio."));
+    const plan = briefAudioRestartPlan({ audioUrl, currentTime: audioRef.current?.currentTime || 0 });
+    if (!plan) return;
+    if (audioRef.current) audioRef.current.currentTime = plan.currentTime;
+    playAudioUrl(plan.audioUrl).catch((error) => setAudioMessage(error.message || "Could not restart audio."));
   };
   const deliberateBrief = async (regenerate = false) => {
     if (!selected) return;
@@ -1888,9 +1922,60 @@ function Briefs({ state, runWorkflow, refresh }) {
       setDeliberationBusy(false);
     }
   };
+  const captureVoiceContext = () => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      setContextMessage("Voice dictation is not available in this browser. Type the missing context instead.");
+      return;
+    }
+    const recognition = new Recognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.onstart = () => setVoiceBusy(true);
+    recognition.onerror = (event) => {
+      setVoiceBusy(false);
+      setContextMessage(event.error ? `Voice note failed: ${event.error}` : "Voice note failed.");
+    };
+    recognition.onend = () => setVoiceBusy(false);
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results || []).map((result) => result[0]?.transcript || "").join(" ").trim();
+      if (transcript) setContextText((current) => [current.trim(), transcript].filter(Boolean).join("\n"));
+    };
+    recognition.start();
+  };
+  const regenerateWithContext = async () => {
+    if (!selected || !contextText.trim()) {
+      setContextMessage("Add the missing context first.");
+      return;
+    }
+    setContextBusy(true);
+    setContextMessage("");
+    try {
+      const result = await api("/api/workflow-runs", {
+        method: "POST",
+        body: JSON.stringify({
+          trigger: "Manual · Regenerate executive day brief with added context",
+          runType: "executive_day",
+          wait: true,
+          additionalContext: contextText.trim(),
+          basedOnRunId: selected.id,
+        }),
+      });
+      await refresh?.();
+      if (result.run?.id) setSelectedId(result.run.id);
+      setContextText("");
+      setContextOpen(false);
+      setContextMessage("Brief regenerated with the added context.");
+    } catch (error) {
+      setContextMessage(error.message || "Could not regenerate the brief.");
+    } finally {
+      setContextBusy(false);
+    }
+  };
   const avgSignals = state.workflowRuns.length
     ? Math.round(state.workflowRuns.reduce((sum, run) => sum + (run.artifact?.selectedIssues?.length || 0), 0) / state.workflowRuns.length)
     : 0;
+  const audioButton = briefAudioButtonState({ audioBusy, audioPlaying, audioUrl, ttsStatus: state.tts?.status });
   return <Page title="Your briefs" desc="Review past briefings, open a full digest, or generate a fresh one." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate brief</Button>}>
     {state.workflowRuns.length ? <div className="briefs-layout">
       <aside className="panel recent-briefs">
@@ -1912,13 +1997,24 @@ function Briefs({ state, runWorkflow, refresh }) {
       <section className="panel brief-reader">
         {selected ? selected.status === "running" ? <BriefGenerationProgress run={selected} /> : <>
           <div className="brief-reader-actions">
-            <Button icon="volume" onClick={playBriefAudio} disabled={audioBusy || state.tts?.status !== "ready"}>{audioBusy ? "Generating..." : audioPlaying ? "Pause" : audioUrl ? "Play audio" : "Generate audio"}</Button>
-            {audioUrl && <Button icon="restart" onClick={restartBriefAudio} disabled={audioBusy || state.tts?.status !== "ready"}>Restart</Button>}
+            <Button icon="volume" onClick={playBriefAudio} disabled={audioButton.disabled}>{audioButton.label}</Button>
+            {audioUrl && <Button icon="restart" onClick={restartBriefAudio} disabled={audioButton.restartDisabled}>Restart</Button>}
             <Button icon="lenses" onClick={() => deliberateBrief(false)} disabled={deliberationBusy || !(state.briefConfig?.perspectiveLenses || []).some((lens) => lens.enabled !== false)}>{deliberationBusy ? "Deliberating..." : selected.artifact?.deliberation ? "Show deliberation" : "Deliberate brief"}</Button>
-            {state.tts?.status !== "ready" && <span>Set up ElevenLabs in Settings to play briefs aloud.</span>}
+            <Button icon="pencil" onClick={() => setContextOpen((open) => !open)}>Add context & regenerate</Button>
+            {audioButton.showTtsSetupNotice && <span>Set up ElevenLabs in Settings to play briefs aloud.</span>}
           </div>
           {audioMessage && <p className={audioMessage.includes("generated") ? "ok-text" : "warn-text"}>{audioMessage}</p>}
           {deliberationMessage && <p className={deliberationMessage.includes("saved") || deliberationMessage.includes("regenerated") ? "ok-text" : "warn-text"}>{deliberationMessage}</p>}
+          {contextOpen && <div className="context-regenerate-panel">
+            <label>Missing context</label>
+            <textarea value={contextText} onChange={(event) => setContextText(event.target.value)} rows={4} placeholder="Tell Pillar Time what it missed, then regenerate the day plan." />
+            <div className="row">
+              <Button icon="mic" onClick={captureVoiceContext} disabled={voiceBusy}>{voiceBusy ? "Listening..." : "Voice note"}</Button>
+              <Button icon="restart" kind="primary" onClick={regenerateWithContext} disabled={contextBusy}>{contextBusy ? "Regenerating..." : "Regenerate"}</Button>
+            </div>
+          </div>}
+          {contextMessage && <p className={contextMessage.includes("regenerated") ? "ok-text" : "warn-text"}>{contextMessage}</p>}
+          <ProposedCalendarStrip artifact={selected.artifact || {}} refresh={refresh} />
           <Markdown text={selected.artifact?.onePageBrief || ""} />
           {selected.artifact?.deliberation && <DeliberationPanel deliberation={selected.artifact.deliberation} onRegenerate={() => deliberateBrief(true)} busy={deliberationBusy} />}
         </> : <Empty icon="briefs" title="No brief selected" body="Choose a brief from the list." />}
@@ -1948,29 +2044,23 @@ function DeliberationPanel({ deliberation, onRegenerate, busy }) {
 }
 
 function GeneratingBrief({ runState }) {
-  const status = runState?.status || "running";
-  const steps = runState?.steps?.length ? runState.steps : [{ key: "run", name: "Generating brief" }];
   const [slowStep, setSlowStep] = React.useState(false);
-  const activeIndex = steps.findIndex((step) => step.status === "active");
-  const doneCount = steps.filter((step) => step.status === "done").length;
-  const currentIndex = Math.max(0, Math.min(steps.length - 1, activeIndex >= 0 ? activeIndex : status === "done" ? steps.length - 1 : runState?.stepIndex ?? doneCount));
-  const current = steps[currentIndex];
-  const progress = status === "done" ? 100 : Math.round(((currentIndex + 0.35) / steps.length) * 100);
+  const view = generationProgressViewModel(runState, { slowStep, labels: workflowLabels });
   React.useEffect(() => {
     setSlowStep(false);
-    if (status !== "running") return undefined;
+    if (view.status !== "running") return undefined;
     const timer = setTimeout(() => setSlowStep(true), 2000);
     return () => clearTimeout(timer);
-  }, [currentIndex, status]);
+  }, [view.currentIndex, view.status]);
   return <div className="generating-screen">
     <div className="generating-panel">
-      <Badge tone={status === "error" ? "warn" : status === "done" ? "ok" : "muted"}>{status === "error" ? "Needs attention" : status === "done" ? "Delivered" : "Generating"}</Badge>
-      <h1>{status === "error" ? "Brief generation stopped." : status === "done" ? "Brief delivered." : current.name}</h1>
-      <p>{status === "error" ? runState?.error || "Something went wrong while generating the brief." : status === "done" ? "The new brief was saved and sent to Telegram." : `Step ${currentIndex + 1} of ${steps.length}: ${current.output || (workflowLabels[current.key] || current.name || "working").toLowerCase()}.`}</p>
-      {status === "running" && current.detail && <p className="generating-detail">{current.detail}</p>}
-      <div className={`main-progress ${slowStep ? "working" : ""}`} aria-label="Brief generation progress"><span style={{ width: `${progress}%` }} /></div>
+      <Badge tone={view.badgeTone}>{view.badgeLabel}</Badge>
+      <h1>{view.title}</h1>
+      <p>{view.message}</p>
+      {view.detail && <p className="generating-detail">{view.detail}</p>}
+      <div className={view.progressClassName} aria-label="Brief generation progress"><span style={{ width: `${view.progress}%` }} /></div>
       <div className="generation-step-list">
-        {steps.map((step, index) => <div key={step.key} className={step.status === "done" || status === "done" ? "done" : step.status === "active" && status !== "error" ? "active" : step.status === "error" ? "error" : ""}>
+        {view.steps.map((step, index) => <div key={step.key} className={view.stepClasses[index]}>
           <b>{String(index + 1).padStart(2, "0")}</b>
           <span>{step.name}</span>
         </div>)}
@@ -2087,19 +2177,21 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
   const [bot, setBot] = React.useState("");
   const [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
-  const paired = session?.status === "paired" || (state.telegram.enabled && state.telegram.chatId && state.telegram.botToken);
+  const paired = telegramPaired({ session, telegram: state.telegram });
+  const statusView = telegramPairingStatusView({ session, telegram: state.telegram, bot });
   React.useEffect(() => {
     if (!session?.id || session.status !== "waiting") return;
     const timer = setInterval(async () => {
       try {
-        const result = await api(`/api/telegram/pairing/${session.id}/poll`, { method: "POST", body: JSON.stringify({}) });
+        const request = telegramPairingPollRequest(session.id);
+        const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
         setSession(result.session);
         if (result.session?.status === "paired") {
-          setMessage("Paired. Telegram delivery is ready.");
+          setMessage(telegramPairingPollMessage(result.session));
           await refresh();
           onPaired?.();
         }
-        if (["failed", "expired"].includes(result.session?.status)) setMessage(result.session.error || "Pairing stopped. Start a new code.");
+        if (["failed", "expired"].includes(result.session?.status)) setMessage(telegramPairingPollMessage(result.session));
       } catch (error) {
         if (error.payload?.session) setSession(error.payload.session);
         setMessage(error.message);
@@ -2112,11 +2204,12 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
     setBusy(true);
     setMessage("");
     try {
-      const validation = await api("/api/telegram/token/validate", { method: "POST", body: JSON.stringify({ botToken }) });
+      const [validateRequest, startRequest] = telegramPairingStartRequests(botToken);
+      const validation = await api(validateRequest.url, { method: validateRequest.method, body: JSON.stringify(validateRequest.body) });
       setBot(validation.botUsername);
-      const result = await api("/api/telegram/pairing/start", { method: "POST", body: JSON.stringify({ botToken }) });
+      const result = await api(startRequest.url, { method: startRequest.method, body: JSON.stringify(startRequest.body) });
       setSession(result.session);
-      setMessage("Pairing code is live. In Telegram, chat with your bot, send /start, then reply with the code shown here.");
+      setMessage(telegramPairingStartMessage());
       await refresh();
     } catch (error) {
       setMessage(error.message);
@@ -2141,8 +2234,8 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
     </form>
     {(session || paired) && <div className={`pair-status ${paired ? "paired" : session?.status || "waiting"}`}>
       <div className="pair-status-head">
-        <div><strong>{paired ? "Telegram paired" : session?.status === "waiting" ? "Waiting for Telegram" : "Pairing status"}</strong><span>{bot || session?.botUsername ? `@${bot || session?.botUsername}` : "Telegram bot"}</span></div>
-        <Badge tone={paired ? "ok" : session?.status === "failed" || session?.status === "expired" ? "warn" : "muted"}>{paired ? "Connected" : session?.status || "waiting"}</Badge>
+        <div><strong>{statusView.title}</strong><span>{statusView.botLabel}</span></div>
+        <Badge tone={statusView.badgeTone}>{statusView.badgeLabel}</Badge>
       </div>
       {!paired && session?.deepLink && <div className="pair-grid">
         <div className="pair-actions">
@@ -2157,7 +2250,7 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
         </div>
       </div>}
     </div>}
-    {message && <p className={message.includes("ready") || message.includes("live") || message.includes("Paired") ? "ok-text" : "warn-text"}>{message}</p>}
+    {message && <p className={telegramPairingMessageTone(message)}>{message}</p>}
   </div>;
 }
 
@@ -2171,84 +2264,22 @@ function OnboardingLoading({ title, body }) {
   </div>;
 }
 
-function localPreferenceHints(briefPrompt = "") {
-  const lower = String(briefPrompt || "").toLowerCase();
-  const hints = [];
-  if (/\bright[-\s]?wing\b|\bconservative\b|\bgop\b|\brepublican\b/.test(lower)) hints.push("preserve the right-leaning/conservative frame");
-  if (/\bleft[-\s]?wing\b|\bprogressive\b|\bdemocrat(ic)?\b|\bdems\b/.test(lower)) hints.push("preserve stated political-party or ideological preferences");
-  if (/\bprefer\b|\balign\b|\bavoid\b|\bdon't\b|\bnot just\b|\bmainly\b|\bfocus\b|\blook mainly\b/.test(lower)) hints.push("carry over explicit preferences, exclusions, and source priorities");
-  if (/\blameness\b|\blame\b|\babsurd\b|\bfailure\b|\bweakness\b/.test(lower)) hints.push("preserve critique angles as source-grounded sentiment/framing");
-  if (/\bx\b|\btwitter\b|\breddit\b/.test(lower)) hints.push("prioritize requested X/Reddit sentiment");
-  return hints;
-}
-
-function defaultCalendarBriefSection() {
-  return {
-    key: "calendarAgenda",
-    label: "Today's Calendar",
-    enabled: true,
-    instruction: "Use today's connected calendar events to prepare me for the day: meetings, schedule shape, likely prep needs, conflicts, sequencing, focus blocks, and follow-up reminders. Treat calendar entries as private schedule context, not news.",
-    promptTarget: "standard",
-    promptRefId: "",
-  };
-}
-
-function putCalendarBriefSectionFirst(sections = [], addIfConnected = false) {
-  const usableSections = Array.isArray(sections) ? sections.filter(Boolean) : [];
-  const existing = usableSections.find((section) => section?.key === "calendarAgenda");
-  if (!existing && !addIfConnected) return usableSections;
-  const calendarSection = existing ? { ...defaultCalendarBriefSection(), ...existing, key: "calendarAgenda" } : defaultCalendarBriefSection();
-  return [calendarSection, ...usableSections.filter((section) => section?.key !== "calendarAgenda")];
-}
-
-function localBriefSetupDraft(briefPrompt = "", current = {}) {
-  const owner = current.ownerName || defaultOwnerName;
-  const prompt = String(briefPrompt || "").toLowerCase();
-  const preferenceHints = localPreferenceHints(briefPrompt);
-  const preferenceText = preferenceHints.length ? ` Preserve these preferences: ${preferenceHints.join("; ")}.` : "";
-  const topics = [];
-  if (prompt.includes("crypto")) topics.push("crypto");
-  if (prompt.includes("ai")) topics.push("AI");
-  if (prompt.includes("politic")) topics.push("politics");
-  if (prompt.includes("movie") || prompt.includes("hollywood")) topics.push("movies/Hollywood");
-  if (prompt.includes("market")) topics.push("markets");
-  if (prompt.includes("reddit")) topics.push("Reddit sentiment");
-  if (prompt.includes("x ") || prompt.includes("twitter")) topics.push("X sentiment");
-  const topicText = topics.length ? topics.join(", ") : "the topics in the brief request";
-  return {
-    ...current,
-    ownerName: owner,
-    productName: current.productName || "Pillar Time",
-    audienceContext: `A private daily brief for ${owner} focused on ${topicText}. Use only source items published today, with enough context to understand why they matter.${preferenceText}`,
-    voiceRules: `Natural, direct, and useful. Prefer plain English, sharp bullets, and concrete takeaways. Avoid corporate stiffness, filler, fake certainty, and false-balance flattening of stated preferences.${preferenceHints.length ? " Keep stated worldview/taste/source preferences visible when source evidence supports them." : ""}`,
-    sections: putCalendarBriefSectionFirst([
-      { key: "topSignals", label: "Top Signals", enabled: true, instruction: "Lead with the most important items published today. Keep each item clear, specific, and tied to why it matters.", promptTarget: "standard", promptRefId: "" },
-      { key: "sentimentRead", label: "Sentiment Read", enabled: true, instruction: `Summarize what people seem to be reacting to on X, Reddit, and other configured sources. Separate real signal from noise.${preferenceHints.length ? " Preserve the user's stated worldview/source preferences in the read when grounded in today's sources." : ""}`, promptTarget: "standard", promptRefId: "" },
-      { key: "politicalRace", label: "Political Race", enabled: prompt.includes("politic") || prompt.includes("race"), instruction: `Cover meaningful political-race developments, polling signals, campaign moves, and narrative shifts from today.${preferenceHints.length ? " Keep explicit political framing preferences intact instead of smoothing them into generic neutrality." : ""}`, promptTarget: "standard", promptRefId: "" },
-      { key: "industryMotion", label: "Industry Motion", enabled: true, instruction: "Explain production, market, industry, or business implications behind the day’s items, not just gossip or surface chatter.", promptTarget: "standard", promptRefId: "" },
-      { key: "marketImpact", label: "Market Impact", enabled: prompt.includes("market") || prompt.includes("crypto"), instruction: "Call out how the day’s events may affect markets, risk appetite, crypto, AI, or broader sentiment.", promptTarget: "standard", promptRefId: "" },
-      { key: "whatToWatch", label: "What To Watch Next", enabled: true, instruction: "End with the next developments, questions, or indicators worth watching over the next 24-72 hours.", promptTarget: "standard", promptRefId: "" },
-      { key: "sourceEvidence", label: "Source Evidence", enabled: true, instruction: "List the source items used, with links where available. Only include items published today.", promptTarget: "standard", promptRefId: "" },
-    ], current.calendarConnected),
-  };
-}
-
 function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSaved }) {
   const [apiKey, setApiKey] = React.useState("");
-  const [voices, setVoices] = React.useState(state.tts?.voiceId ? [{ id: state.tts.voiceId, name: state.tts.voiceName || state.tts.voiceId }] : []);
+  const [voices, setVoices] = React.useState(elevenLabsInitialVoices(state.tts));
   const [voiceId, setVoiceId] = React.useState(state.tts?.voiceId || "");
-  const [modelId, setModelId] = React.useState(state.tts?.modelId || "eleven_multilingual_v2");
+  const [modelId, setModelId] = React.useState(state.tts?.modelId || ELEVENLABS_DEFAULT_MODEL);
   const [telegramAutoSend, setTelegramAutoSend] = React.useState(!!state.tts?.telegramAutoSend);
   const [enabled, setEnabled] = React.useState(!!state.tts?.enabled);
   const [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [previewUrl, setPreviewUrl] = React.useState("");
-  const selectedVoice = voices.find((voice) => voice.id === voiceId);
   const fetchVoices = async () => {
-    const result = await api("/api/tts/voices", { method: "POST", body: JSON.stringify({ apiKey }) });
+    const request = elevenLabsSetupRequest("voices", { apiKey });
+    const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
     const nextVoices = result.voices || [];
     setVoices(nextVoices);
-    const nextVoiceId = nextVoices.some((voice) => voice.id === voiceId) ? voiceId : nextVoices[0]?.id || "";
+    const nextVoiceId = nextElevenLabsVoiceId(nextVoices, voiceId);
     if (nextVoiceId) setVoiceId(nextVoiceId);
     await refresh?.();
     return { voices: nextVoices, voiceId: nextVoiceId };
@@ -2271,22 +2302,23 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
     setMessage("");
     try {
       let nextVoiceId = voiceId;
-      let nextVoiceName = selectedVoice?.name || state.tts?.voiceName || "";
+      let nextVoiceName = elevenLabsVoiceName(voices, voiceId, state.tts?.voiceName || "");
       if (!nextVoiceId && (apiKey || state.tts?.apiKeySaved)) {
         const detected = await fetchVoices();
-        const detectedVoice = detected.voices.find((voice) => voice.id === detected.voiceId);
         nextVoiceId = detected.voiceId;
-        nextVoiceName = detectedVoice?.name || nextVoiceName;
+        nextVoiceName = elevenLabsVoiceName(detected.voices, detected.voiceId, nextVoiceName);
       }
-      if (!nextVoiceId) throw new Error("Choose a voice or detect voices before saving ElevenLabs audio.");
-      await mutate("/api/tts", {
+      const readiness = elevenLabsSaveReadiness({ voiceId: nextVoiceId, apiKey, apiKeySaved: state.tts?.apiKeySaved });
+      if (!readiness.canSave) throw new Error(readiness.error);
+      const request = elevenLabsSetupRequest("save", {
         apiKey,
         voiceId: nextVoiceId,
         voiceName: nextVoiceName,
         modelId,
         telegramAutoSend,
         enabled: enabled || !!nextVoiceId,
-      }, "PATCH");
+      });
+      await mutate(request.url, request.body, request.method);
       setApiKey("");
       setMessage("ElevenLabs audio saved.");
       onSaved?.();
@@ -2300,15 +2332,8 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
     setBusy(true);
     setMessage("");
     try {
-      const result = await api("/api/tts/preview", {
-        method: "POST",
-        body: JSON.stringify({
-          apiKey,
-          voiceId,
-          modelId,
-          text: "This is your Pillar Time audio preview. Your daily brief can be read aloud with this ElevenLabs voice.",
-        }),
-      });
+      const request = elevenLabsSetupRequest("preview", { apiKey, voiceId, modelId, text: ELEVENLABS_PREVIEW_TEXT });
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setPreviewUrl(result.audio.url);
       new Audio(result.audio.url).play().catch(() => {});
       setMessage("Preview generated.");
@@ -2343,7 +2368,7 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
     ]} />
     <label className="check"><input type="checkbox" checked={telegramAutoSend} onChange={(event) => setTelegramAutoSend(event.target.checked)} /> Auto-send audio after Telegram text brief</label>
     {previewUrl && <audio controls src={previewUrl} className="audio-preview" />}
-    {message && <p className={message.includes("saved") || message.includes("Detected") || message.includes("Preview") ? "ok-text" : "warn-text"}>{message}</p>}
+    {message && <p className={elevenLabsSetupMessageTone(message)}>{message}</p>}
     <div className="row">
       {onSkip && <Button type="button" onClick={onSkip}>Skip audio</Button>}
       <Button type="button" icon="volume" onClick={preview} disabled={busy || !voiceId}>Play preview</Button>
@@ -2353,16 +2378,15 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
 }
 
 function Onboarding({ state, mutate, refresh }) {
-  const steps = ["welcome", "profile", "today", "reminders", "reviews", "model", "intent", "sources", "calendar", "telegram", "schedule", "review"];
+  const steps = onboardingSteps;
   const readiness = state.onboarding.readiness || {};
   const savedOwnerName = state.briefConfig?.ownerName || "";
   const hasSavedFirstName = !isDefaultOwnerName(savedOwnerName);
-  const initialIncomplete = () => {
-    if (!hasSavedFirstName) return "welcome";
-    if (!readiness.scheduleSet) return "schedule";
-    return "review";
-  };
-  const [step, setStep] = React.useState(!hasSavedFirstName ? "welcome" : state.onboarding.currentStep === "complete" ? initialIncomplete() : state.onboarding.currentStep || "welcome");
+  const [step, setStep] = React.useState(initialOnboardingStep({
+    savedOwnerName,
+    currentStep: state.onboarding.currentStep,
+    readiness,
+  }));
   const [model, setModel] = React.useState({ enabled: true, provider: state.model.provider || "openai", model: state.model.model || defaultModelForProvider(state.model.provider || "openai"), apiKey: "", baseUrl: state.model.baseUrl || "" });
   const [modelOptions, setModelOptions] = React.useState(state.model.model ? [state.model.model] : []);
   const [modelOptionsProvider, setModelOptionsProvider] = React.useState(state.model.provider || "openai");
@@ -2370,14 +2394,9 @@ function Onboarding({ state, mutate, refresh }) {
   const [detecting, setDetecting] = React.useState(false);
   const [returnAfterModel, setReturnAfterModel] = React.useState("");
   const [firstName, setFirstName] = React.useState(hasSavedFirstName ? savedOwnerName : "");
-  const firstNameReady = !isDefaultOwnerName(firstName.trim() || savedOwnerName);
-  const reviewReadiness = { ...readiness, ownerNameReady: firstNameReady };
-  const canComplete = reviewReadiness.ownerNameReady && reviewReadiness.scheduleSet;
-  const firstIncomplete = () => {
-    if (!reviewReadiness.ownerNameReady) return "welcome";
-    if (!reviewReadiness.scheduleSet) return "schedule";
-    return "review";
-  };
+  const reviewReadiness = onboardingReviewReadiness({ readiness, firstName, savedOwnerName });
+  const canComplete = canCompleteOnboarding(reviewReadiness);
+  const firstIncomplete = () => firstIncompleteOnboardingStep(reviewReadiness);
   const [nameMessage, setNameMessage] = React.useState("");
   const [savingFirstName, setSavingFirstName] = React.useState(false);
   const [operatingManual, setOperatingManual] = React.useState(state.time?.preferences?.operatingManual || "");
@@ -2486,40 +2505,32 @@ function Onboarding({ state, mutate, refresh }) {
   };
   const addStarterCommitment = async (event) => {
     event.preventDefault();
-    if (!starterCommitment.trim()) {
-      setStarterMessage("Write one commitment or priority first.");
-      return;
-    }
     setStarterMessage("");
-    try {
-      const title = starterCommitment.trim();
-      await api("/api/time/tasks", { method: "POST", body: JSON.stringify({ title, source: "onboarding", leverageCategory: "deepWork", priority: "high" }) });
-      await api("/api/time/commitments", { method: "POST", body: JSON.stringify({ title, notes: "Added during onboarding.", rank: Math.min(3, (state.time?.commitments || []).length + 1) }) });
+    const result = await submitStarterCommitmentFlow({
+      value: starterCommitment,
+      existingCommitments: state.time?.commitments || [],
+      api,
+      refresh,
+    });
+    if (result.clearInput) {
       setStarterCommitment("");
-      setStarterMessage("Added to Planner and Today’s Three.");
-      await refresh();
-    } catch (error) {
-      setStarterMessage(error.message || "Could not add commitment.");
     }
+    setStarterMessage(result.message);
   };
   const saveReminderDefaults = async (patch = {}) => {
-    try {
-      await mutate("/api/time/preferences", {
-        ...(state.time?.preferences || {}),
-        ...patch,
-      }, "PATCH");
-    } catch (error) {
-      setStarterMessage(error.message || "Could not save reminder settings.");
+    const result = await saveReminderDefaultsFlow({
+      preferences: state.time?.preferences || {},
+      patch,
+      mutate,
+    });
+    if (!result.ok) {
+      setStarterMessage(result.message);
     }
   };
   const toggleReview = async (review) => {
     setReviewMessage("");
-    try {
-      await mutate(`/api/time/reviews/${review.id}`, { enabled: !review.enabled }, "PATCH");
-      setReviewMessage(`${review.title} ${review.enabled ? "disabled" : "enabled"}.`);
-    } catch (error) {
-      setReviewMessage(error.message || "Could not update review.");
-    }
+    const result = await toggleReviewTemplateFlow({ review, mutate });
+    setReviewMessage(result.message);
   };
   const detectModels = async () => {
     setDetecting(true);
@@ -2581,17 +2592,16 @@ function Onboarding({ state, mutate, refresh }) {
     try {
       await mutate("/api/onboarding", { currentStep: "setup", briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: briefDraft }, "PATCH");
       setStep("setup");
-      const result = await api("/api/onboarding/brief-setup-draft", { method: "POST", body: JSON.stringify({ briefPrompt, ownerName: firstName.trim() || state.briefConfig.ownerName }) });
+      const request = briefSetupDraftRequest({ briefPrompt, ownerName: firstName.trim() || state.briefConfig.ownerName });
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setBriefDraft(result.draft || state.briefConfig);
-      setBriefDraftMessage(result.fallback
-        ? `Built a starter setup because the model draft was incomplete. Review and apply ${(result.draft?.sections || []).length} sections.`
-        : `Drafted ${(result.draft?.sections || []).length} brief sections. Review and apply them.`);
+      setBriefDraftMessage(briefSetupDraftMessage(result.draft || state.briefConfig, result.fallback));
       await refresh();
     } catch (error) {
-      if (/not found|cannot\s+(post|get)|404/i.test(error.message || "")) {
+      if (shouldUseLocalBriefSetupFallback(error)) {
         const draft = localBriefSetupDraft(briefPrompt, { ...state.briefConfig, ownerName: firstName.trim() || state.briefConfig.ownerName, calendarConnected: googleCalendarConnected });
         setBriefDraft(draft);
-        setBriefDraftMessage(`Built a starter setup locally. Review and apply ${draft.sections.length} sections.`);
+        setBriefDraftMessage(localBriefSetupDraftMessage(draft));
       } else {
         setBriefDraftMessage(error.message);
       }
@@ -2607,16 +2617,19 @@ function Onboarding({ state, mutate, refresh }) {
       ownerName: !isDefaultOwnerName(savedOwner) ? savedOwner : briefDraft?.ownerName,
     };
     try {
-      await api("/api/onboarding/brief-setup-apply", { method: "POST", body: JSON.stringify({ draft: draftToApply }) });
+      const request = briefSetupApplyRequest(draftToApply);
+      await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setBriefDraft(draftToApply);
       await refresh();
       setBriefDraftMessage("Brief setup saved.");
       await go("perspectives");
     } catch (error) {
-      if (/not found|cannot\s+(post|get)|404/i.test(error.message || "")) {
+      if (shouldUseLocalBriefSetupFallback(error)) {
         try {
-          await mutate("/api/brief-config", draftToApply, "PATCH");
-          await mutate("/api/onboarding", { currentStep: "sources", briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: draftToApply }, "PATCH");
+          const requests = briefSetupApplyFallbackRequests({ draft: draftToApply, briefPrompt, sourceSuggestions: suggestions });
+          for (const request of requests) {
+            await mutate(request.url, request.body, request.method);
+          }
           setBriefDraftMessage("Brief setup saved.");
           await go("perspectives");
         } catch (fallbackError) {
@@ -2727,11 +2740,12 @@ function Onboarding({ state, mutate, refresh }) {
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(payload.error || "Could not transcribe voice input.");
           const transcript = String(payload.transcript || "").trim();
-          if (!transcript) throw new Error("Transcription returned no text. You can try again or type the request.");
-          setPerspectivePrompt((current) => `${current ? `${current} ` : ""}${transcript}`.trim());
-          setPerspectiveMessage("Voice input added.");
+          const voiceResult = appendPerspectiveTranscript("", transcript);
+          if (!voiceResult.added) throw new Error(voiceResult.message);
+          setPerspectivePrompt((current) => appendPerspectiveTranscript(current, transcript).prompt);
+          setPerspectiveMessage(voiceResult.message);
         } catch (error) {
-          setPerspectiveMessage(error.message || "Voice input stopped. You can keep typing instead.");
+          setPerspectiveMessage(perspectiveVoiceFailure(error));
         }
       };
       setListening(true);
@@ -2745,11 +2759,13 @@ function Onboarding({ state, mutate, refresh }) {
     setGeneratingPerspectives(true);
     setPerspectiveMessage("");
     try {
-      const result = await api("/api/perspective-lenses/generate", { method: "POST", body: JSON.stringify({ prompt: perspectivePrompt }) });
-      setPerspectiveDrafts(result.lenses || []);
-      setPerspectiveMessage(`Generated ${(result.lenses || []).length} perspective lens${(result.lenses || []).length === 1 ? "" : "es"}.`);
+      const request = perspectiveGenerationRequest(perspectivePrompt);
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
+      const next = perspectiveGenerationSuccess(result.lenses);
+      setPerspectiveDrafts(next.drafts);
+      setPerspectiveMessage(next.message);
     } catch (error) {
-      setPerspectiveMessage(error.message || "Could not generate perspective lenses.");
+      setPerspectiveMessage(perspectiveGenerationFailure(error));
     } finally {
       setGeneratingPerspectives(false);
     }
@@ -2765,29 +2781,26 @@ function Onboarding({ state, mutate, refresh }) {
     }
   };
   const addSelectedSources = async () => {
-    const chosen = suggestions.filter((source) => selected.has(source.id));
-    if (!chosen.length) {
-      setSourceMessage("Select at least one source.");
+    const decision = addSelectedSourcesDecision({ suggestions, selectedIds: selected, state });
+    if (decision.action === "message") {
+      setSourceMessage(decision.message);
       return;
     }
-    const blocked = chosen.filter((source) => !sourceReadyForOnboarding(source, state));
-    if (blocked.length) {
-      setPendingSourceIds(new Set(chosen.map((source) => source.id)));
-      setSourceMessage(`${blocked.length} selected source${blocked.length === 1 ? "" : "s"} need setup first.`);
+    if (decision.action === "access") {
+      setPendingSourceIds(decision.pendingIds);
+      setSourceMessage(decision.message);
       await go("access");
       return;
     }
-    await saveChosenSources(chosen);
+    await saveChosenSources(decision.ready);
   };
   const saveChosenSources = async (chosen) => {
     setSavingSources(true);
     setSourceMessage("");
     try {
       for (const source of chosen) {
-        await api("/api/sources", { method: "POST", body: JSON.stringify({
-          ...source,
-          config: source.config,
-        }) });
+        const request = sourceCreateRequest(source);
+        await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       }
       await refresh();
       setSourceMessage(`${chosen.length} source${chosen.length === 1 ? "" : "s"} added.`);
@@ -2870,36 +2883,26 @@ function Onboarding({ state, mutate, refresh }) {
     }
   };
   const skipPrerequisiteSources = async (key) => {
-    const shouldSkip = (source) => {
-      const keys = sourcePrerequisiteKeys(source, state);
-      if (key === "transcription") return keys.includes("ffmpeg") || keys.includes("transcriptionModel");
-      return keys.includes(key);
-    };
-    const remaining = pendingSources.filter((source) => !shouldSkip(source));
-    const nextIds = new Set(remaining.map((source) => source.id));
-    setPendingSourceIds(nextIds);
-    setSelected(nextIds);
-    setSourceMessage(`Skipped ${key === "x" ? "X" : "transcription-dependent"} sources.`);
-    if (!remaining.length) {
+    const result = skipPrerequisiteSelection({ pendingSources, state, key });
+    setPendingSourceIds(result.nextIds);
+    setSelected(result.nextIds);
+    setSourceMessage(result.message);
+    if (result.returnToSources) {
       await go("sources");
     }
   };
   const continueAfterAccess = async () => {
-    const ready = pendingSources.filter((source) => sourceReadyForOnboarding(source, state));
-    const blocked = pendingSources.filter((source) => !sourceReadyForOnboarding(source, state));
-    if (blocked.length) {
-      setSourceMessage(`${blocked.length} selected source${blocked.length === 1 ? "" : "s"} still need setup. Skip those sources or finish setup to continue.`);
+    const decision = continueAfterAccessDecision({ pendingSources, state });
+    if (decision.action === "message") {
+      setSourceMessage(decision.message);
       return;
     }
-    await saveChosenSources(ready);
+    await saveChosenSources(decision.ready);
   };
   const startCalendarOAuth = async () => {
     setCalendarMessage("");
     try {
-      const result = await api("/api/google-calendar/oauth/start", { method: "POST", body: JSON.stringify({}) });
-      await refresh();
-      setCalendarMessage("Google consent opened. When it says connected, return here and refresh status.");
-      await openExternalUrl(result.authUrl);
+      setCalendarMessage(await startCalendarOAuthFlow({ api, refresh, openExternalUrl }));
     } catch (error) {
       setCalendarMessage(error.message || "Could not start Google Calendar connection.");
     }
@@ -2907,25 +2910,20 @@ function Onboarding({ state, mutate, refresh }) {
   const refreshCalendarStatus = async () => {
     setCalendarMessage("");
     try {
-      if (googleCalendarConnected) {
-        await api("/api/google-calendar/calendars", { method: "POST", body: JSON.stringify({}) });
-        setCalendarMessage("Google Calendar is connected. Brief Setup includes Today's Calendar at the top.");
-      } else {
-        await api("/api/google-calendar/test", { method: "POST", body: JSON.stringify({}) });
-        setCalendarMessage("Google Calendar is connected. Brief Setup includes Today's Calendar at the top.");
-      }
-      await refresh();
+      setCalendarMessage(await refreshCalendarStatusFlow({ api, refresh, googleCalendarConnected }));
     } catch (error) {
       setCalendarMessage(error.message || "Google Calendar is not connected yet.");
       await refresh();
     }
   };
   const saveDelivery = async (patch) => {
-    await mutate("/api/brief-config", { ...state.briefConfig, deliveryTimezone: timezone, ...patch }, "PATCH");
+    const request = deliverySaveRequest({ currentConfig: state.briefConfig, timezone, patch });
+    await mutate(request.url, request.body, request.method);
   };
   const complete = async () => {
     try {
-      await mutate("/api/onboarding/complete", {});
+      const request = onboardingCompleteRequest();
+      await mutate(request.url, request.body);
     } catch (error) {
       setSourceMessage(error.message);
     }
@@ -2935,20 +2933,7 @@ function Onboarding({ state, mutate, refresh }) {
   };
   const stepIndex = Math.max(0, steps.indexOf(step));
   const activeModelProvider = modelProviderRows.find((row) => row.provider === model.provider) || modelProviderRows[0];
-  const stepLabels = {
-    welcome: "Start",
-    profile: "Profile",
-    today: "Today",
-    reminders: "Reminders",
-    reviews: "Reviews",
-    model: "AI",
-    intent: "Brief",
-    sources: "Sources",
-    calendar: "Calendar",
-    telegram: "Telegram",
-    schedule: "Schedule",
-    review: "Review",
-  };
+  const stepLabels = onboardingStepLabels;
   return <div className="onboarding-shell">
     <aside className="onboarding-rail">
       <PillarBriefLockup />
@@ -2996,7 +2981,7 @@ function Onboarding({ state, mutate, refresh }) {
         <div className="readiness-list">
           {(state.time?.commitments || []).slice(0, 3).map((item) => <div key={item.id}><Icon name="check" /><span>{item.title}</span><Badge tone={item.status === "done" ? "ok" : "muted"}>{item.status}</Badge></div>)}
         </div>
-        {starterMessage && <p className={starterMessage.includes("Added") ? "ok-text" : "warn-text"}>{starterMessage}</p>}
+        {starterMessage && <p className={starterCommitmentMessageTone(starterMessage)}>{starterMessage}</p>}
         <div className="row"><Button onClick={() => go("profile")}>Back</Button><Button kind="primary" onClick={() => go("reminders")}>Continue</Button></div>
       </section>}
       {step === "reminders" && <section className="onboarding-panel onboarding-panel-wide">
@@ -3007,8 +2992,8 @@ function Onboarding({ state, mutate, refresh }) {
             ["reminderMasterEnabled", "Master reminders"],
             ["regularRemindersEnabled", "Regular reminders"],
             ["sporadicRemindersEnabled", "Sporadic reminders"],
-          ].map(([key, label]) => <label className="switch-row" key={key}><span>{label}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.[key]} onChange={(event) => saveReminderDefaults({ [key]: event.target.checked })} /><span /></label></label>)}
-          {["desktopText", "telegramText"].map((key) => <label className="switch-row" key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.channels?.[key]} onChange={(event) => saveReminderDefaults({ channels: { ...(state.time?.preferences?.channels || {}), [key]: event.target.checked } })} /><span /></label></label>)}
+          ].map(([key, label]) => <label className="switch-row" key={key}><span>{label}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.[key]} onChange={(event) => saveReminderDefaults(reminderDefaultPatch({ key, checked: event.target.checked, preferences: state.time?.preferences || {} }))} /><span /></label></label>)}
+          {["desktopText", "telegramText"].map((key) => <label className="switch-row" key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.channels?.[key]} onChange={(event) => saveReminderDefaults(reminderDefaultPatch({ key, checked: event.target.checked, preferences: state.time?.preferences || {} }))} /><span /></label></label>)}
         </div>
         <div className="row"><Button onClick={() => go("today")}>Back</Button><Button kind="primary" onClick={() => go("reviews")}>Continue</Button></div>
       </section>}
@@ -3019,7 +3004,7 @@ function Onboarding({ state, mutate, refresh }) {
           <div className="time-card-head"><div><strong>{review.title}</strong><small>{review.cadence}</small></div><Badge tone={review.enabled ? "ok" : "muted"}>{review.enabled ? "On" : "Off"}</Badge></div>
           <Button icon={review.enabled ? "x" : "check"} onClick={() => toggleReview(review)}>{review.enabled ? "Disable" : "Enable"}</Button>
         </div>)}</div>
-        {reviewMessage && <p className={reviewMessage.includes("enabled") || reviewMessage.includes("disabled") ? "ok-text" : "warn-text"}>{reviewMessage}</p>}
+        {reviewMessage && <p className={reviewMessageTone(reviewMessage)}>{reviewMessage}</p>}
         <div className="row"><Button onClick={() => go("reminders")}>Back</Button><Button kind="primary" onClick={() => go("model")}>Continue</Button></div>
       </section>}
       {step === "model" && <section className="onboarding-panel">
@@ -3077,7 +3062,7 @@ function Onboarding({ state, mutate, refresh }) {
           <Button type="button" icon="mic" onClick={listenForPerspectivePrompt} disabled={!speechSupported && !listening}>{listening ? "Stop" : "Speak"}</Button>
         </div>
         {!speechSupported && <p className="hint">Voice input is not available in this WebView, but typed input works normally.</p>}
-        <div className="row"><Button onClick={() => go("setup")}>Back</Button><Button icon="run" onClick={generatePerspectives} disabled={generatingPerspectives || perspectivePrompt.trim().length < 8}>{generatingPerspectives ? "Generating..." : "Generate lenses"}</Button><Button onClick={() => suggestSources()}>Skip</Button><Button icon="save" kind="primary" onClick={() => savePerspectives("sources")} disabled={!perspectiveDrafts.length}>Save and continue</Button></div>
+        <div className="row"><Button onClick={() => go("setup")}>Back</Button><Button icon="run" onClick={generatePerspectives} disabled={generatingPerspectives || perspectivePrompt.trim().length < 8}>{generatingPerspectives ? "Generating..." : "Generate lenses"}</Button><Button onClick={() => go("sources")}>Skip</Button><Button icon="save" kind="primary" onClick={() => savePerspectives("sources")} disabled={!perspectiveDrafts.length}>Save and continue</Button></div>
         <div className="analyzer-list">
           {perspectiveDrafts.map((lens, index) => <div className={`analyzer-card ${lens.enabled === false ? "disabled" : ""}`} key={lens.id || index}>
             <label className="switch"><input type="checkbox" checked={lens.enabled !== false} onChange={(event) => updatePerspectiveDraft(index, { enabled: event.target.checked })} /><span /></label>
@@ -3148,7 +3133,7 @@ function Onboarding({ state, mutate, refresh }) {
             <p className={ffmpegStatus?.available ? "ok-text" : "warn-text"}>{ffmpegMessage || ffmpegStatus?.message || "FFmpeg has not been checked yet."}</p>
           </div>}
           {pendingPrereqKeys.includes("transcriptionModel") && <div className="setup-subcard">
-            <div><strong>Set up speech-to-text</strong><span>Use local Whisper STT when bundled/configured, or add an OpenAI/custom transcription endpoint. You can also skip podcast transcription sources.</span></div>
+            <div><strong>Set up speech-to-text</strong><span>Local Whisper is optional and no longer bundled. Install whisper.cpp later for private local STT, or add an OpenAI/custom transcription endpoint. You can also skip podcast transcription sources.</span></div>
             <div className="setup-link-row">
               <Button type="button" icon="run" onClick={checkStt} disabled={sttBusy}>{sttBusy ? "Checking..." : "Check local Whisper"}</Button>
               {sttStatus?.binaryAvailable && !sttStatus?.modelAvailable && <Button type="button" icon="download" kind="primary" onClick={installSttModel} disabled={sttBusy}>{sttBusy ? "Downloading..." : "Download Whisper model"}</Button>}
@@ -3180,7 +3165,7 @@ function Onboarding({ state, mutate, refresh }) {
             <Button type="button" icon="external" onClick={startCalendarOAuth}>{googleCalendarConnected ? "Reconnect Google Calendar" : "Connect Google Calendar"}</Button>
             <Button type="button" icon="run" onClick={refreshCalendarStatus}>Refresh status</Button>
           </div>
-          {calendarMessage && <p className={calendarMessage.includes("connected") || calendarMessage.includes("opened") ? "ok-text" : "warn-text"}>{calendarMessage}</p>}
+          {calendarMessage && <p className={calendarSetupMessageTone(calendarMessage)}>{calendarMessage}</p>}
         </div>
         <div className="row"><Button onClick={() => go("sources")}>Back</Button><Button onClick={() => go("audio")}>Skip calendar</Button><Button kind="primary" onClick={() => go("audio")}>Continue</Button></div>
       </section>}
@@ -3221,19 +3206,20 @@ function Onboarding({ state, mutate, refresh }) {
 }
 
 function Telegram({ state, mutate, refresh }) {
-  const [form, setForm] = React.useState({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
+  const [form, setForm] = React.useState(telegramSettingsForm(state.telegram));
   const [cmd, setCmd] = React.useState("/review");
   const [result, setResult] = React.useState("");
   const [telegramMessage, setTelegramMessage] = React.useState("");
   React.useEffect(() => {
-    setForm({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
+    setForm(telegramSettingsForm(state.telegram));
   }, [state.telegram]);
   const save = async (e) => {
     e.preventDefault();
     setTelegramMessage("");
     try {
-      await mutate("/api/telegram", { ...form, allowedUsers: form.allowedUsers.split(",").map((u) => u.trim()).filter(Boolean) }, "PATCH");
-      setTelegramMessage("Telegram settings saved.");
+      const request = telegramSettingsRequest(form);
+      await mutate(request.url, request.body, request.method);
+      setTelegramMessage(telegramSaveMessage());
     } catch (error) {
       setTelegramMessage(error.message);
     }
@@ -3241,8 +3227,9 @@ function Telegram({ state, mutate, refresh }) {
   const testTelegram = async () => {
     setTelegramMessage("");
     try {
-      const response = await mutate("/api/telegram/test", {});
-      setTelegramMessage(`Test message sent${response.botUsername ? ` via @${response.botUsername}` : ""}.`);
+      const request = telegramTestRequest();
+      const response = await mutate(request.url, request.body, request.method);
+      setTelegramMessage(telegramTestMessage(response));
     } catch (error) {
       setTelegramMessage(error.message);
     }
@@ -3251,16 +3238,21 @@ function Telegram({ state, mutate, refresh }) {
   return <Page title="Telegram" desc="Pair Telegram with a bot link, or use Advanced for manual chat IDs." wide>
     <div className="split">
       <div className="card form"><h2>Easy pairing</h2><TelegramPairingFlow state={state} refresh={refresh} /></div>
-      <form className="card form" onSubmit={save}><h2>Advanced manual settings</h2><label className="check"><input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Enable Telegram adapter</label><Field label="Bot token" type="password" value={form.botToken} onChange={(botToken) => setForm({ ...form, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} /><Field label="Chat ID" value={form.chatId} onChange={(chatId) => setForm({ ...form, chatId })} placeholder="-1001234567890 or 123456789" /><Field label="Allowed users" value={form.allowedUsers} onChange={(allowedUsers) => setForm({ ...form, allowedUsers })} placeholder="username, teammate, 123456789" /><div className="row"><Button icon="save" kind="primary">Save Telegram Settings</Button><Button type="button" icon="telegram" onClick={testTelegram}>Send Test</Button></div>{telegramMessage && <p className={telegramMessage.includes("sent") || telegramMessage.includes("saved") ? "ok-text" : "warn-text"}>{telegramMessage}</p>}{state.telegram.lastError && <p className="warn-text">{state.telegram.lastError}</p>}{state.telegram.lastCheckedAt && <p className="hint">Last checked {new Date(state.telegram.lastCheckedAt).toLocaleString()}</p>}</form>
+      <form className="card form" onSubmit={save}><h2>Advanced manual settings</h2><label className="check"><input type="checkbox" checked={form.enabled} onChange={(e) => setForm({ ...form, enabled: e.target.checked })} /> Enable Telegram adapter</label><Field label="Bot token" type="password" value={form.botToken} onChange={(botToken) => setForm({ ...form, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} /><Field label="Chat ID" value={form.chatId} onChange={(chatId) => setForm({ ...form, chatId })} placeholder="-1001234567890 or 123456789" /><Field label="Allowed users" value={form.allowedUsers} onChange={(allowedUsers) => setForm({ ...form, allowedUsers })} placeholder="username, teammate, 123456789" /><div className="row"><Button icon="save" kind="primary">Save Telegram Settings</Button><Button type="button" icon="telegram" onClick={testTelegram}>Send Test</Button></div>{telegramMessage && <p className={telegramSettingsMessageTone(telegramMessage)}>{telegramMessage}</p>}{state.telegram.lastError && <p className="warn-text">{state.telegram.lastError}</p>}{state.telegram.lastCheckedAt && <p className="hint">Last checked {new Date(state.telegram.lastCheckedAt).toLocaleString()}</p>}</form>
       <div className="card form"><h2>Command tool call</h2><Select label="Command" value={cmd} onChange={setCmd} options={state.telegram.commands} /><Button icon="run" onClick={runCmd}>Run Command</Button>{result && <pre>{result}</pre>}<h2>Supported commands</h2><div className="chips">{state.telegram.commands.map((c) => <span key={c}>{c}</span>)}</div></div>
     </div>
   </Page>;
 }
 
 function Audit({ state }) {
+  const auditView = settingsAuditVisibility({ auditLogs: state.auditLogs, limit: 250 });
   return <Page title="Audit Log" desc="State-changing actions are recorded here." wide>
-    <div className="card table-card">{state.auditLogs.length ? <table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Note</th></tr></thead><tbody>{state.auditLogs.map((a) => <tr key={a.id}><td className="mono">{new Date(a.ts).toLocaleString()}</td><td>{a.actor}</td><td><Badge>{a.action}</Badge></td><td className="mono">{a.entityType}:{a.entityId}</td><td>{a.note}</td></tr>)}</tbody></table> : <Empty icon="audit" title="No audit entries" body="The first state-changing action will create the first audit log." />}</div>
+    <div className="card table-card"><AuditLogTable view={auditView} /></div>
   </Page>;
+}
+
+function AuditLogTable({ view }) {
+  return view.rows.length ? <table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Note</th></tr></thead><tbody>{view.rows.map((a) => <tr key={a.id}><td className="mono">{a.time}</td><td>{a.actor}</td><td><Badge>{a.action}</Badge></td><td className="mono">{a.entity}</td><td>{a.note}</td></tr>)}</tbody></table> : <Empty icon={view.emptyState.icon} title={view.emptyState.title} body={view.emptyState.body} />;
 }
 
 function Settings({ state, mutate, refresh, desktopUpdate }) {
@@ -3296,7 +3288,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     grantType: "client_credentials",
     deviceId: "DO_NOT_TRACK_THIS_DEVICE",
   });
-  const [telegramForm, setTelegramForm] = React.useState({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
+  const [telegramForm, setTelegramForm] = React.useState(telegramSettingsForm(state.telegram));
+  const [telegramSettingsMessage, setTelegramSettingsMessage] = React.useState("");
   const [detecting, setDetecting] = React.useState(false);
   const [detectError, setDetectError] = React.useState("");
   const [ffmpegStatus, setFfmpegStatus] = React.useState(state.runtime?.ffmpeg || null);
@@ -3333,7 +3326,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     }));
   }, [state.connectors?.reddit?.grantType]);
   React.useEffect(() => {
-    setTelegramForm({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
+    setTelegramForm(telegramSettingsForm(state.telegram));
   }, [state.telegram]);
   React.useEffect(() => {
     setFfmpegStatus(state.runtime?.ffmpeg || null);
@@ -3351,13 +3344,15 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   };
   const saveXConnector = (e) => {
     e.preventDefault();
-    mutate("/api/connectors/x", { ...xConnector, enabled: true }, "PATCH").then(() => setXModal(false));
+    const request = connectorRequest("saveX", xConnector);
+    mutate(request.url, request.body, request.method).then(() => setXModal(false));
   };
   const saveRedditConnector = async (e) => {
     e.preventDefault();
     setRedditMessage("");
     try {
-      await mutate("/api/connectors/reddit", { ...redditConnector, enabled: true }, "PATCH");
+      const request = connectorRequest("saveReddit", redditConnector);
+      await mutate(request.url, request.body, request.method);
       setRedditConnector({ ...redditConnector, clientId: "", clientSecret: "" });
       setRedditMessage("Reddit OAuth settings saved.");
       setRedditModal(false);
@@ -3368,7 +3363,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const testRedditConnector = async () => {
     setRedditMessage("");
     try {
-      await api("/api/reddit/test", { method: "POST", body: JSON.stringify(redditConnector) });
+      const request = connectorRequest("testReddit", redditConnector);
+      await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setRedditConnector({ ...redditConnector, clientId: "", clientSecret: "" });
       setRedditMessage("Reddit OAuth API is ready.");
       await refresh();
@@ -3380,7 +3376,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const enableLinearConnector = async () => {
     setLinearMessage("");
     try {
-      await mutate("/api/connectors/linear", { enabled: true }, "PATCH");
+      const request = connectorRequest("enableLinear");
+      await mutate(request.url, request.body, request.method);
       setLinearMessage("Linear connector enabled.");
     } catch (error) {
       setLinearMessage(error.message || "Could not enable Linear.");
@@ -3389,7 +3386,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const disableLinearConnector = async () => {
     setLinearMessage("");
     try {
-      await mutate("/api/connectors/linear", { enabled: false }, "PATCH");
+      const request = connectorRequest("disableLinear");
+      await mutate(request.url, request.body, request.method);
       setLinearMessage("Linear connector disabled.");
     } catch (error) {
       setLinearMessage(error.message || "Could not disable Linear.");
@@ -3398,7 +3396,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const testLinearConnector = async () => {
     setLinearMessage("");
     try {
-      const result = await api("/api/linear/test", { method: "POST", body: JSON.stringify({}) });
+      const request = connectorRequest("testLinear");
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setLinearMessage(`Linear is ready${result.viewer?.displayName || result.viewer?.name ? ` for ${result.viewer.displayName || result.viewer.name}` : ""}.`);
       await refresh();
     } catch (error) {
@@ -3410,7 +3409,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     e.preventDefault();
     setGoogleCalendarMessage("");
     try {
-      const result = await api("/api/google-calendar/oauth/start", { method: "POST", body: JSON.stringify({}) });
+      const request = connectorRequest("startGoogleCalendar");
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       await refresh();
       setGoogleCalendarMessage("Google consent opened. Complete it, then return here and refresh calendars.");
       await openExternalUrl(result.authUrl);
@@ -3421,7 +3421,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const testGoogleCalendar = async () => {
     setGoogleCalendarMessage("");
     try {
-      await api("/api/google-calendar/test", { method: "POST", body: JSON.stringify({}) });
+      const request = connectorRequest("testGoogleCalendar");
+      await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setGoogleCalendarMessage("Google Calendar is connected and ready.");
       await refresh();
     } catch (error) {
@@ -3432,7 +3433,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const refreshGoogleCalendars = async () => {
     setGoogleCalendarMessage("");
     try {
-      const result = await api("/api/google-calendar/calendars", { method: "POST", body: JSON.stringify({}) });
+      const request = connectorRequest("refreshGoogleCalendars");
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setGoogleCalendarSelection(result.selectedCalendarIds || ["primary"]);
       setGoogleCalendarSelectionDirty(false);
       setGoogleCalendarMessage("Calendar list refreshed.");
@@ -3445,7 +3447,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const saveGoogleCalendarSelection = async () => {
     setGoogleCalendarMessage("");
     try {
-      await mutate("/api/google-calendar/calendars", { selectedCalendarIds: googleCalendarSelection }, "PATCH");
+      const request = connectorRequest("saveGoogleCalendars", { selectedCalendarIds: googleCalendarSelection });
+      await mutate(request.url, request.body, request.method);
       setGoogleCalendarSelectionDirty(false);
       setGoogleCalendarMessage("Calendar selection saved.");
     } catch (error) {
@@ -3454,13 +3457,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   };
   const toggleGoogleCalendar = (calendarId) => {
     setGoogleCalendarSelectionDirty(true);
-    setGoogleCalendarSelection((current) => {
-      if (current.includes(calendarId)) {
-        const next = current.filter((item) => item !== calendarId);
-        return next.length ? next : current;
-      }
-      return [...current, calendarId];
-    });
+    setGoogleCalendarSelection((current) => toggleCalendarSelection(current, calendarId));
   };
   const closeGoogleCalendarModal = () => {
     setGoogleCalendarSelection(state.connectors?.googleCalendar?.selectedCalendarIds || ["primary"]);
@@ -3469,14 +3466,33 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   };
   const disconnectGoogleCalendar = async () => {
     setGoogleCalendarMessage("");
-    await mutate("/api/google-calendar/disconnect", {}, "POST");
+    const request = connectorRequest("disconnectGoogleCalendar");
+    await mutate(request.url, request.body, request.method);
     setGoogleCalendarSelection(["primary"]);
     setGoogleCalendarSelectionDirty(false);
     setGoogleCalendarMessage("Google Calendar disconnected.");
   };
-  const saveTelegram = (e) => {
+  const saveTelegram = async (e) => {
     e.preventDefault();
-    mutate("/api/telegram", { ...telegramForm, enabled: true, allowedUsers: telegramForm.allowedUsers.split(",").map((u) => u.trim()).filter(Boolean) }, "PATCH").then(() => setTelegramModal(false));
+    setTelegramSettingsMessage("");
+    try {
+      const request = telegramSettingsRequest(telegramForm, { enabled: true });
+      await mutate(request.url, request.body, request.method);
+      setTelegramSettingsMessage(telegramSaveMessage());
+      setTelegramModal(false);
+    } catch (error) {
+      setTelegramSettingsMessage(error.message || "Could not save Telegram settings.");
+    }
+  };
+  const testTelegramSettings = async () => {
+    setTelegramSettingsMessage("");
+    try {
+      const request = telegramTestRequest();
+      const result = await mutate(request.url, request.body, request.method);
+      setTelegramSettingsMessage(telegramTestMessage(result));
+    } catch (error) {
+      setTelegramSettingsMessage(error.message || "Telegram test failed.");
+    }
   };
   const detectModels = React.useCallback(async () => {
     const requestProvider = editingProvider || model.provider;
@@ -3517,21 +3533,14 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     return () => clearTimeout(timer);
   }, [editingProvider, model.apiKey, detectModels, state.model.credentialStatus, state.model.provider, state.model.providerCredentials]);
   const modelConnected = state.model.status === "ready";
-  const xConnected = state.connectors?.x?.status === "ready";
   const redditConnected = state.connectors?.reddit?.status === "ready";
   const linearConnected = state.connectors?.linear?.status === "ready";
   const googleCalendarConnected = state.connectors?.googleCalendar?.status === "ready";
   const telegramConnected = state.telegram?.enabled && state.telegram?.chatId && state.telegram?.botToken;
   const providerRows = modelProviderRows;
-  const researchRows = [
-    { service: "X (Twitter)", sub: "Search and monitor posts", type: "Social", logo: "X", status: xConnected ? "Connected" : "Needs token", connected: xConnected, action: "x" },
-    { service: "Google Calendar", sub: "Add today's agenda to briefs", type: "Calendar", logo: "Calendar", status: googleCalendarConnected ? "Connected" : state.connectors?.googleCalendar?.status === "needs consent" ? "Needs consent" : "Needs OAuth", connected: googleCalendarConnected, action: "googleCalendar" },
-    { service: "Reddit", sub: "Monitor subreddits and posts", type: "Social", logo: "Reddit", status: redditConnected ? "Connected" : "Needs OAuth", connected: redditConnected, action: "reddit" },
-    { service: "Linear", sub: "Read and update TRA issues", type: "Project", logo: "Linear", status: linearConnected ? "Connected" : state.connectors?.linear?.credentialStatus === "missing" ? "Needs env key" : "Disabled", connected: linearConnected, action: "linear" },
-    { service: "Web Search", sub: "General web search", type: "Search", logo: "Web", status: "Available", connected: true },
-    { service: "YouTube", sub: "Channels, uploads, and transcripts", type: "Video", logo: "YouTube", status: "Available", connected: true },
-  ];
+  const researchRows = settingsResearchRows(state);
   const visibleModelOptions = modelOptionsProvider === (editingProvider || model.provider) ? modelOptions : [];
+  const localDependencyView = localDependencySettingsView({ ffmpeg: ffmpegStatus, stt: sttStatus });
   const openProvider = (provider) => {
     setModel({ enabled: true, provider, model: provider === state.model.provider ? state.model.model || defaultModelForProvider(provider) : defaultModelForProvider(provider), apiKey: "", baseUrl: provider === state.model.provider ? state.model.baseUrl || "" : "" });
     setModelOptions([]);
@@ -3544,7 +3553,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setFfmpegBusy(true);
     setFfmpegMessage("");
     try {
-      const result = await api("/api/runtime/ffmpeg");
+      const request = localDependencyRuntimeRequest("checkFfmpeg");
+      const result = await api(request.url);
       setFfmpegStatus(result.ffmpeg);
     } catch (error) {
       setFfmpegMessage(error.message);
@@ -3556,7 +3566,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setFfmpegBusy(true);
     setFfmpegMessage("Installing FFmpeg with Homebrew...");
     try {
-      const result = await api("/api/runtime/ffmpeg/install", { method: "POST", body: JSON.stringify({ consent: true }) });
+      const request = localDependencyRuntimeRequest("installFfmpeg");
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setFfmpegStatus(result.ffmpeg);
       setFfmpegMessage(result.message || "FFmpeg installed successfully.");
     } catch (error) {
@@ -3570,7 +3581,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setSettingsSttBusy(true);
     setSettingsSttMessage("");
     try {
-      const result = await api("/api/runtime/stt");
+      const request = localDependencyRuntimeRequest("checkStt");
+      const result = await api(request.url);
       setSettingsSttStatus(result.stt);
     } catch (error) {
       setSettingsSttMessage(error.message);
@@ -3582,7 +3594,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setSettingsSttBusy(true);
     setSettingsSttMessage("Downloading Whisper model...");
     try {
-      const result = await api("/api/runtime/stt/model/install", { method: "POST", body: JSON.stringify({}) });
+      const request = localDependencyRuntimeRequest("installSttModel");
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setSettingsSttStatus(result.stt);
       setSettingsSttMessage(result.message || "Whisper model downloaded.");
       await refresh();
@@ -3593,16 +3606,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       setSettingsSttBusy(false);
     }
   };
-  const updateTone = desktopUpdate?.status === "current" || desktopUpdate?.status === "installed" ? "ok" : desktopUpdate?.status === "error" ? "warn" : "muted";
-  const updateLabel = desktopUpdate?.status === "available"
-    ? "Update available"
-    : desktopUpdate?.status === "installing"
-      ? "Installing"
-      : desktopUpdate?.status === "installed"
-        ? "Restart required"
-        : desktopUpdate?.status === "current"
-          ? "Up to date"
-          : "Desktop only";
+  const updateTone = desktopUpdateSettingsTone(desktopUpdate);
+  const updateLabel = desktopUpdateSettingsLabel(desktopUpdate);
+  const auditView = settingsAuditVisibility({ auditLogs: state.auditLogs });
   return <Page
     title="Settings"
     desc="Configure the models, services, and APIs used to analyze, research, and deliver your brief."
@@ -3621,13 +3627,13 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <Badge tone={updateTone}>{desktopUpdate.update?.version ? `v${desktopUpdate.update.version}` : updateLabel}</Badge>
           <span>{desktopUpdate.progress || desktopUpdate.message || "Check for signed updates."}</span>
           <div className="row tight-row">
-            <Button type="button" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={desktopUpdate.status === "checking" || desktopUpdate.status === "installing"}>{desktopUpdate.status === "checking" ? "Checking..." : "Check"}</Button>
+            <Button type="button" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={desktopUpdateIsBusy(desktopUpdate)}>{desktopUpdate.status === "checking" ? "Checking..." : "Check"}</Button>
             {desktopUpdate.status === "available" && <Button type="button" icon="download" kind="primary" onClick={desktopUpdate.installUpdate}>Install</Button>}
             {desktopUpdate.status === "installed" && <Button type="button" icon="restart" kind="primary" onClick={desktopUpdate.restartApp}>Restart</Button>}
           </div>
         </div>
         <div className={`notice ${desktopUpdate.status === "error" ? "notice-warn" : ""}`}>
-          <strong>{desktopUpdate.status === "available" ? "A signed update is ready" : desktopUpdate.status === "installed" ? "Restart to finish updating" : "Automatic update checks are enabled"}</strong>
+          <strong>{desktopUpdateSettingsNoticeTitle(desktopUpdate)}</strong>
           <span>{desktopUpdate.message || "Pillar Time checks once on startup and lets you install from Settings."}</span>
         </div>
       </section>}
@@ -3674,7 +3680,13 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
             <span>{row.type}</span>
             <Badge tone={row.connected ? "ok" : "muted"}>{row.status}</Badge>
             <span>{row.connected ? "Ready" : "-"}</span>
-            <Button type="button" icon="pencil" onClick={() => row.action === "x" ? setXModal(true) : row.action === "googleCalendar" ? setGoogleCalendarModal(true) : row.action === "reddit" ? setRedditModal(true) : row.action === "linear" ? setLinearModal(true) : null}>{row.action === "x" || row.action === "googleCalendar" || row.action === "reddit" || row.action === "linear" ? "Edit" : "View"}</Button>
+            <Button type="button" icon="pencil" onClick={() => {
+              const target = connectorModalTarget(row.action);
+              if (target === "x") setXModal(true);
+              if (target === "googleCalendar") setGoogleCalendarModal(true);
+              if (target === "reddit") setRedditModal(true);
+              if (target === "linear") setLinearModal(true);
+            }}>{connectorModalTarget(row.action) ? "Edit" : "View"}</Button>
           </div>)}
         </div>
       </section>
@@ -3682,37 +3694,37 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       <section className="panel connector-card">
         <div className="connector-head">
           <div className="connector-title"><span className="connector-icon"><Icon name="settings" /></span><div><h2>Local system dependencies</h2><p>Host tools used by local-only workflows.</p></div></div>
-          <Badge tone={ffmpegStatus?.available && sttStatus?.available ? "ok" : "warn"}>{ffmpegStatus?.available && sttStatus?.available ? "Ready" : "Needs setup"}</Badge>
+          <Badge tone={localDependencyView.summary.tone}>{localDependencyView.summary.label}</Badge>
         </div>
         <div className="connector-row dependency-row">
-          <div className="connector-name"><span className="source-icon-box"><Icon name="mic" /></span><div><strong>Whisper speech-to-text</strong><small>Local STT for voice input and podcast transcription.</small></div></div>
-          <span>Bundled binary + model</span>
-          <Badge tone={sttStatus?.available ? "ok" : "warn"}>{sttStatus?.available ? "Ready" : "Unavailable"}</Badge>
-          <span>{sttStatus?.modelName || "tiny.en"}</span>
+          <div className="connector-name"><span className="source-icon-box"><Icon name="mic" /></span><div><strong>Whisper speech-to-text</strong><small>Optional local STT for voice input and podcast transcription.</small></div></div>
+          <span>Optional local install</span>
+          <Badge tone={localDependencyView.stt.badgeTone}>{localDependencyView.stt.badgeLabel}</Badge>
+          <span>{localDependencyView.stt.modelLabel}</span>
           <div className="row tight-row">
             <Button type="button" icon="run" onClick={checkStt} disabled={sttBusy}>{sttBusy ? "Checking..." : "Re-check"}</Button>
-            {sttStatus?.binaryAvailable && !sttStatus?.modelAvailable && <Button type="button" icon="download" kind="primary" onClick={installSttModel} disabled={sttBusy}>{sttBusy ? "Downloading..." : "Download model"}</Button>}
+            {localDependencyView.stt.showModelDownload && <Button type="button" icon="download" kind="primary" onClick={installSttModel} disabled={sttBusy}>{sttBusy ? "Downloading..." : "Download model"}</Button>}
           </div>
         </div>
-        <div className={`notice ${sttStatus?.available ? "" : "notice-warn"}`}>
-          <strong>{sttStatus?.available ? "Local speech-to-text is enabled" : "Local speech-to-text is disabled"}</strong>
+        <div className={`notice ${localDependencyView.stt.noticeWarn ? "notice-warn" : ""}`}>
+          <strong>{localDependencyView.stt.headline}</strong>
           <span>{sttMessage || sttStatus?.message || "Checking local Whisper availability..."}</span>
-          {!sttStatus?.binaryAvailable && <span>For self-hosted installs, set WHISPER_CPP_PATH. For desktop releases, bundle whisper-cli in vendor/whisper/bin before building.</span>}
+          {localDependencyView.stt.showBinaryHint && <span>Install whisper.cpp separately and set WHISPER_CPP_PATH when you want local speech-to-text. The desktop app does not bundle Whisper.</span>}
         </div>
         <div className="connector-row dependency-row">
           <div className="connector-name"><span className="source-icon-box"><Icon name="Podcast" /></span><div><strong>FFmpeg</strong><small>Required for local podcast transcription.</small></div></div>
           <span>Host binary</span>
-          <Badge tone={ffmpegStatus?.available ? "ok" : "warn"}>{ffmpegStatus?.available ? "Installed" : "Unavailable"}</Badge>
-          <span>{ffmpegStatus?.path || "Not found"}</span>
+          <Badge tone={localDependencyView.ffmpeg.badgeTone}>{localDependencyView.ffmpeg.badgeLabel}</Badge>
+          <span>{localDependencyView.ffmpeg.pathLabel}</span>
           <div className="row tight-row">
             <Button type="button" icon="run" onClick={checkFfmpeg} disabled={ffmpegBusy}>{ffmpegBusy ? "Checking..." : "Re-check"}</Button>
-            {!ffmpegStatus?.available && ffmpegStatus?.installable && <Button type="button" icon="download" kind="primary" onClick={installFfmpeg} disabled={ffmpegBusy}>{ffmpegBusy ? "Installing..." : "Install FFmpeg"}</Button>}
+            {localDependencyView.ffmpeg.showInstall && <Button type="button" icon="download" kind="primary" onClick={installFfmpeg} disabled={ffmpegBusy}>{ffmpegBusy ? "Installing..." : "Install FFmpeg"}</Button>}
           </div>
         </div>
-        <div className={`notice ${ffmpegStatus?.available ? "" : "notice-warn"}`}>
-          <strong>{ffmpegStatus?.available ? "Podcast transcription is enabled" : "Podcast transcription is disabled"}</strong>
+        <div className={`notice ${localDependencyView.ffmpeg.noticeWarn ? "notice-warn" : ""}`}>
+          <strong>{localDependencyView.ffmpeg.headline}</strong>
           <span>{ffmpegStatus?.message || "Checking FFmpeg availability..."}</span>
-          {!ffmpegStatus?.available && !ffmpegStatus?.homebrewAvailable && <span>Homebrew is required for the one-click macOS installer. Install it from brew.sh, then return here.</span>}
+          {localDependencyView.ffmpeg.showHomebrewHint && <span>Homebrew is required for the one-click macOS installer. Install it from brew.sh, then return here.</span>}
           {ffmpegMessage && <span>{ffmpegMessage}</span>}
         </div>
       </section>
@@ -3731,8 +3743,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       </section>
 
       <section className="panel audit-settings">
-        <div className="connector-head"><div className="connector-title"><span className="connector-icon"><Icon name="audit" /></span><div><h2>Audit Log</h2><p>State-changing actions are recorded here.</p></div></div><Badge>{state.auditLogs.length} entries</Badge></div>
-        {state.auditLogs.length ? <table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Entity</th><th>Note</th></tr></thead><tbody>{state.auditLogs.slice(0, 12).map((a) => <tr key={a.id}><td className="mono">{new Date(a.ts).toLocaleString()}</td><td>{a.actor}</td><td><Badge>{a.action}</Badge></td><td className="mono">{a.entityType}:{a.entityId}</td><td>{a.note}</td></tr>)}</tbody></table> : <Empty icon="audit" title="No audit entries" body="The first state-changing action will create the first audit log." />}
+        <div className="connector-head"><div className="connector-title"><span className="connector-icon"><Icon name="audit" /></span><div><h2>Audit Log</h2><p>State-changing actions are recorded here.</p></div></div><Badge>{auditView.countLabel}</Badge></div>
+        <AuditLogTable view={auditView} />
       </section>
     </div>
     {connectorModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConnectorModal(false); }}>
@@ -3769,7 +3781,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <Field label="Bot token" type="password" value={telegramForm.botToken} onChange={(botToken) => setTelegramForm({ ...telegramForm, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} />
         <Field label="Chat ID" value={telegramForm.chatId} onChange={(chatId) => setTelegramForm({ ...telegramForm, chatId })} placeholder="-1001234567890 or 123456789" />
         <Field label="Allowed users" value={telegramForm.allowedUsers} onChange={(allowedUsers) => setTelegramForm({ ...telegramForm, allowedUsers })} placeholder="username, teammate, 123456789" />
-        <div className="modal-actions"><Button type="button" onClick={() => setTelegramModal(false)}>Cancel</Button><Button icon="save" kind="primary">Save Telegram</Button></div>
+        {telegramSettingsMessage && <p className={telegramSettingsMessageTone(telegramSettingsMessage)}>{telegramSettingsMessage}</p>}
+        {state.telegram.lastError && <p className="warn-text">{state.telegram.lastError}</p>}
+        <div className="modal-actions"><Button type="button" onClick={() => setTelegramModal(false)}>Cancel</Button><Button type="button" icon="telegram" onClick={testTelegramSettings}>Send Test</Button><Button icon="save" kind="primary">Save Telegram</Button></div>
       </form>
     </div>}
     {xModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setXModal(false); }}>
@@ -3790,7 +3804,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <Field label="Client ID" value={redditConnector.clientId} onChange={(clientId) => setRedditConnector({ ...redditConnector, clientId })} placeholder={state.connectors?.reddit?.apiKeySaved ? "Saved. Paste a new client ID to replace it." : "Paste Reddit app client ID"} />
         <Field label="Client secret" type="password" value={redditConnector.clientSecret} onChange={(clientSecret) => setRedditConnector({ ...redditConnector, clientSecret })} placeholder={state.connectors?.reddit?.apiKeySaved ? "Saved if configured. Paste to replace it." : "Required for script/web app; blank for installed app"} />
         {redditConnector.grantType === "installed_client" && <Field label="Device ID" value={redditConnector.deviceId} onChange={(deviceId) => setRedditConnector({ ...redditConnector, deviceId })} placeholder="DO_NOT_TRACK_THIS_DEVICE" />}
-        {redditMessage && <p className={redditMessage.includes("ready") || redditMessage.includes("saved") ? "ok-text" : "warn-text"}>{redditMessage}</p>}
+        {redditMessage && <p className={connectorMessageTone(redditMessage)}>{redditMessage}</p>}
         <div className="modal-actions"><Button type="button" onClick={() => setRedditModal(false)}>Cancel</Button><Button type="button" icon="run" onClick={testRedditConnector}>Test</Button><Button icon="save" kind="primary">Save Reddit OAuth</Button></div>
       </form>
     </div>}
@@ -3802,7 +3816,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <span>{state.connectors?.linear?.lastError || linearMessage || "Set LINEAR_API_KEY in the environment that launches Pillar Time, restart the app, then test the connector."}</span>
         </div>
         <p className="hint">The Linear personal API key is env-only. Pillar Time does not store it in SQLite or ask you to paste it into this screen.</p>
-        {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("enabled") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
+        {linearMessage && <p className={connectorMessageTone(linearMessage)}>{linearMessage}</p>}
         <div className="modal-actions">
           <Button type="button" onClick={() => setLinearModal(false)}>Cancel</Button>
           <Button type="button" icon="run" onClick={testLinearConnector}>Test</Button>
@@ -3830,7 +3844,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
             {calendar.summary || calendar.id}{calendar.primary ? " (primary)" : ""}
           </label>) : <p className="hint">Refresh calendars to load your available Google calendars.</p>}
         </div>}
-        {googleCalendarMessage && <p className={googleCalendarMessage.includes("ready") || googleCalendarMessage.includes("opened") || googleCalendarMessage.includes("disconnected") ? "ok-text" : "warn-text"}>{googleCalendarMessage}</p>}
+        {googleCalendarMessage && <p className={connectorMessageTone(googleCalendarMessage)}>{googleCalendarMessage}</p>}
         <div className="modal-actions"><Button type="button" onClick={closeGoogleCalendarModal}>Cancel</Button>{googleCalendarConnected && <Button type="button" icon="run" onClick={refreshGoogleCalendars}>Refresh calendars</Button>}{googleCalendarConnected && <Button type="button" icon="save" onClick={saveGoogleCalendarSelection}>Save calendars</Button>}<Button type="button" icon="run" onClick={testGoogleCalendar}>Test</Button>{googleCalendarConnected && <Button type="button" icon="trash" onClick={disconnectGoogleCalendar}>Disconnect</Button>}<Button icon="save" kind="primary">{googleCalendarConnected ? "Reconnect Google" : "Connect Google"}</Button></div>
       </form>
     </div>}
@@ -3897,7 +3911,7 @@ function App() {
       return nextStatus;
     };
     try {
-      const result = await api("/api/workflow-runs", { method: "POST", body: JSON.stringify({ trigger: "Manual · Generate and deliver brief" }) });
+      const result = await api("/api/workflow-runs", { method: "POST", body: JSON.stringify({ trigger: "Manual · Generate executive day brief", runType: "executive_day" }) });
       let run = result.run;
       let nextStatus = applyRunState(run);
       while (run?.id && nextStatus === "running") {
@@ -3930,7 +3944,9 @@ function App() {
     briefSetup: <BriefSetup state={state} mutate={mutate} />,
     sources: <Sources state={state} mutate={mutate} />,
     linear: <Linear state={state} refresh={refresh} />,
+    approvals: <Approvals state={state} mutate={mutate} />,
     trustedContext: <TrustedContext state={state} mutate={mutate} />,
+    documents: <Documents state={state} mutate={mutate} />,
     lenses: <Lenses state={state} mutate={mutate} />,
     telegram: <Telegram state={state} mutate={mutate} refresh={refresh} />,
     settings: <Settings state={state} mutate={mutate} refresh={refresh} desktopUpdate={desktopUpdate} />,

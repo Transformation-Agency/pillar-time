@@ -8,12 +8,11 @@ const root = path.resolve(__dirname, "..");
 const tauriDir = path.join(root, "src-tauri");
 const resourcesDir = path.join(tauriDir, "resources");
 const backendDir = path.join(resourcesDir, "backend");
+const runtimeLibDir = path.join(tauriDir, "lib");
 const whisperResourcesDir = path.join(resourcesDir, "whisper");
-const whisperVendorDir = process.env.PILLAR_WHISPER_VENDOR_DIR || path.join(root, "vendor", "whisper");
 const binariesDir = path.join(tauriDir, "binaries");
 const sidecarName = "pillar-time-backend";
 const legacySidecarName = "jack-daily-brief-backend";
-const whisperSidecarName = "whisper-cli";
 const backendRuntimeDependencies = ["express"];
 
 function rmrf(target) {
@@ -21,6 +20,15 @@ function rmrf(target) {
 }
 
 function copy(src, dest) {
+  if (process.platform === "darwin") {
+    try {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      execFileSync("ditto", ["--noextattr", "--norsrc", src, dest], { stdio: "ignore" });
+      return;
+    } catch {
+      // Fall through to fs.cp when ditto is unavailable or cannot copy this path.
+    }
+  }
   fs.cpSync(src, dest, {
     recursive: true,
     dereference: true,
@@ -92,55 +100,51 @@ function copyNodeSidecar(filePath) {
   const nodeBinary = process.env.PILLAR_NODE_SIDECAR_PATH || process.execPath;
   fs.copyFileSync(nodeBinary, filePath);
   fs.chmodSync(filePath, 0o755);
-}
-
-function normalizeWhisperArtifacts(dir) {
-  if (!fs.existsSync(dir)) return;
-  for (const entry of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile()) continue;
-    const filePath = path.join(entry.parentPath || dir, entry.name);
-    if (/\.(dylib|so)$/.test(entry.name) || entry.name === "whisper-cli") {
-      fs.chmodSync(filePath, 0o755);
-    }
-    if (process.platform === "darwin") {
-      try {
-        execFileSync("xattr", ["-c", filePath], { stdio: "ignore" });
-      } catch {
-        // Best effort: copied Homebrew artifacts can carry local xattrs that confuse bundling.
-      }
-      try {
-        execFileSync("xattr", ["-d", "com.apple.provenance", filePath], { stdio: "ignore" });
-      } catch {
-        // This attribute is not always present or removable on every macOS version.
-      }
-    }
+  if (process.platform === "darwin") {
+    execFileSync("install_name_tool", ["-add_rpath", "@loader_path/../Resources/lib", filePath], { stdio: "ignore" });
+    const signingIdentity = process.env.PILLAR_SIGNING_IDENTITY || process.env.APPLE_SIGNING_IDENTITY || "";
+    const entitlements = path.join(tauriDir, "entitlements.plist");
+    const signArgs = signingIdentity
+      ? ["--force", "--options", "runtime", "--timestamp", "--entitlements", entitlements, "--sign", signingIdentity, filePath]
+      : ["--force", "--sign", "-", filePath];
+    execFileSync("codesign", signArgs, { stdio: "ignore" });
   }
 }
 
-function addDevRpath(binaryPath, rpath) {
-  if (process.platform !== "darwin" || !fs.existsSync(binaryPath) || !fs.existsSync(rpath)) return;
+function nodeSharedLibraryPath() {
+  if (process.platform !== "darwin") return null;
+  const nodeBinary = process.env.PILLAR_NODE_SIDECAR_PATH || process.execPath;
+  const nodeHome = path.dirname(path.dirname(nodeBinary));
+  const candidate = path.join(nodeHome, "lib", `libnode.${process.versions.modules}.dylib`);
+  if (fs.existsSync(candidate)) return candidate;
   try {
-    const output = execFileSync("otool", ["-l", binaryPath], { encoding: "utf8" });
-    if (output.includes(`path ${rpath} `)) return;
-    execFileSync("install_name_tool", ["-add_rpath", rpath, binaryPath], { stdio: "ignore" });
+    const otoolOutput = execFileSync("otool", ["-L", nodeBinary], { encoding: "utf8" });
+    const match = otoolOutput.match(/^\s+(\S*libnode\.\d+\.dylib)\s/m);
+    if (match?.[1] && fs.existsSync(match[1])) return match[1];
+    if (!/libnode\.\d+\.dylib/.test(otoolOutput)) return null;
   } catch {
-    // Best effort for local dev packaging. Production should use a static whisper.cpp build.
+    // Fall through to the packaging error below.
   }
+  throw new Error(`Could not find libnode.${process.versions.modules}.dylib for the packaged backend sidecar.`);
 }
 
-function adHocSign(binaryPath) {
-  if (process.platform !== "darwin" || !fs.existsSync(binaryPath)) return;
-  try {
-    execFileSync("codesign", ["--force", "--sign", "-", binaryPath], { stdio: "ignore" });
-  } catch {
-    // Best effort for local dev packaging; release signing will replace this signature.
+function copyNodeRuntimeLibraries() {
+  fs.mkdirSync(runtimeLibDir, { recursive: true });
+  const libnode = nodeSharedLibraryPath();
+  if (!libnode) return;
+  const dest = path.join(runtimeLibDir, path.basename(libnode));
+  copyBundleAsset(libnode, dest);
+  fs.chmodSync(dest, 0o755);
+  const signingIdentity = process.env.PILLAR_SIGNING_IDENTITY || process.env.APPLE_SIGNING_IDENTITY || "";
+  if (process.platform === "darwin" && signingIdentity) {
+    execFileSync("codesign", ["--force", "--options", "runtime", "--timestamp", "--sign", signingIdentity, dest], { stdio: "ignore" });
   }
 }
 
 rmrf(backendDir);
+rmrf(runtimeLibDir);
 rmrf(whisperResourcesDir);
 fs.mkdirSync(backendDir, { recursive: true });
-fs.mkdirSync(whisperResourcesDir, { recursive: true });
 fs.mkdirSync(binariesDir, { recursive: true });
 
 copy(path.join(root, "server"), path.join(backendDir, "server"));
@@ -162,47 +166,22 @@ fs.writeFileSync(path.join(backendDir, "package.json"), `${JSON.stringify({
 
 const hostTriple = targetTriple();
 
-if (fs.existsSync(whisperVendorDir)) {
-  const vendorModelDir = path.join(whisperVendorDir, "models");
-  if (fs.existsSync(vendorModelDir)) {
-    copyBundleAsset(vendorModelDir, path.join(whisperResourcesDir, "models"));
-  }
-  normalizeWhisperArtifacts(whisperResourcesDir);
-  const vendorWhisperBinary = process.env.PILLAR_WHISPER_CLI_PATH || path.join(whisperVendorDir, "bin", "whisper-cli");
-  if (fs.existsSync(vendorWhisperBinary)) {
-    copyBundleAsset(vendorWhisperBinary, path.join(binariesDir, `${whisperSidecarName}-${hostTriple}${exeSuffix}`));
-    fs.chmodSync(path.join(binariesDir, `${whisperSidecarName}-${hostTriple}${exeSuffix}`), 0o755);
-    rmrf(path.join(whisperResourcesDir, "bin"));
-  }
-}
-
 for (const file of fs.readdirSync(binariesDir)) {
   if (
     file.startsWith(`${sidecarName}-`) ||
     file.startsWith(`${legacySidecarName}-`) ||
-    file.startsWith(`${whisperSidecarName}-`)
+    file.startsWith("whisper-cli-")
   ) rmrf(path.join(binariesDir, file));
 }
 
 copyNodeSidecar(path.join(binariesDir, `${sidecarName}-${hostTriple}${exeSuffix}`));
-if (fs.existsSync(whisperVendorDir)) {
-  const vendorWhisperBinary = process.env.PILLAR_WHISPER_CLI_PATH || path.join(whisperVendorDir, "bin", "whisper-cli");
-  if (fs.existsSync(vendorWhisperBinary)) {
-    const whisperSidecarPath = path.join(binariesDir, `${whisperSidecarName}-${hostTriple}${exeSuffix}`);
-    copyBundleAsset(vendorWhisperBinary, whisperSidecarPath);
-    fs.chmodSync(whisperSidecarPath, 0o755);
-    addDevRpath(whisperSidecarPath, "/opt/homebrew/lib");
-    addDevRpath(whisperSidecarPath, "/usr/local/lib");
-    adHocSign(whisperSidecarPath);
-  }
-}
+copyNodeRuntimeLibraries();
 
-console.log(`Prepared Tauri Node sidecar resources for ${hostTriple}${fs.existsSync(whisperVendorDir) ? " with whisper.cpp assets" : ""}`);
+console.log(`Prepared Tauri Node sidecar resources for ${hostTriple}. Local Whisper is optional and configured after install.`);
 
 const debugResourcesDir = path.join(tauriDir, "target", "debug", "resources");
 if (fs.existsSync(debugResourcesDir)) {
+  rmrf(path.join(debugResourcesDir, "whisper"));
   copyBundleAsset(backendDir, path.join(debugResourcesDir, "backend"));
-  if (fs.existsSync(whisperResourcesDir)) {
-    copyBundleAsset(whisperResourcesDir, path.join(debugResourcesDir, "whisper"));
-  }
+  copyBundleAsset(runtimeLibDir, path.join(debugResourcesDir, "lib"));
 }

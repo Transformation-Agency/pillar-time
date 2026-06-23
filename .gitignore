@@ -1,6 +1,7 @@
 node_modules/
 dist/
 data/
+.release-sidecars/
 .env
 .env.local
 .env.*.local
@@ -9,6 +10,7 @@ SAAS_SPEC.md
 *_SPEC.md
 *_PLAN.md
 src-tauri/target/
+src-tauri/lib/
 src-tauri/resources/backend/
 src-tauri/resources/whisper/
 src-tauri/binaries/jack-daily-brief-backend-*

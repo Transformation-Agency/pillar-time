@@ -7,12 +7,29 @@ The app is designed to run on your machine with a local SQLite database. Source 
 ## What Changed From Pillar Brief
 
 - The app now opens to Today instead of a source setup landing page.
-- Today includes Highest Leverage Today, Today’s Three, quick capture, timeline context, and next reminders.
+- Today includes a first-class "What Should I Do Now?" recommendation panel, morning brief context, Highest Leverage Today, Today’s Three, quick capture, timeline context, and next reminders.
+- The "What Should I Do Now?" loop ranks one primary action, one fallback action, and one avoid-for-now item using a visible constitutional score chain: authority, risk, objective alignment, bottleneck relief, leverage, time fit, energy fit, deadline pressure, flow cost, morning brief relevance, confidence, and feedback history.
+- The morning brief remains a first-class planning ritual. Its latest executive-day artifact feeds Today recommendations when available.
 - Planner captures tasks and important dates.
 - Reminders have explicit global and per-reminder switches and are disabled by default.
 - Review templates are seeded for daily, weekly, monthly, quarterly, and annual planning.
 - Meeting records can be captured locally for future planning context.
 - The existing intelligence brief workflow remains under Intelligence.
+
+## Implemented Now Versus Deferred
+
+Implemented in Personal Desktop Mode:
+
+- Local-first Today, Planner, reminders, reviews, meeting records, important dates, brief generation, Telegram delivery, Google Calendar context, Linear review/write actions, and approval-gated calendar filling.
+- A visible Contact Lens authority boundary in the Today recommendation loop: the system may observe, classify, rank, recommend, draft, remind, prepare, and propose, but it does not decide or execute external actions without explicit approval.
+- Recommendation feedback controls for useful, wrong priority, and blocked signals.
+- WIP pressure warnings for Today's Three and active commitment overload.
+
+Deferred or partial:
+
+- Objective, Key Result, Strategic Bet, Decision, Opportunity, Delegation, Authority Boundary, Focus Block, and Morning Brief as fully migrated relational canonical objects.
+- Executive Workspace Mode, multi-user collaboration, assistant role separation, and server-side workspace isolation.
+- Autonomous external action. External mutations remain typed, approval-gated, verified where implemented, and auditable.
 
 See [docs/executive-operating-system.md](docs/executive-operating-system.md) for the product architecture and [docs/pillar-time-implementation.md](docs/pillar-time-implementation.md) for schema, migration, endpoint, and verification notes.
 

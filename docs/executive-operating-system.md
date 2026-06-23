@@ -10,6 +10,18 @@ Every feature should fit into at least one of these layers:
 
 Do not build disconnected dashboards. Data extracted from email, calendar, meetings, chat, tasks, documents, or travel must normalize into the same executive data model.
 
+## Current Implemented Loop
+
+The Personal Desktop Mode build now exposes the first visible version of the constitutional operating loop on Today:
+
+1. The morning brief remains a first-class planning ritual and, when available, feeds the Today recommendation context.
+2. "What Should I Do Now?" produces one primary action, one fallback action, and one avoid-for-now item.
+3. The recommendation is explicitly scoped as a Contact Lens output: it may rank, explain, prepare, and propose, but it cannot decide or execute external actions for the human.
+4. The recommendation shows an inspectable score chain covering authority, risk, objective alignment, bottleneck relief, leverage, time fit, energy fit, deadline pressure, flow cost, morning brief relevance, evidence confidence, and feedback history.
+5. The user can set the current time window and energy state, then give feedback when the recommendation is useful, wrong priority, or blocked.
+
+This is intentionally not a claim that the full canonical schema is complete. The current implementation reuses existing local-first tasks, daily commitments, canonical commitments, workflow run artifacts, approvals, reviews, and suggestion feedback. Dedicated relational tables for Objective, KeyResult, StrategicBet, Decision, Opportunity, Delegation, AuthorityBoundary, FocusBlock, ImplementationIntention, and MorningBrief should be added in later slices as the data model hardens.
+
 ## Deployment Topology
 
 Pillar Time supports two explicit operating modes.

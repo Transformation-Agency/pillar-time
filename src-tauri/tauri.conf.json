@@ -28,8 +28,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": ["binaries/pillar-time-backend", "binaries/whisper-cli"],
-    "resources": ["resources/backend", "resources/whisper", "icons/tray-template.png", "icons/tray-template@1x.png"],
+    "externalBin": ["binaries/pillar-time-backend"],
+    "resources": ["resources/backend", "lib", "icons/tray-template.png", "icons/tray-template@1x.png"],
     "shortDescription": "Local-first time-management agent.",
     "longDescription": "Pillar Time combines daily planning, reminders, reviews, meetings, calendar context, and local intelligence workflows in a private desktop app.",
     "macOS": {
