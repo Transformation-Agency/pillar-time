@@ -2347,11 +2347,16 @@ async function fetchGoogleCalendarSource(source) {
   const config = source.config || {};
   const credential = googleCalendarCredential();
   const selectedCalendarIds = Array.isArray(credential.data.selectedCalendarIds) && credential.data.selectedCalendarIds.length ? credential.data.selectedCalendarIds : ["primary"];
-  const calendarIds = Array.isArray(config.calendarIds) && config.calendarIds.length
-    ? config.calendarIds
+  // In "selected" mode the source follows the connector's live calendar selection.
+  // Checking the cached config.calendarIds first would ignore later deselections.
+  const usesSettingsSelection = source.locator === "selected" || !config.calendarId || config.calendarId === "selected";
+  const calendarIds = usesSettingsSelection
+    ? selectedCalendarIds
     : config.calendarId && config.calendarId !== "selected"
       ? [config.calendarId]
-      : selectedCalendarIds;
+      : Array.isArray(config.calendarIds) && config.calendarIds.length
+        ? config.calendarIds
+        : selectedCalendarIds;
   const accessToken = await refreshGoogleCalendarAccessToken();
   const rawEventsByCalendar = [];
   for (const calendarId of calendarIds) {
