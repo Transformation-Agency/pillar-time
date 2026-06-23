@@ -143,6 +143,7 @@ import {
   telegramTestRequest,
 } from "./telegramSettings.js";
 import { trustedContextConstitutionView } from "./trustedContextConstitution.js";
+import { trustedContextFactAfterSave, trustedContextFactDefaultForm, trustedContextFactSavePlan } from "./trustedContextFactForm.js";
 import {
   BookOpen,
   Bot,
@@ -1060,15 +1061,7 @@ function TrustedContext({ state, mutate }) {
   const context = state.trustedContext || {};
   const constitutionView = trustedContextConstitutionView(context);
   const health = context.health || {};
-  const [factForm, setFactForm] = React.useState({
-    resourceType: "identity.profile",
-    fieldKey: "preferredName",
-    value: "",
-    partition: "professional",
-    visibility: "assistant",
-    trustLevel: "verified_canonical_profile",
-    verificationStatus: "verified",
-  });
+  const [factForm, setFactForm] = React.useState(trustedContextFactDefaultForm);
   const [previewRequest, setPreviewRequest] = React.useState({
     mode: "speaking_to_subject",
     partition: "professional",
@@ -1081,9 +1074,14 @@ function TrustedContext({ state, mutate }) {
   const saveFact = async (event) => {
     event.preventDefault();
     setMessage("");
+    const plan = trustedContextFactSavePlan(factForm);
+    if (!plan.ok) {
+      setMessage(plan.message);
+      return;
+    }
     try {
-      await mutate("/api/trusted-context/facts", factForm, "POST");
-      setFactForm((current) => ({ ...current, value: "" }));
+      await mutate("/api/trusted-context/facts", plan.body, "POST");
+      setFactForm((current) => trustedContextFactAfterSave(current));
       setMessage("Fact saved.");
     } catch (error) {
       setMessage(error.message);
