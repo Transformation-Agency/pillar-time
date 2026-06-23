@@ -1,5 +1,41 @@
 const defaultNames = new Set(["", "you", "brief owner", "the brief owner"]);
 
+export const onboardingSteps = [
+  "welcome",
+  "profile",
+  "today",
+  "reminders",
+  "reviews",
+  "model",
+  "intent",
+  "setup",
+  "perspectives",
+  "sources",
+  "calendar",
+  "audio",
+  "telegram",
+  "schedule",
+  "review",
+];
+
+export const onboardingStepLabels = {
+  welcome: "Start",
+  profile: "Profile",
+  today: "Today",
+  reminders: "Reminders",
+  reviews: "Reviews",
+  model: "AI",
+  intent: "Brief",
+  setup: "Setup",
+  perspectives: "Lenses",
+  sources: "Sources",
+  calendar: "Calendar",
+  audio: "Audio",
+  telegram: "Telegram",
+  schedule: "Schedule",
+  review: "Review",
+};
+
 export function isDefaultOwnerName(name) {
   return defaultNames.has(String(name || "").trim().toLowerCase());
 }

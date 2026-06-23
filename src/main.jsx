@@ -75,8 +75,11 @@ import {
   deliverySaveRequest,
   firstIncompleteOnboardingStep,
   initialOnboardingStep,
+  isDefaultOwnerName,
   onboardingCompleteRequest,
   onboardingReviewReadiness,
+  onboardingStepLabels,
+  onboardingSteps,
 } from "./onboardingCompletion.js";
 import {
   energyStateOptions,
@@ -673,11 +676,6 @@ const fallbackTimezones = [
   "Asia/Tokyo",
   "Australia/Sydney",
 ];
-
-function isDefaultOwnerName(name) {
-  const normalized = String(name || "").trim().toLowerCase();
-  return !normalized || ["you", "brief owner", "the brief owner"].includes(normalized);
-}
 
 function timezoneOptions(current) {
   const supported = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : fallbackTimezones;
@@ -2380,7 +2378,7 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
 }
 
 function Onboarding({ state, mutate, refresh }) {
-  const steps = ["welcome", "profile", "today", "reminders", "reviews", "model", "intent", "sources", "calendar", "telegram", "schedule", "review"];
+  const steps = onboardingSteps;
   const readiness = state.onboarding.readiness || {};
   const savedOwnerName = state.briefConfig?.ownerName || "";
   const hasSavedFirstName = !isDefaultOwnerName(savedOwnerName);
@@ -2935,20 +2933,7 @@ function Onboarding({ state, mutate, refresh }) {
   };
   const stepIndex = Math.max(0, steps.indexOf(step));
   const activeModelProvider = modelProviderRows.find((row) => row.provider === model.provider) || modelProviderRows[0];
-  const stepLabels = {
-    welcome: "Start",
-    profile: "Profile",
-    today: "Today",
-    reminders: "Reminders",
-    reviews: "Reviews",
-    model: "AI",
-    intent: "Brief",
-    sources: "Sources",
-    calendar: "Calendar",
-    telegram: "Telegram",
-    schedule: "Schedule",
-    review: "Review",
-  };
+  const stepLabels = onboardingStepLabels;
   return <div className="onboarding-shell">
     <aside className="onboarding-rail">
       <PillarBriefLockup />
@@ -3077,7 +3062,7 @@ function Onboarding({ state, mutate, refresh }) {
           <Button type="button" icon="mic" onClick={listenForPerspectivePrompt} disabled={!speechSupported && !listening}>{listening ? "Stop" : "Speak"}</Button>
         </div>
         {!speechSupported && <p className="hint">Voice input is not available in this WebView, but typed input works normally.</p>}
-        <div className="row"><Button onClick={() => go("setup")}>Back</Button><Button icon="run" onClick={generatePerspectives} disabled={generatingPerspectives || perspectivePrompt.trim().length < 8}>{generatingPerspectives ? "Generating..." : "Generate lenses"}</Button><Button onClick={() => suggestSources()}>Skip</Button><Button icon="save" kind="primary" onClick={() => savePerspectives("sources")} disabled={!perspectiveDrafts.length}>Save and continue</Button></div>
+        <div className="row"><Button onClick={() => go("setup")}>Back</Button><Button icon="run" onClick={generatePerspectives} disabled={generatingPerspectives || perspectivePrompt.trim().length < 8}>{generatingPerspectives ? "Generating..." : "Generate lenses"}</Button><Button onClick={() => go("sources")}>Skip</Button><Button icon="save" kind="primary" onClick={() => savePerspectives("sources")} disabled={!perspectiveDrafts.length}>Save and continue</Button></div>
         <div className="analyzer-list">
           {perspectiveDrafts.map((lens, index) => <div className={`analyzer-card ${lens.enabled === false ? "disabled" : ""}`} key={lens.id || index}>
             <label className="switch"><input type="checkbox" checked={lens.enabled !== false} onChange={(event) => updatePerspectiveDraft(index, { enabled: event.target.checked })} /><span /></label>

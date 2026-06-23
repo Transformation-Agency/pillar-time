@@ -9,6 +9,8 @@ import {
   isDefaultOwnerName,
   onboardingCompleteRequest,
   onboardingReviewReadiness,
+  onboardingStepLabels,
+  onboardingSteps,
 } from "../src/onboardingCompletion.js";
 
 test("onboarding completion requires a non-default owner name and schedule", () => {
@@ -63,6 +65,29 @@ test("onboarding initial step reopens completed setup at missing required step",
     currentStep: "telegram",
     readiness: { scheduleSet: true },
   }), "telegram");
+});
+
+test("onboarding rail includes every rendered optional setup screen", () => {
+  assert.deepEqual(onboardingSteps, [
+    "welcome",
+    "profile",
+    "today",
+    "reminders",
+    "reviews",
+    "model",
+    "intent",
+    "setup",
+    "perspectives",
+    "sources",
+    "calendar",
+    "audio",
+    "telegram",
+    "schedule",
+    "review",
+  ]);
+  for (const step of onboardingSteps) {
+    assert.ok(onboardingStepLabels[step], `${step} should have a progress rail label`);
+  }
 });
 
 test("onboarding delivery save request preserves existing config and applies schedule patch", () => {
