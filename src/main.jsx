@@ -78,6 +78,11 @@ import {
   onboardingCompleteRequest,
   onboardingReviewReadiness,
 } from "./onboardingCompletion.js";
+import {
+  energyStateOptions,
+  timeWindowOptions,
+  whatShouldIDoNow,
+} from "./nowRecommendation.js";
 import { submitQuickTaskCapture } from "./quickTaskCapture.js";
 import { todayAgendaRows } from "./todayAgenda.js";
 import {
@@ -842,10 +847,13 @@ function TimeSuggestionCard({ suggestion, mutate }) {
 function Today({ state, mutate, runWorkflow, setRoute }) {
   const time = todayTime(state);
   const [capture, setCapture] = React.useState("");
+  const [windowMinutes, setWindowMinutes] = React.useState(30);
+  const [energyState, setEnergyState] = React.useState("clear");
   const agenda = todayAgendaRows(state);
   const reminderRows = todayReminderRows(time);
   const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
   const suggestions = (time.suggestions || []).slice(0, 6);
+  const nowRecommendation = whatShouldIDoNow(state, { windowMinutes, energyState });
   const addTask = async (event) => {
     event.preventDefault();
     const result = await submitQuickTaskCapture({ value: capture, mutate });
@@ -859,6 +867,38 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
       <Metric label="Reminders" value={(time.reminders || []).filter((item) => item.enabled).length} sub={time.scheduler?.active ? "scheduler active" : "scheduler idle"} alert={!time.scheduler?.active} />
     </div>
     <div className="time-layout">
+      <section className="panel now-panel">
+        <PanelTitle icon="today" title="What Should I Do Now?" sub="A Contact Lens recommendation. It ranks and explains; it does not decide or execute for you." />
+        <div className="now-controls">
+          <label><span>Window</span><select value={windowMinutes} onChange={(event) => setWindowMinutes(Number(event.target.value))}>{timeWindowOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <label><span>Energy</span><select value={energyState} onChange={(event) => setEnergyState(event.target.value)}>{energyStateOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+          <Button icon="briefs" onClick={() => nowRecommendation.morningBrief.available ? setRoute("briefs") : runWorkflow()}>{nowRecommendation.morningBrief.available ? "Open morning brief" : "Generate morning brief"}</Button>
+        </div>
+        {nowRecommendation.morningBrief.available ? <div className="brief-signal">
+          <Icon name="briefs" /><span><strong>Morning brief input:</strong> {nowRecommendation.morningBrief.title}{nowRecommendation.morningBrief.generatedAt ? ` · ${new Date(nowRecommendation.morningBrief.generatedAt).toLocaleString()}` : ""}</span>
+        </div> : <div className="brief-signal warn-signal"><Icon name="briefs" /><span><strong>No morning brief yet.</strong> Generate the brief so Today can use the operating plan, focus blocks, risks, and missing information.</span></div>}
+        {nowRecommendation.primary ? <div className="now-recommendation">
+          <div className="now-primary">
+            <span className="eyebrow">Recommended</span>
+            <h2>{nowRecommendation.primary.title}</h2>
+            <p>{nowRecommendation.primary.reason || "This is currently the highest-ranked candidate."}</p>
+            <div className="chips"><span>score {Math.round(nowRecommendation.primary.constitutionalScore)}</span><span>{nowRecommendation.primary.leverageCategory || "admin"}</span><span>{nowRecommendation.primary.estimateMinutes || 30} min</span><span>{Math.round((nowRecommendation.primary.confidence || 0) * 100)}% confidence</span></div>
+          </div>
+          <div className="now-next-action"><strong>Exact next action</strong><p>{nowRecommendation.nextAction}</p></div>
+          <div className="now-grid">
+            <div><strong>Fallback</strong><p>{nowRecommendation.fallback?.title || "No fallback ranked yet."}</p></div>
+            <div><strong>Avoid right now</strong><p>{nowRecommendation.avoid?.title || "Avoid opening a new loop until one candidate is captured or briefed."}</p></div>
+          </div>
+          <details className="score-details"><summary>Why this ranked here</summary><div className="score-list">{nowRecommendation.primary.scoreBreakdown.map((factor) => <div key={factor.key}><span>{factor.label}</span><b>{factor.score > 0 ? "+" : ""}{factor.score}</b></div>)}</div></details>
+          <div className="authority-note"><Icon name="trustedContext" /><span><strong>{nowRecommendation.authorityBoundary.label}:</strong> {nowRecommendation.authorityBoundary.detail}</span></div>
+          {nowRecommendation.wip.warnings.length ? <div className="authority-note warn-signal"><Icon name="audit" /><span><strong>WIP pressure:</strong> {nowRecommendation.wip.warnings.join(" ")}</span></div> : null}
+          <div className="row tight-row">
+            <Button icon="check" onClick={() => mutate(`/api/time/suggestions/${encodeURIComponent(nowRecommendation.primary.feedbackKey || nowRecommendation.primary.id || nowRecommendation.primary.title)}/feedback`, { feedback: "useful" })}>Useful</Button>
+            <Button icon="x" onClick={() => mutate(`/api/time/suggestions/${encodeURIComponent(nowRecommendation.primary.feedbackKey || nowRecommendation.primary.id || nowRecommendation.primary.title)}/feedback`, { feedback: "wrongPriority" })}>Wrong priority</Button>
+            <Button icon="clock" onClick={() => mutate(`/api/time/suggestions/${encodeURIComponent(nowRecommendation.primary.feedbackKey || nowRecommendation.primary.id || nowRecommendation.primary.title)}/feedback`, { feedback: "blocked" })}>Blocked</Button>
+          </div>
+        </div> : <Empty icon="today" title="No recommendation yet" body={nowRecommendation.nextAction} action={<Button icon="run" kind="primary" onClick={runWorkflow}>Generate Day Brief</Button>} />}
+      </section>
       <section className="panel">
         <PanelTitle icon="today" title="Highest Leverage Today" sub="These are offerings, not orders. Change them until they fit the day." />
         <div className="time-card-list">{suggestions.length ? suggestions.map((suggestion) => <TimeSuggestionCard key={suggestion.id || suggestion.feedbackKey || suggestion.title} suggestion={suggestion} mutate={mutate} />) : <Empty icon="planner" title="No ranked suggestions yet" body="Capture a task or connect calendar and intelligence sources." />}</div>

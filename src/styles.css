@@ -769,6 +769,107 @@ td {
   gap: 24px;
   align-items: start;
 }
+.now-panel {
+  grid-column: 1 / -1;
+}
+.now-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+.now-controls label {
+  display: grid;
+  gap: 5px;
+  min-width: 180px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.now-controls select {
+  min-height: 40px;
+}
+.brief-signal,
+.authority-note {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.58);
+  padding: 11px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--ink-soft);
+}
+.warn-signal {
+  background: #fff7e8;
+  border-color: #f1d3a1;
+}
+.now-recommendation {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+.now-primary {
+  border: 1px solid rgba(38, 87, 63, .25);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(232,244,236,.9), rgba(255,255,255,.68));
+  padding: 16px;
+}
+.now-primary h2 {
+  margin: 3px 0 7px;
+  font-size: clamp(24px, 3vw, 38px);
+  line-height: 1;
+}
+.eyebrow {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.now-next-action,
+.now-grid > div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 13px;
+  background: rgba(255,255,255,.54);
+}
+.now-next-action p,
+.now-grid p {
+  color: var(--ink-soft);
+  margin: 5px 0 0;
+}
+.now-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+.score-details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255,255,255,.5);
+}
+.score-details summary {
+  cursor: pointer;
+  font-weight: 900;
+}
+.score-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.score-list div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-soft);
+}
+.score-list b {
+  font-family: var(--mono);
+  color: var(--ink);
+}
 .time-section { margin-top: 24px; }
 .time-card-list, .review-grid {
   display: grid;
