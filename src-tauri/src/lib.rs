@@ -16,8 +16,8 @@ use tauri::{
     Manager, RunEvent, WebviewUrl, WebviewWindowBuilder,
 };
 
-const BACKEND_PORT: u16 = 42817;
-const BACKEND_URL: &str = "http://127.0.0.1:42817";
+const BACKEND_PORT: u16 = 42818;
+const BACKEND_URL: &str = "http://127.0.0.1:42818";
 const SIDECAR_PREFIX: &str = "pillar-time-backend";
 
 struct BackendProcess(Mutex<Option<Child>>);

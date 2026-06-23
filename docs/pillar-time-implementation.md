@@ -71,4 +71,4 @@ npm run check
 PILLAR_TIME_DATA_DIR=/tmp/pillar-time-dev npm run dev
 ```
 
-Open `http://127.0.0.1:42817/#/today`.
+Open `http://127.0.0.1:42818/#/today`.
