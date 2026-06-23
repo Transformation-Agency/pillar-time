@@ -40,12 +40,12 @@ jobs:
           set -euo pipefail
           mkdir -p release
           assets=(
-            "Pillar.Brief_${VERSION}_aarch64.app.tar.gz"
-            "Pillar.Brief_${VERSION}_aarch64.app.tar.gz.sig"
-            "Pillar.Brief_${VERSION}_x64.app.tar.gz"
-            "Pillar.Brief_${VERSION}_x64.app.tar.gz.sig"
-            "Pillar.Brief_${VERSION}_x64-setup.exe"
-            "Pillar.Brief_${VERSION}_x64-setup.exe.sig"
+            "Pillar.Time_${VERSION}_aarch64.app.tar.gz"
+            "Pillar.Time_${VERSION}_aarch64.app.tar.gz.sig"
+            "Pillar.Time_${VERSION}_x64.app.tar.gz"
+            "Pillar.Time_${VERSION}_x64.app.tar.gz.sig"
+            "Pillar.Time_${VERSION}_x64-setup.exe"
+            "Pillar.Time_${VERSION}_x64-setup.exe.sig"
           )
           for attempt in {1..60}; do
             missing=0

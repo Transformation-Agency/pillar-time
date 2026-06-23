@@ -65,21 +65,21 @@ jobs:
           if (-not $exe) { throw "No NSIS installer found" }
           $sig = Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe.sig" | Select-Object -First 1
           if (-not $sig) { throw "No NSIS updater signature found" }
-          Copy-Item $exe.FullName "release/Pillar.Brief_${version}_x64-setup.exe"
-          Copy-Item $sig.FullName "release/Pillar.Brief_${version}_x64-setup.exe.sig"
-          Get-FileHash "release/Pillar.Brief_${version}_x64-setup.exe" -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash.ToLower())  Pillar.Brief_${version}_x64-setup.exe" } |
-            Set-Content "release/Pillar.Brief_${version}_x64-setup.exe.sha256"
+          Copy-Item $exe.FullName "release/Pillar.Time_${version}_x64-setup.exe"
+          Copy-Item $sig.FullName "release/Pillar.Time_${version}_x64-setup.exe.sig"
+          Get-FileHash "release/Pillar.Time_${version}_x64-setup.exe" -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  Pillar.Time_${version}_x64-setup.exe" } |
+            Set-Content "release/Pillar.Time_${version}_x64-setup.exe.sha256"
           $notes = "docs/release-notes/${env:GITHUB_REF_NAME}.md"
           if (Test-Path $notes) {
             Copy-Item $notes "release-body.md"
           } else {
-            Set-Content "release-body.md" "# Pillar Brief $version`n`nDesktop release artifacts for Pillar Brief."
+            Set-Content "release-body.md" "# Pillar Time $version`n`nDesktop release artifacts for Pillar Time."
           }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: pillar-brief-windows
+          name: pillar-time-windows
           path: release/*
           if-no-files-found: error
 

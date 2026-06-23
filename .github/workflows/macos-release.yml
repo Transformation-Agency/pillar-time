@@ -154,8 +154,8 @@ jobs:
           updater="$(find "src-tauri/target/${{ matrix.target }}/release/bundle/macos" -name '*.app.tar.gz' -print -quit)"
           test -n "$updater"
           test -f "${updater}.sig"
-          asset="release/Pillar.Brief_${version}_${{ matrix.suffix }}.dmg"
-          updater_asset="release/Pillar.Brief_${version}_${{ matrix.suffix }}.app.tar.gz"
+          asset="release/Pillar.Time_${version}_${{ matrix.suffix }}.dmg"
+          updater_asset="release/Pillar.Time_${version}_${{ matrix.suffix }}.app.tar.gz"
           cp "$dmg" "$asset"
           cp "$updater" "$updater_asset"
           cp "${updater}.sig" "${updater_asset}.sig"
@@ -165,13 +165,13 @@ jobs:
           if [ -f "$notes" ]; then
             cp "$notes" release-body.md
           else
-            printf '# Pillar Brief %s\n\nDesktop release artifacts for Pillar Brief.\n' "$version" > release-body.md
+            printf '# Pillar Time %s\n\nDesktop release artifacts for Pillar Time.\n' "$version" > release-body.md
           fi
           ls -lh release
 
       - uses: actions/upload-artifact@v4
         with:
-          name: pillar-brief-macos-${{ matrix.suffix }}
+          name: pillar-time-macos-${{ matrix.suffix }}
           path: release/*
           if-no-files-found: error
 
