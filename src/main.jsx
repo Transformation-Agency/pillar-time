@@ -22,6 +22,32 @@ import {
 } from "./calendarOnboarding.js";
 import { desktopRuntime } from "./desktopRuntime.js";
 import {
+  desktopUpdateBannerVisible,
+  desktopUpdateCheckErrorState,
+  desktopUpdateCheckingState,
+  desktopUpdateDownloadProgress,
+  desktopUpdateHelpMessage,
+  desktopUpdateInstalledState,
+  desktopUpdateInstallErrorState,
+  desktopUpdateInstallStartState,
+  desktopUpdateIsBusy,
+  desktopUpdateResultState,
+  desktopUpdateSettingsLabel,
+  desktopUpdateSettingsNoticeTitle,
+  desktopUpdateSettingsTone,
+  desktopUpdateStatusIcon,
+} from "./desktopUpdates.js";
+import {
+  ELEVENLABS_DEFAULT_MODEL,
+  ELEVENLABS_PREVIEW_TEXT,
+  elevenLabsInitialVoices,
+  elevenLabsSaveReadiness,
+  elevenLabsSetupMessageTone,
+  elevenLabsSetupRequest,
+  elevenLabsVoiceName,
+  nextElevenLabsVoiceId,
+} from "./elevenLabsSetup.js";
+import {
   localDependencyRuntimeRequest,
   localDependencySettingsView,
 } from "./localDependencies.js";
@@ -40,6 +66,7 @@ import {
   reminderDefaultPatch,
   saveReminderDefaultsFlow,
 } from "./reminderDefaults.js";
+import { todayReminderRows } from "./todayReminders.js";
 import {
   reviewMessageTone,
   toggleReviewTemplateFlow,
@@ -427,36 +454,16 @@ function useDesktopUpdates() {
       setUpdateState((current) => ({ ...current, isDesktop: false, status: "idle" }));
       return null;
     }
-    setUpdateState((current) => ({
-      ...current,
-      isDesktop: true,
-      status: silent ? "checking-silent" : "checking",
-      message: silent ? current.message : "Checking for updates...",
-      progress: "",
-    }));
+    setUpdateState((current) => desktopUpdateCheckingState(current, { silent }));
     try {
       const [version, update] = await Promise.all([
         desktopRuntime.appVersion(),
         desktopRuntime.checkForUpdates(),
       ]);
-      setUpdateState((current) => ({
-        ...current,
-        isDesktop: true,
-        version,
-        status: update ? "available" : "current",
-        update,
-        message: update ? `Version ${update.version} is ready to install.` : "Pillar Time is up to date.",
-        progress: "",
-      }));
+      setUpdateState((current) => desktopUpdateResultState(current, { version, update }));
       return update;
     } catch (error) {
-      setUpdateState((current) => ({
-        ...current,
-        isDesktop: true,
-        status: silent ? "idle" : "error",
-        message: silent ? current.message : error.message,
-        progress: "",
-      }));
+      setUpdateState((current) => desktopUpdateCheckErrorState(current, error, { silent }));
       return null;
     }
   }, []);
@@ -464,45 +471,16 @@ function useDesktopUpdates() {
   const installUpdate = React.useCallback(async () => {
     if (!updateState.update) return;
     let downloaded = 0;
-    setUpdateState((current) => ({
-      ...current,
-      status: "installing",
-      message: `Downloading version ${current.update?.version || "update"}...`,
-      progress: "",
-    }));
+    setUpdateState(desktopUpdateInstallStartState);
     try {
       await desktopRuntime.downloadAndInstallUpdate(updateState.update, (event) => {
-        if (event.event === "Started") {
-          downloaded = 0;
-          setUpdateState((current) => ({
-            ...current,
-            progress: event.data?.contentLength ? `0 of ${Math.round(event.data.contentLength / 1024 / 1024)} MB` : "Download started",
-          }));
-        }
-        if (event.event === "Progress") {
-          downloaded += event.data?.chunkLength || 0;
-          setUpdateState((current) => ({
-            ...current,
-            progress: `${Math.max(1, Math.round(downloaded / 1024 / 1024))} MB downloaded`,
-          }));
-        }
-        if (event.event === "Finished") {
-          setUpdateState((current) => ({ ...current, progress: "Download complete" }));
-        }
+        const nextProgress = desktopUpdateDownloadProgress(event, downloaded);
+        downloaded = nextProgress.downloaded;
+        if (nextProgress.progress) setUpdateState((current) => ({ ...current, progress: nextProgress.progress }));
       });
-      setUpdateState((current) => ({
-        ...current,
-        status: "installed",
-        message: "Update installed. Restart Pillar Time to finish.",
-        progress: "",
-      }));
+      setUpdateState(desktopUpdateInstalledState);
     } catch (error) {
-      setUpdateState((current) => ({
-        ...current,
-        status: "error",
-        message: error.message,
-        progress: "",
-      }));
+      setUpdateState((current) => desktopUpdateInstallErrorState(current, error));
     }
   }, [updateState.update]);
 
@@ -531,17 +509,8 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
   const helpRef = React.useRef(null);
   const activeSources = state?.sources?.filter((s) => s.status === "active").length || 0;
   const counts = { sources: activeSources, lenses: state?.briefConfig?.perspectiveLenses?.filter((l) => l.enabled !== false).length || 0 };
-  const updateVisible = desktopUpdate?.isDesktop && ["available", "installed"].includes(desktopUpdate.status);
-  const updateBusy = ["checking", "checking-silent", "installing"].includes(desktopUpdate?.status);
-  const updateStatus = desktopUpdate?.status === "available"
-    ? `Update ${desktopUpdate.update?.version ? `v${desktopUpdate.update.version}` : ""} available`
-    : desktopUpdate?.status === "installed"
-      ? "Restart to finish updating"
-      : desktopUpdate?.status === "current"
-        ? "Pillar Time is up to date"
-        : desktopUpdate?.status === "error"
-          ? "Update check failed"
-          : "Check for signed desktop updates";
+  const updateVisible = desktopUpdateBannerVisible(desktopUpdate);
+  const updateBusy = desktopUpdateIsBusy(desktopUpdate);
   React.useEffect(() => {
     if (!helpOpen) return;
     const onPointerDown = (event) => {
@@ -570,8 +539,8 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
             <span>{desktopUpdate?.version ? `Version ${desktopUpdate.version}` : "Desktop app"}</span>
           </div>
           <div className={`help-update-status ${desktopUpdate?.status === "error" ? "warn" : ""}`}>
-            <Icon name={desktopUpdate?.status === "available" ? "download" : desktopUpdate?.status === "installed" ? "restart" : desktopUpdate?.status === "error" ? "x" : "check"} />
-            <span>{desktopUpdate?.isDesktop ? (desktopUpdate.progress || desktopUpdate.message || updateStatus) : "Updates are available in the desktop app."}</span>
+            <Icon name={desktopUpdateStatusIcon(desktopUpdate)} />
+            <span>{desktopUpdateHelpMessage(desktopUpdate)}</span>
           </div>
           {desktopUpdate?.isDesktop && <div className="help-menu-actions">
             <Button type="button" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={updateBusy}>{desktopUpdate?.status === "checking" ? "Checking..." : "Check for Updates"}</Button>
@@ -855,6 +824,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
   const time = todayTime(state);
   const [capture, setCapture] = React.useState("");
   const agenda = todayAgendaRows(state);
+  const reminderRows = todayReminderRows(time);
   const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
   const suggestions = (time.suggestions || []).slice(0, 6);
   const addTask = async (event) => {
@@ -888,7 +858,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
       </section>
       <section className="panel">
         <PanelTitle icon="reminders" title="Next Reminders" sub="Regular and sporadic nudges, paused by default until you enable them." />
-        {(time.reminders || []).slice(0, 6).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.nextOccurrence.dateKey} at ${formatDeliveryTime(reminder.nextOccurrence.localTime)}` : "No next occurrence"} right={<div className="row tight-row"><Badge tone={reminder.enabled ? "ok" : "muted"}>{reminder.enabled ? "On" : "Off"}</Badge><Button icon="settings" onClick={() => setRoute("reminders")}>Edit</Button></div>} />)}
+        {reminderRows.map((reminder) => <ListRow key={reminder.key} title={reminder.title} sub={reminder.sub} right={<div className="row tight-row"><Badge tone={reminder.statusTone}>{reminder.statusLabel}</Badge><Button icon="settings" onClick={() => setRoute(reminder.editRoute)}>Edit</Button></div>} />)}
       </section>
     </div>
   </Page>;
@@ -2242,20 +2212,20 @@ function OnboardingLoading({ title, body }) {
 
 function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSaved }) {
   const [apiKey, setApiKey] = React.useState("");
-  const [voices, setVoices] = React.useState(state.tts?.voiceId ? [{ id: state.tts.voiceId, name: state.tts.voiceName || state.tts.voiceId }] : []);
+  const [voices, setVoices] = React.useState(elevenLabsInitialVoices(state.tts));
   const [voiceId, setVoiceId] = React.useState(state.tts?.voiceId || "");
-  const [modelId, setModelId] = React.useState(state.tts?.modelId || "eleven_multilingual_v2");
+  const [modelId, setModelId] = React.useState(state.tts?.modelId || ELEVENLABS_DEFAULT_MODEL);
   const [telegramAutoSend, setTelegramAutoSend] = React.useState(!!state.tts?.telegramAutoSend);
   const [enabled, setEnabled] = React.useState(!!state.tts?.enabled);
   const [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [previewUrl, setPreviewUrl] = React.useState("");
-  const selectedVoice = voices.find((voice) => voice.id === voiceId);
   const fetchVoices = async () => {
-    const result = await api("/api/tts/voices", { method: "POST", body: JSON.stringify({ apiKey }) });
+    const request = elevenLabsSetupRequest("voices", { apiKey });
+    const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
     const nextVoices = result.voices || [];
     setVoices(nextVoices);
-    const nextVoiceId = nextVoices.some((voice) => voice.id === voiceId) ? voiceId : nextVoices[0]?.id || "";
+    const nextVoiceId = nextElevenLabsVoiceId(nextVoices, voiceId);
     if (nextVoiceId) setVoiceId(nextVoiceId);
     await refresh?.();
     return { voices: nextVoices, voiceId: nextVoiceId };
@@ -2278,22 +2248,23 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
     setMessage("");
     try {
       let nextVoiceId = voiceId;
-      let nextVoiceName = selectedVoice?.name || state.tts?.voiceName || "";
+      let nextVoiceName = elevenLabsVoiceName(voices, voiceId, state.tts?.voiceName || "");
       if (!nextVoiceId && (apiKey || state.tts?.apiKeySaved)) {
         const detected = await fetchVoices();
-        const detectedVoice = detected.voices.find((voice) => voice.id === detected.voiceId);
         nextVoiceId = detected.voiceId;
-        nextVoiceName = detectedVoice?.name || nextVoiceName;
+        nextVoiceName = elevenLabsVoiceName(detected.voices, detected.voiceId, nextVoiceName);
       }
-      if (!nextVoiceId) throw new Error("Choose a voice or detect voices before saving ElevenLabs audio.");
-      await mutate("/api/tts", {
+      const readiness = elevenLabsSaveReadiness({ voiceId: nextVoiceId, apiKey, apiKeySaved: state.tts?.apiKeySaved });
+      if (!readiness.canSave) throw new Error(readiness.error);
+      const request = elevenLabsSetupRequest("save", {
         apiKey,
         voiceId: nextVoiceId,
         voiceName: nextVoiceName,
         modelId,
         telegramAutoSend,
         enabled: enabled || !!nextVoiceId,
-      }, "PATCH");
+      });
+      await mutate(request.url, request.body, request.method);
       setApiKey("");
       setMessage("ElevenLabs audio saved.");
       onSaved?.();
@@ -2307,15 +2278,8 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
     setBusy(true);
     setMessage("");
     try {
-      const result = await api("/api/tts/preview", {
-        method: "POST",
-        body: JSON.stringify({
-          apiKey,
-          voiceId,
-          modelId,
-          text: "This is your Pillar Time audio preview. Your daily brief can be read aloud with this ElevenLabs voice.",
-        }),
-      });
+      const request = elevenLabsSetupRequest("preview", { apiKey, voiceId, modelId, text: ELEVENLABS_PREVIEW_TEXT });
+      const result = await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       setPreviewUrl(result.audio.url);
       new Audio(result.audio.url).play().catch(() => {});
       setMessage("Preview generated.");
@@ -2350,7 +2314,7 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
     ]} />
     <label className="check"><input type="checkbox" checked={telegramAutoSend} onChange={(event) => setTelegramAutoSend(event.target.checked)} /> Auto-send audio after Telegram text brief</label>
     {previewUrl && <audio controls src={previewUrl} className="audio-preview" />}
-    {message && <p className={message.includes("saved") || message.includes("Detected") || message.includes("Preview") ? "ok-text" : "warn-text"}>{message}</p>}
+    {message && <p className={elevenLabsSetupMessageTone(message)}>{message}</p>}
     <div className="row">
       {onSkip && <Button type="button" onClick={onSkip}>Skip audio</Button>}
       <Button type="button" icon="volume" onClick={preview} disabled={busy || !voiceId}>Play preview</Button>
@@ -3593,16 +3557,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       setSettingsSttBusy(false);
     }
   };
-  const updateTone = desktopUpdate?.status === "current" || desktopUpdate?.status === "installed" ? "ok" : desktopUpdate?.status === "error" ? "warn" : "muted";
-  const updateLabel = desktopUpdate?.status === "available"
-    ? "Update available"
-    : desktopUpdate?.status === "installing"
-      ? "Installing"
-      : desktopUpdate?.status === "installed"
-        ? "Restart required"
-        : desktopUpdate?.status === "current"
-          ? "Up to date"
-          : "Desktop only";
+  const updateTone = desktopUpdateSettingsTone(desktopUpdate);
+  const updateLabel = desktopUpdateSettingsLabel(desktopUpdate);
   return <Page
     title="Settings"
     desc="Configure the models, services, and APIs used to analyze, research, and deliver your brief."
@@ -3621,13 +3577,13 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <Badge tone={updateTone}>{desktopUpdate.update?.version ? `v${desktopUpdate.update.version}` : updateLabel}</Badge>
           <span>{desktopUpdate.progress || desktopUpdate.message || "Check for signed updates."}</span>
           <div className="row tight-row">
-            <Button type="button" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={desktopUpdate.status === "checking" || desktopUpdate.status === "installing"}>{desktopUpdate.status === "checking" ? "Checking..." : "Check"}</Button>
+            <Button type="button" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={desktopUpdateIsBusy(desktopUpdate)}>{desktopUpdate.status === "checking" ? "Checking..." : "Check"}</Button>
             {desktopUpdate.status === "available" && <Button type="button" icon="download" kind="primary" onClick={desktopUpdate.installUpdate}>Install</Button>}
             {desktopUpdate.status === "installed" && <Button type="button" icon="restart" kind="primary" onClick={desktopUpdate.restartApp}>Restart</Button>}
           </div>
         </div>
         <div className={`notice ${desktopUpdate.status === "error" ? "notice-warn" : ""}`}>
-          <strong>{desktopUpdate.status === "available" ? "A signed update is ready" : desktopUpdate.status === "installed" ? "Restart to finish updating" : "Automatic update checks are enabled"}</strong>
+          <strong>{desktopUpdateSettingsNoticeTitle(desktopUpdate)}</strong>
           <span>{desktopUpdate.message || "Pillar Time checks once on startup and lets you install from Settings."}</span>
         </div>
       </section>}

@@ -45,6 +45,12 @@ import {
   shouldRunSourcePreflight,
 } from "./briefScheduler.js";
 import {
+  buildCoverageDiagnostics,
+  NO_NEWS_FRESHNESS_POLICY,
+  noNewsClaimPolicy,
+  selectIssueClusters,
+} from "./intelligenceWorkflow.js";
+import {
   buildExecutiveCandidates as buildExecutiveCandidatesPure,
   calendarBusyIntervals as buildCalendarBusyIntervals,
   calendarFreeWindows as buildCalendarFreeWindows,
@@ -136,6 +142,10 @@ import {
   ffmpegInstallDecision,
   sttModelInstallDecision,
 } from "./localDependencies.js";
+import {
+  normalizeElevenLabsVoices,
+  ttsSettingsPatchPlan,
+} from "./ttsSettings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -1522,12 +1532,7 @@ async function listElevenLabsVoices(apiKey = "") {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload?.detail?.message || payload?.message || `ElevenLabs voice lookup failed: ${response.status}`);
-  return (payload.voices || []).map((voice) => ({
-    id: voice.voice_id,
-    name: voice.name,
-    category: voice.category || "",
-    previewUrl: voice.preview_url || "",
-  })).filter((voice) => voice.id && voice.name);
+  return normalizeElevenLabsVoices(payload);
 }
 
 function ttsSettings() {
@@ -4436,66 +4441,6 @@ function dedupeCalendarAgenda(agenda = []) {
   return deduped;
 }
 
-function coverageForResults(type, results = []) {
-  const rows = Array.isArray(results) ? results : [];
-  return {
-    type,
-    attempted: rows.length,
-    succeeded: rows.filter((result) => result.ok !== false && !result.skipped).length,
-    failed: rows.filter((result) => result.ok === false).length,
-    skipped: rows.filter((result) => result.skipped).length,
-    fetched: rows.reduce((sum, result) => sum + Number(result.seen || result.today || result.fetched || 0), 0),
-    today: rows.reduce((sum, result) => sum + Number(result.today || 0), 0),
-    inserted: rows.reduce((sum, result) => sum + Number(result.inserted || 0), 0),
-    reused: rows.reduce((sum, result) => sum + Number(result.reused || result.preflight || 0), 0),
-  };
-}
-
-function buildCoverageDiagnostics({ activeSources = [], sourceResults = {}, itemCount = 0, candidateCount = 0, calendarAgenda = [] } = {}) {
-  const groups = {
-    x: coverageForResults("X", sourceResults.xFetches),
-    rss: coverageForResults("RSS/YouTube", sourceResults.rssFetches),
-    reddit: coverageForResults("Reddit", sourceResults.redditFetches),
-    web: coverageForResults("Web", sourceResults.webFetches),
-    calendar: coverageForResults("Calendar", sourceResults.calendarFetches),
-    podcast: coverageForResults("Podcast", sourceResults.podcastTranscriptions),
-  };
-  const topFailures = [];
-  for (const [type, rows] of Object.entries({
-    x: sourceResults.xFetches || [],
-    rss: sourceResults.rssFetches || [],
-    reddit: sourceResults.redditFetches || [],
-    web: sourceResults.webFetches || [],
-    calendar: sourceResults.calendarFetches || [],
-    podcast: sourceResults.podcastTranscriptions || [],
-  })) {
-    for (const result of rows) {
-      if (result?.ok === false) topFailures.push({
-        type,
-        source: result.sourceName || result.source || result.name || result.url || result.sourceId || "Unknown source",
-        error: String(result.error || result.reason || "Unknown failure").slice(0, 260),
-      });
-    }
-  }
-  const warnings = [];
-  if (groups.reddit.failed) warnings.push(`Reddit coverage degraded: ${groups.reddit.failed} source${groups.reddit.failed === 1 ? "" : "s"} failed, often due to 403/429 access limits.`);
-  const unsupportedX = topFailures.filter((failure) => failure.type === "x" && /(min_faves|filter:news|unsupported)/i.test(failure.error));
-  if (unsupportedX.length) warnings.push(`Some X searches used unsupported operators and were not counted as reliable coverage: ${unsupportedX.map((failure) => failure.source).slice(0, 4).join(", ")}.`);
-  if (groups.x.failed) warnings.push(`X coverage degraded: ${groups.x.failed} search${groups.x.failed === 1 ? "" : "es"} failed.`);
-  if (groups.rss.failed) warnings.push(`RSS/YouTube coverage degraded: ${groups.rss.failed} feed${groups.rss.failed === 1 ? "" : "s"} failed or blocked.`);
-  if (!candidateCount && itemCount) warnings.push("Sources fetched items, but no same-day non-calendar news candidates qualified for ranking.");
-  return {
-    generatedAt: now(),
-    activeSourceCount: activeSources.length,
-    itemCount,
-    candidateCount,
-    calendarAgendaCount: calendarAgenda.length,
-    byType: groups,
-    topFailures: topFailures.slice(0, 18),
-    warnings,
-  };
-}
-
 function articleTextFromHtml(html = "") {
   const withoutNoise = String(html || "")
     .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
@@ -4624,41 +4569,6 @@ function clusterCandidates(candidates = []) {
   }).sort((a, b) => b.score - a.score);
 }
 
-function selectIssueClusters(clusters = [], min = 12, max = 18) {
-  const selected = [];
-  const selectedIds = new Set();
-  const addBestForTag = (tag, count = 1) => {
-    for (const cluster of clusters) {
-      if (selected.length >= max) return;
-      if (selectedIds.has(cluster.id) || !cluster.sectionTags.includes(tag)) continue;
-      selected.push(cluster);
-      selectedIds.add(cluster.id);
-      if (selected.filter((item) => item.sectionTags.includes(tag)).length >= count) return;
-    }
-  };
-  addBestForTag("politicalNational", 2);
-  addBestForTag("financialMarkets", 2);
-  addBestForTag("boulderLocal", 1);
-  addBestForTag("coloradoRegional", 1);
-  addBestForTag("worldGeopolitics", 1);
-  for (const cluster of clusters) {
-    if (selected.length >= max) break;
-    if (selectedIds.has(cluster.id)) continue;
-    const techScienceCount = selected.filter((item) => item.sectionTags.includes("techAi") || item.sectionTags.includes("scienceHealth")).length;
-    if (techScienceCount < 2 && (cluster.sectionTags.includes("techAi") || cluster.sectionTags.includes("scienceHealth"))) {
-      selected.push(cluster);
-      selectedIds.add(cluster.id);
-    }
-  }
-  for (const cluster of clusters) {
-    if (selected.length >= Math.min(max, Math.max(min, clusters.length))) break;
-    if (selectedIds.has(cluster.id)) continue;
-    selected.push(cluster);
-    selectedIds.add(cluster.id);
-  }
-  return selected.sort((a, b) => b.score - a.score).slice(0, max);
-}
-
 function issueFromCluster(cluster, evidencePacketsById = new Map(), reference = new Date()) {
   const lead = cluster.items.find((item) => item.id === cluster.leadItemId) || cluster.items[0] || {};
   const evidence = evidencePacketsById.get(lead.id);
@@ -4732,7 +4642,7 @@ async function buildRigorousBriefInputs({ activeSources = [], sourceResults = {}
       summary: candidate.summary,
     })),
   };
-  const coverageDiagnostics = buildCoverageDiagnostics({ activeSources, sourceResults, itemCount, candidateCount: candidates.length, calendarAgenda });
+  const coverageDiagnostics = buildCoverageDiagnostics({ activeSources, sourceResults, itemCount, candidateCount: candidates.length, calendarAgenda, generatedAt: now() });
   return { selectedIssues, selectedIssueClusters, evidencePackets, candidateScan, coverageDiagnostics, calendarAgenda };
 }
 
@@ -4882,6 +4792,7 @@ async function synthesizeStrategicBrief({ selectedIssues, sourceResults, selecte
   const owner = config.ownerName || "the brief owner";
   const calendarAgenda = Array.isArray(explicitCalendarAgenda) ? explicitCalendarAgenda : (Array.isArray(sourceResults?.calendarAgenda) ? sourceResults.calendarAgenda : []);
   if (!selectedIssues.length && !calendarAgenda.length) throw new Error("No usable source items or calendar events from today were selected. Add or fix sources, then generate again.");
+  const noNewsPolicy = noNewsClaimPolicy({ coverageDiagnostics, candidateScan });
   const enabledAnalyzers = sanitizeAnalyzerList(config.analyzers, defaultAnalyzers()).filter((analyzer) => analyzer.enabled !== false);
   const enabledSections = (config.sections || []).filter((section) => section.enabled !== false).map((section) => {
     return {
@@ -4955,6 +4866,7 @@ async function synthesizeStrategicBrief({ selectedIssues, sourceResults, selecte
     candidateScan,
     calendarAgenda,
     coverageDiagnostics,
+    noNewsPolicy,
     trustedContextEnvelope: trustedContextEnvelope ? {
       temporalFrame: trustedContextEnvelope.temporalFrame,
       constitution: trustedContextEnvelope.constitution,
@@ -4962,7 +4874,7 @@ async function synthesizeStrategicBrief({ selectedIssues, sourceResults, selecte
       facts: (trustedContextEnvelope.facts || []).slice(0, 24),
       quality: trustedContextEnvelope.quality,
     } : null,
-    sourceFreshnessPolicy: "Selected issue clusters have publishedAt dates from today only. Calendar is agenda only. Never say 'no news' for a section when coverageDiagnostics shows relevant coverage was degraded or relevant unselected candidates existed.",
+    sourceFreshnessPolicy: NO_NEWS_FRESHNESS_POLICY,
     sourceResultsSummary: {
       xFetches: sourceResults?.xFetches?.length || 0,
       rssFetches: sourceResults?.rssFetches?.length || 0,
@@ -7481,24 +7393,18 @@ app.patch("/api/tts", (req, res) => {
          ON CONFLICT(provider) DO UPDATE SET api_key=$apiKey, enabled=1, last_error='', updated_at=$t`, { $apiKey: apiKey, $t: now() });
   }
   const current = get("SELECT * FROM tts_settings WHERE id=1");
-  const enabled = b.enabled === undefined ? !!current.enabled : !!b.enabled;
-  const voiceId = String(b.voiceId ?? current.voice_id ?? "").trim();
-  const voiceName = String(b.voiceName ?? current.voice_name ?? "").trim();
-  const modelId = String(b.modelId ?? current.model_id ?? "eleven_multilingual_v2").trim() || "eleven_multilingual_v2";
-  const telegramAutoSend = b.telegramAutoSend === undefined ? !!current.telegram_auto_send : !!b.telegramAutoSend;
-  const hasKey = !!elevenLabsKey(apiKey);
-  const lastError = enabled && (!hasKey || !voiceId) ? "Missing ElevenLabs API key or voice" : "";
+  const plan = ttsSettingsPatchPlan(b, current, { hasKey: !!elevenLabsKey(apiKey) });
   run(`UPDATE tts_settings SET provider='elevenlabs', voice_id=$voiceId, voice_name=$voiceName, model_id=$modelId,
        telegram_auto_send=$telegramAutoSend, enabled=$enabled, last_error=$lastError, updated_at=$t WHERE id=1`, {
-    $voiceId: voiceId,
-    $voiceName: voiceName,
-    $modelId: modelId,
-    $telegramAutoSend: telegramAutoSend ? 1 : 0,
-    $enabled: enabled ? 1 : 0,
-    $lastError: lastError,
+    $voiceId: plan.voiceId,
+    $voiceName: plan.voiceName,
+    $modelId: plan.modelId,
+    $telegramAutoSend: plan.telegramAutoSend ? 1 : 0,
+    $enabled: plan.enabled ? 1 : 0,
+    $lastError: plan.lastError,
     $t: now(),
   });
-  audit("tts.settings_updated", "tts", "elevenlabs", enabled ? "ElevenLabs TTS enabled/updated" : "ElevenLabs TTS disabled/updated");
+  audit("tts.settings_updated", "tts", "elevenlabs", plan.auditNote);
   res.json(state());
 });
 
