@@ -6854,7 +6854,7 @@ app.get("/api/google-calendar/oauth/callback", async (req, res) => {
   const returnedState = String(req.query.state || "");
   const connector = googleCalendarCredential();
   const data = connector.data;
-  const render = (title, body, { autoReturn = false } = {}) => res.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>${autoReturn ? '<meta http-equiv="refresh" content="1.4; url=/#/settings">' : ''}<style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:48px;line-height:1.5;color:#111827}main{max-width:640px}.button{display:inline-flex;align-items:center;justify-content:center;margin-top:20px;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font-weight:800;padding:12px 16px}p{font-size:18px;color:#374151}code{background:#f3f4f6;padding:2px 6px;border-radius:6px}</style></head><body><main><h1>${title}</h1><p>${body}</p><p>${autoReturn ? "Returning to Pillar Time Settings..." : "Use the button below to return to Pillar Time."}</p><a class="button" href="/#/settings">Return to Pillar Time</a></main><script>${autoReturn ? 'setTimeout(() => { window.location.href = "/#/settings"; }, 800);' : ''}</script></body></html>`);
+  const render = (title, body, { connected = false } = {}) => res.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><title>${htmlEscape(title)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:48px;line-height:1.5;color:#111827}main{max-width:640px}.button{display:inline-flex;align-items:center;justify-content:center;margin-top:20px;border:0;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font:inherit;font-weight:800;padding:12px 16px;cursor:pointer}p{font-size:18px;color:#374151}.muted{color:#6b7280}</style></head><body><main><h1>${htmlEscape(title)}</h1><p>${htmlEscape(body)}</p><p>${connected ? "You can close this tab and return to Pillar Time. The app updates the connection automatically." : "Close this tab, return to Pillar Time, and try connecting again."}</p><button class="button" type="button" onclick="window.close()">Close tab</button><p class="muted">If the tab does not close, close it manually.</p></main></body></html>`);
   if (!code) {
     const error = String(req.query.error || "Missing OAuth code");
     run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: error, $t: now() });
@@ -6873,7 +6873,7 @@ app.get("/api/google-calendar/oauth/callback", async (req, res) => {
       codeVerifier: data.codeVerifier,
     });
     await saveCompletedGoogleCalendarOAuth(data, token, { authMode: "direct", authBrokerUrl: "" });
-    return render("Google Calendar connected", "Pillar Time can now read today's events. Return to the app to choose calendars.", { autoReturn: true });
+    return render("Google Calendar connected", "Pillar Time can now read today's events. Return to the app to choose calendars.", { connected: true });
   } catch (error) {
     const message = error.message || "Google Calendar OAuth failed";
     run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: message, $t: now() });
@@ -6888,7 +6888,7 @@ app.post("/api/google-calendar/oauth/complete", async (req, res) => {
   const errorPayload = String(req.body?.error || "");
   const connector = googleCalendarCredential();
   const data = connector.data;
-  const render = (title, body, { autoReturn = false } = {}) => res.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><title>${htmlEscape(title)}</title>${autoReturn ? '<meta http-equiv="refresh" content="1.4; url=/#/settings">' : ''}<style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:48px;line-height:1.5;color:#111827}main{max-width:640px}.button{display:inline-flex;align-items:center;justify-content:center;margin-top:20px;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font-weight:800;padding:12px 16px}p{font-size:18px;color:#374151}code{background:#f3f4f6;padding:2px 6px;border-radius:6px}</style></head><body><main><h1>${htmlEscape(title)}</h1><p>${htmlEscape(body)}</p><p>${autoReturn ? "Returning to Pillar Time Settings..." : "Use the button below to return to Pillar Time."}</p><a class="button" href="/#/settings">Return to Pillar Time</a></main><script>${autoReturn ? 'setTimeout(() => { window.location.href = "/#/settings"; }, 800);' : ''}</script></body></html>`);
+  const render = (title, body, { connected = false } = {}) => res.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><title>${htmlEscape(title)}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;margin:48px;line-height:1.5;color:#111827}main{max-width:640px}.button{display:inline-flex;align-items:center;justify-content:center;margin-top:20px;border:0;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font:inherit;font-weight:800;padding:12px 16px;cursor:pointer}p{font-size:18px;color:#374151}.muted{color:#6b7280}</style></head><body><main><h1>${htmlEscape(title)}</h1><p>${htmlEscape(body)}</p><p>${connected ? "You can close this tab and return to Pillar Time. The app updates the connection automatically." : "Close this tab, return to Pillar Time, and try connecting again."}</p><button class="button" type="button" onclick="window.close()">Close tab</button><p class="muted">If the tab does not close, close it manually.</p></main></body></html>`);
   if (!data.oauthState || returnedState !== data.oauthState) {
     run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: "OAuth state did not match.", $t: now() });
     return render("Google Calendar was not connected", "The OAuth state did not match. Start the connection again from Pillar Time.");
@@ -6905,7 +6905,7 @@ app.post("/api/google-calendar/oauth/complete", async (req, res) => {
       clientId: data.clientId || "",
       clientSecret: "",
     });
-    return render("Google Calendar connected", "Pillar Time can now read today's events. Return to the app to choose calendars.", { autoReturn: true });
+    return render("Google Calendar connected", "Pillar Time can now read today's events. Return to the app to choose calendars.", { connected: true });
   } catch (error) {
     const message = error.message || "Google Calendar OAuth failed";
     run("UPDATE connector_credentials SET last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER, $err: message, $t: now() });
