@@ -32,6 +32,15 @@ import {
   toggleCalendarSelection,
 } from "./settingsConnectors.js";
 import {
+  addSelectedSourcesDecision,
+  continueAfterAccessDecision,
+  skipPrerequisiteSelection,
+  sourceCreateRequest,
+  sourcePrerequisiteKeys,
+  sourcePrerequisites,
+  sourceReadyForOnboarding,
+} from "./sourceSuggestions.js";
+import {
   starterCommitmentMessageTone,
   submitStarterCommitmentFlow,
 } from "./starterCommitment.js";
@@ -196,51 +205,6 @@ function sourceLocator(type, config) {
   return config.feedUrl || config.url || config.query || config.username || "";
 }
 
-function sourcePrerequisites(source, state) {
-  const notes = [];
-  if (source.type === "Calendar" && state.connectors?.googleCalendar?.status !== "ready") {
-    notes.push({
-      key: "googleCalendar",
-      blocking: true,
-      label: "Needs Google Calendar",
-      body: "Connect Google Calendar before this source can fetch today's agenda.",
-    });
-  }
-  if (source.type === "X" && state.connectors?.x?.status !== "ready") {
-    notes.push({
-      key: "x",
-      blocking: true,
-      label: "Needs X API token",
-      body: "Set up an X developer Bearer Token before this source can fetch posts.",
-    });
-  }
-  if (source.type === "Podcast" && source.config?.transcribeNewEpisodes !== false) {
-    if (state.runtime?.ffmpeg?.available === false) {
-      notes.push({
-        key: "ffmpeg",
-        blocking: true,
-        label: "Needs FFmpeg",
-        body: "Install FFmpeg before long podcast audio can be split and converted for transcription.",
-      });
-    }
-    const localSttReady = state.runtime?.stt?.available;
-    const transcriptionModelReady = localSttReady || (["openai", "custom"].includes(state.model?.provider) && state.model?.status === "ready");
-    if (!transcriptionModelReady) {
-      notes.push({
-        key: "transcriptionModel",
-        blocking: true,
-        label: "Needs speech-to-text",
-        body: "Podcast transcription needs local Whisper STT or an OpenAI-compatible transcription endpoint.",
-      });
-    }
-  }
-  return notes;
-}
-
-function sourceReadyForOnboarding(source, state) {
-  return sourcePrerequisites(source, state).every((note) => !note.blocking);
-}
-
 function encodeMonoWav(chunks, sampleRate) {
   const totalSamples = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const pcm = new Int16Array(totalSamples);
@@ -272,10 +236,6 @@ function encodeMonoWav(chunks, sampleRate) {
   view.setUint32(40, pcm.length * 2, true);
   for (let i = 0; i < pcm.length; i += 1) view.setInt16(44 + i * 2, pcm[i], true);
   return new Blob([buffer], { type: "audio/wav" });
-}
-
-function sourcePrerequisiteKeys(source, state) {
-  return [...new Set(sourcePrerequisites(source, state).filter((note) => note.blocking).map((note) => note.key))];
 }
 
 function safeDecodeText(value) {
@@ -2856,29 +2816,26 @@ function Onboarding({ state, mutate, refresh }) {
     }
   };
   const addSelectedSources = async () => {
-    const chosen = suggestions.filter((source) => selected.has(source.id));
-    if (!chosen.length) {
-      setSourceMessage("Select at least one source.");
+    const decision = addSelectedSourcesDecision({ suggestions, selectedIds: selected, state });
+    if (decision.action === "message") {
+      setSourceMessage(decision.message);
       return;
     }
-    const blocked = chosen.filter((source) => !sourceReadyForOnboarding(source, state));
-    if (blocked.length) {
-      setPendingSourceIds(new Set(chosen.map((source) => source.id)));
-      setSourceMessage(`${blocked.length} selected source${blocked.length === 1 ? "" : "s"} need setup first.`);
+    if (decision.action === "access") {
+      setPendingSourceIds(decision.pendingIds);
+      setSourceMessage(decision.message);
       await go("access");
       return;
     }
-    await saveChosenSources(chosen);
+    await saveChosenSources(decision.ready);
   };
   const saveChosenSources = async (chosen) => {
     setSavingSources(true);
     setSourceMessage("");
     try {
       for (const source of chosen) {
-        await api("/api/sources", { method: "POST", body: JSON.stringify({
-          ...source,
-          config: source.config,
-        }) });
+        const request = sourceCreateRequest(source);
+        await api(request.url, { method: request.method, body: JSON.stringify(request.body) });
       }
       await refresh();
       setSourceMessage(`${chosen.length} source${chosen.length === 1 ? "" : "s"} added.`);
@@ -2961,28 +2918,21 @@ function Onboarding({ state, mutate, refresh }) {
     }
   };
   const skipPrerequisiteSources = async (key) => {
-    const shouldSkip = (source) => {
-      const keys = sourcePrerequisiteKeys(source, state);
-      if (key === "transcription") return keys.includes("ffmpeg") || keys.includes("transcriptionModel");
-      return keys.includes(key);
-    };
-    const remaining = pendingSources.filter((source) => !shouldSkip(source));
-    const nextIds = new Set(remaining.map((source) => source.id));
-    setPendingSourceIds(nextIds);
-    setSelected(nextIds);
-    setSourceMessage(`Skipped ${key === "x" ? "X" : "transcription-dependent"} sources.`);
-    if (!remaining.length) {
+    const result = skipPrerequisiteSelection({ pendingSources, state, key });
+    setPendingSourceIds(result.nextIds);
+    setSelected(result.nextIds);
+    setSourceMessage(result.message);
+    if (result.returnToSources) {
       await go("sources");
     }
   };
   const continueAfterAccess = async () => {
-    const ready = pendingSources.filter((source) => sourceReadyForOnboarding(source, state));
-    const blocked = pendingSources.filter((source) => !sourceReadyForOnboarding(source, state));
-    if (blocked.length) {
-      setSourceMessage(`${blocked.length} selected source${blocked.length === 1 ? "" : "s"} still need setup. Skip those sources or finish setup to continue.`);
+    const decision = continueAfterAccessDecision({ pendingSources, state });
+    if (decision.action === "message") {
+      setSourceMessage(decision.message);
       return;
     }
-    await saveChosenSources(ready);
+    await saveChosenSources(decision.ready);
   };
   const startCalendarOAuth = async () => {
     setCalendarMessage("");
