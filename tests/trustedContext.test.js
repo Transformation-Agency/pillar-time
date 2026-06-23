@@ -6,6 +6,7 @@ import {
   classifyFreshness,
   profileFactFromRow,
   profileFactInput,
+  profileFactValidationErrorResponse,
   proposeProfileUpdate,
   sortByTrust,
   validateContextRequest,
@@ -58,6 +59,13 @@ test("validateContextRequest requires explicit interaction mode and request iden
   const missingActor = validateContextRequest(request({ actorId: "" }));
   assert.equal(missingActor.ok, false);
   assert.match(missingActor.errors.join("\n"), /actorId is required/);
+});
+
+test("profile fact validation errors do not serialize whole app state", () => {
+  const response = profileFactValidationErrorResponse(new Error("fieldKey is required"));
+
+  assert.deepEqual(response, { error: "fieldKey is required" });
+  assert.equal(Object.prototype.hasOwnProperty.call(response, "state"), false);
 });
 
 test("speaking_for_subject excludes unverified observations and inferences", () => {

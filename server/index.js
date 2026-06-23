@@ -87,6 +87,7 @@ import {
   proposeProfileUpdate,
   profileFactFromRow as trustedProfileFactFromRow,
   profileFactInput,
+  profileFactValidationErrorResponse,
   trustLevels,
   validateContextRequest,
   visibilityLevels,
@@ -6073,7 +6074,7 @@ app.post("/api/trusted-context/facts", (req, res) => {
   try {
     fact = profileFactInput(req.body || {}, { now: new Date(t), idFactory: () => id("fact") });
   } catch (error) {
-    return res.status(400).json({ error: error.message || "Profile fact is invalid", state: state() });
+    return res.status(400).json(profileFactValidationErrorResponse(error));
   }
   run(`INSERT INTO profile_facts (id, resource_type, field_key, value, value_json, partition, visibility, trust_level,
          verification_status, status, valid_from, valid_to, learned_at, provenance_id, source_label, confidence, created_by, created_at, updated_at)

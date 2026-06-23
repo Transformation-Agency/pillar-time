@@ -220,6 +220,10 @@ export function profileFactInput(input = {}, { now = new Date(), idFactory = () 
   };
 }
 
+export function profileFactValidationErrorResponse(error) {
+  return { error: error?.message || "Profile fact is invalid" };
+}
+
 export function profileFactFromRow(row = {}, parseJson = JSON.parse) {
   let valueMeta = {};
   try {
