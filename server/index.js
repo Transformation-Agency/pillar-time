@@ -6104,7 +6104,7 @@ app.post("/api/runtime/ffmpeg/install", async (req, res) => {
 
 app.post("/api/runtime/open-url", async (req, res) => {
   const url = String(req.body?.url || "").trim();
-  if (!/^https:\/\/(core\.telegram\.org|telegram\.org|t\.me|brew\.sh|formulae\.brew\.sh|ffmpeg\.org|platform\.openai\.com|help\.openai\.com|console\.anthropic\.com|docs\.anthropic\.com|openrouter\.ai|aistudio\.google\.com|ai\.google\.dev|developer\.x\.com|docs\.x\.com|console\.x\.ai|docs\.x\.ai|elevenlabs\.io|linear\.app)(\/|$)/i.test(url)) {
+  if (!/^https:\/\/(core\.telegram\.org|telegram\.org|t\.me|brew\.sh|formulae\.brew\.sh|ffmpeg\.org|platform\.openai\.com|help\.openai\.com|console\.anthropic\.com|docs\.anthropic\.com|openrouter\.ai|accounts\.google\.com|auth\.pillar\.transformationagency\.com|aistudio\.google\.com|ai\.google\.dev|developer\.x\.com|docs\.x\.com|console\.x\.ai|docs\.x\.ai|elevenlabs\.io|linear\.app)(\/|$)/i.test(url)) {
     return res.status(400).json({ error: "That external URL is not allowed.", state: state() });
   }
   if (isDesktop && process.platform === "darwin") {
@@ -6837,11 +6837,9 @@ app.post("/api/google-calendar/oauth/start", (req, res) => {
     code_challenge_method: "S256",
   })}`;
   audit("google_calendar.oauth_started", "connector", GOOGLE_CALENDAR_PROVIDER, "Started Google Calendar OAuth consent", { redirectUri, authMode: data.authMode }, "system");
-  if (isDesktop && process.platform === "darwin") {
-    execFile("/usr/bin/open", ["-a", "Google Chrome", authUrl], (error) => {
-      if (error) console.error("Failed to open Google Calendar OAuth in Chrome:", error.message || error);
-    });
-  }
+  // The frontend opens authUrl via openExternalUrl -> /api/runtime/open-url (now
+  // allowlisted for the broker + Google). Opening it here too would launch a
+  // second OAuth flow whose later postback fails with "OAuth state did not match".
   res.json({ authUrl, redirectUri: useBroker ? data.completeUri : redirectUri, authMode: data.authMode, state: state() });
 });
 
