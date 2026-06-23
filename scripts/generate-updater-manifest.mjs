@@ -19,9 +19,9 @@ function readSignature(assetName) {
   return fs.readFileSync(signaturePath, "utf8").trim();
 }
 
-const macArm = `Pillar.Brief_${version}_aarch64.app.tar.gz`;
-const macIntel = `Pillar.Brief_${version}_x64.app.tar.gz`;
-const winX64 = `Pillar.Brief_${version}_x64-setup.exe`;
+const macArm = `Pillar.Time_${version}_aarch64.app.tar.gz`;
+const macIntel = `Pillar.Time_${version}_x64.app.tar.gz`;
+const winX64 = `Pillar.Time_${version}_x64-setup.exe`;
 
 const manifest = {
   version,
