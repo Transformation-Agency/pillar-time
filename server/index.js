@@ -73,7 +73,7 @@ import {
   proposedCalendarScheduleFromContext as buildProposedCalendarScheduleFromContext,
   toDateMs,
 } from "./executivePlanning.js";
-import { approvalQueueItemsForRender } from "./executiveBriefRender.js";
+import { addedContextItemsForRender, approvalQueueItemsForRender } from "./executiveBriefRender.js";
 import {
   googleCalendarPublicConnectorView,
   linearPublicConnectorView,
@@ -5346,6 +5346,7 @@ function renderExecutiveDayBrief(artifact = {}) {
     else list.forEach((item) => lines.push(`- ${typeof item === "string" ? item : JSON.stringify(item)}`));
   };
   addList("Straight Read", brief.coachingOpen || brief.executiveRead);
+  addList("Added Context", addedContextItemsForRender(artifact), "No user correction added for this run.");
   addList("Why This Is Highest Leverage", brief.leverageRead || brief.highestLeverageRead || (artifact.rankedDayCandidates || []).slice(0, 5).map((item) => `${item.title} - ${item.reason || item.source || ""}`));
   addList("The Tension This Relieves", brief.tensionRelief, "No specific tension identified from connected systems.");
   addList("Avoidance Check", brief.avoidanceCheck, "No obvious avoidance pattern detected. Stay honest anyway.");

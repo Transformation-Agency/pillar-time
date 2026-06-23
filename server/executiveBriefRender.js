@@ -11,3 +11,10 @@ export function approvalQueueItemsForRender({ brief = {}, artifact = {} } = {}) 
   if (actual.length) return actual;
   return Array.isArray(brief.approvalRead) ? brief.approvalRead.filter(Boolean) : [];
 }
+
+export function addedContextItemsForRender(artifact = {}) {
+  const context = String(artifact.additionalContext || "").trim();
+  if (!context) return [];
+  const prefix = artifact.basedOnRunId ? `Regenerated from ${artifact.basedOnRunId}: ` : "";
+  return [`${prefix}${context}`];
+}
