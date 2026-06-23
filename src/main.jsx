@@ -24,6 +24,7 @@ import {
   onboardingCompleteRequest,
   onboardingReviewReadiness,
 } from "./onboardingCompletion.js";
+import { submitQuickTaskCapture } from "./quickTaskCapture.js";
 import {
   reminderDefaultPatch,
   saveReminderDefaultsFlow,
@@ -915,10 +916,10 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
   const agenda = latestCalendarAgenda(state).slice(0, 8);
   const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
   const suggestions = (time.suggestions || []).slice(0, 6);
-  const addTask = (event) => {
+  const addTask = async (event) => {
     event.preventDefault();
-    if (!capture.trim()) return;
-    mutate("/api/time/tasks", { title: capture.trim(), source: "quick-capture" }).then(() => setCapture(""));
+    const result = await submitQuickTaskCapture({ value: capture, mutate });
+    if (result.clearInput) setCapture("");
   };
   return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, and executive day planning." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Brief</Button>}>
     <div className="metric-grid">
