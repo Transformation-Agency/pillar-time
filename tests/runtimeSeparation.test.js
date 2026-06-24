@@ -185,6 +185,10 @@ test("Help update menu exposes expanded state and keyboard dismissal", () => {
   assert.match(mainSource, /window\.removeEventListener\("keydown", onKeyDown\)/);
   assert.match(mainSource, /aria-haspopup="menu" aria-expanded=\{helpOpen\} aria-controls="help-update-menu"/);
   assert.match(mainSource, /id="help-update-menu" className="help-menu" role="menu" aria-label="Help and update actions"/);
+  assert.match(mainSource, /<Button type="button" role="menuitem" icon="run" onClick=\{\(\) => desktopUpdate\.checkForUpdates\(\)\}/);
+  assert.match(mainSource, /<Button type="button" role="menuitem" icon="download" kind="primary" onClick=\{desktopUpdate\.installUpdate\}>Install Update<\/Button>/);
+  assert.match(mainSource, /<Button type="button" role="menuitem" icon="restart" kind="primary" onClick=\{desktopUpdate\.restartApp\}>Restart to Update<\/Button>/);
+  assert.match(mainSource, /<Button type="button" role="menuitem" icon="settings" onClick=\{\(\) => \{ setHelpOpen\(false\); setRoute\("settings"\); \}\}>Open Update Settings<\/Button>/);
 });
 
 test("Desktop update restart asks before quitting the app", () => {
