@@ -1218,11 +1218,19 @@ function Reminders({ state, mutate }) {
   const masterRemindersOn = !!prefs.reminderMasterEnabled;
   const emptyReminderForm = { title: "", body: "", type: "regular", scheduleType: "daily", localTime: "09:00", enabled: false, channels: { desktopText: true, telegramText: false }, sporadic: { windowStart: "10:00", windowEnd: "16:00", count: 2, minGapMinutes: 120 } };
   const [form, setForm] = React.useState(emptyReminderForm);
+  const [reminderMessage, setReminderMessage] = React.useState("");
   const savePrefs = (patch) => mutate("/api/time/preferences", { ...prefs, ...patch }, "PATCH");
-  const createReminder = (event) => {
+  const createReminder = async (event) => {
     event.preventDefault();
     if (!form.title.trim()) return;
-    mutate("/api/time/reminders", form).then(() => setForm(emptyReminderForm));
+    setReminderMessage("");
+    try {
+      await mutate("/api/time/reminders", form);
+      setForm(emptyReminderForm);
+      setReminderMessage("Reminder created.");
+    } catch (error) {
+      setReminderMessage(error.message || "Could not create reminder.");
+    }
   };
   const archiveReminder = (reminder) => {
     const title = reminder.title || "this reminder";
@@ -1254,6 +1262,7 @@ function Reminders({ state, mutate }) {
     <div className="split time-section">
       <section className="panel">
         <PanelTitle icon="plus" title="Create Reminder" sub="The new reminder is off unless you enable it." />
+        {reminderMessage && <p className={reminderMessage.includes("created") ? "ok-text" : "warn-text"}>{reminderMessage}</p>}
         <form className="form" onSubmit={createReminder}>
           <Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} />
           <TextArea label="Body" value={form.body} rows={3} onChange={(body) => setForm({ ...form, body })} />
@@ -1300,15 +1309,24 @@ function Reviews({ state, mutate }) {
 function Meetings({ state, mutate }) {
   const time = todayTime(state);
   const [form, setForm] = React.useState({ title: "", startsAt: "", notes: "" });
-  const createMeeting = (event) => {
+  const [meetingMessage, setMeetingMessage] = React.useState("");
+  const createMeeting = async (event) => {
     event.preventDefault();
     if (!form.title.trim()) return;
-    mutate("/api/time/meetings", form).then(() => setForm({ title: "", startsAt: "", notes: "" }));
+    setMeetingMessage("");
+    try {
+      await mutate("/api/time/meetings", form);
+      setForm({ title: "", startsAt: "", notes: "" });
+      setMeetingMessage("Meeting saved.");
+    } catch (error) {
+      setMeetingMessage(error.message || "Could not save meeting.");
+    }
   };
   return <Page title="Meetings" desc="Capture meeting intent, notes, decisions, and follow-ups for planning context." wide>
     <div className="split">
       <section className="panel">
         <PanelTitle icon="meetings" title="Record Meeting" sub="Use this for prep notes or after-action notes." />
+        {meetingMessage && <p className={meetingMessage.includes("saved") ? "ok-text" : "warn-text"}>{meetingMessage}</p>}
         <form className="form" onSubmit={createMeeting}>
           <Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} />
           <Field label="Start time" value={form.startsAt} onChange={(startsAt) => setForm({ ...form, startsAt })} />
