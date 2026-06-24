@@ -126,9 +126,12 @@ test("Planning removal actions ask for confirmation before hiding active items",
   assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute \}\)/);
   assert.match(mainSource, /Remove "\$\{title\}" from Today's Three\? It will stop being protected for today, but the underlying task or source item will not be deleted\./);
   assert.match(mainSource, /onClick=\{\(\) => removeDailyCommitment\(item\)\}/);
+  assert.match(mainSource, /Archive "\$\{title\}"\? It will leave the active planning backlog and stop showing as a Today candidate\./);
+  assert.match(mainSource, /onClick=\{\(\) => archiveTask\(item\)\}/);
   assert.match(mainSource, /Archive "\$\{title\}"\? It will disappear from your active reminder list and stop scheduling future nudges\./);
   assert.match(mainSource, /onClick=\{\(\) => archiveReminder\(reminder\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/commitments\/\$\{item\.id\}`, \{ \.\.\.item, status: "removed" \}, "PATCH"\)\}/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/tasks\/\$\{item\.id\}`, \{ status: "archived" \}, "PATCH"\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/reminders\/\$\{reminder\.id\}`, \{ archive: true \}, "PATCH"\)\}/);
 });
 

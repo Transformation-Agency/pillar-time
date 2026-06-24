@@ -1152,6 +1152,11 @@ function Planner({ state, mutate }) {
     if (!task.title.trim()) return;
     mutate("/api/time/tasks", task).then(() => setTask({ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" }));
   };
+  const archiveTask = (item) => {
+    const title = item.title || "this task";
+    if (!window.confirm(`Archive "${title}"? It will leave the active planning backlog and stop showing as a Today candidate.`)) return;
+    mutate(`/api/time/tasks/${item.id}`, { status: "archived" }, "PATCH");
+  };
   const createDate = (event) => {
     event.preventDefault();
     if (!importantDate.title.trim() || !importantDate.startDate) return;
@@ -1171,7 +1176,7 @@ function Planner({ state, mutate }) {
       </section>
       <section className="panel">
         <PanelTitle icon="check" title="Task Backlog" sub={`${(time.tasks || []).length} captured tasks.`} />
-        {(time.tasks || []).length ? time.tasks.map((item) => <ListRow key={item.id} title={item.title} sub={`${item.leverageCategory || "admin"} · ${item.status || "inbox"} · ${item.estimateMinutes || 30} min`} right={<div className="row tight-row"><Button icon="check" onClick={() => mutate(`/api/time/tasks/${item.id}`, { status: "done" }, "PATCH")}>Done</Button><Button icon="x" onClick={() => mutate(`/api/time/tasks/${item.id}`, { status: "archived" }, "PATCH")}>Archive</Button></div>} />) : <Empty icon="planner" title="No tasks captured" body="Add one task to start giving the ranking engine something real to work with." />}
+        {(time.tasks || []).length ? time.tasks.map((item) => <ListRow key={item.id} title={item.title} sub={`${item.leverageCategory || "admin"} · ${item.status || "inbox"} · ${item.estimateMinutes || 30} min`} right={<div className="row tight-row"><Button icon="check" onClick={() => mutate(`/api/time/tasks/${item.id}`, { status: "done" }, "PATCH")}>Done</Button><Button icon="x" onClick={() => archiveTask(item)}>Archive</Button></div>} />) : <Empty icon="planner" title="No tasks captured" body="Add one task to start giving the ranking engine something real to work with." />}
       </section>
     </div>
     <section className="panel time-section">
