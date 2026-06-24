@@ -98,6 +98,18 @@ test("First-run controls avoid misleading defaults and internal labels", () => {
   assert.doesNotMatch(mainSource, /Run onboarding/);
 });
 
+test("Modal close buttons have accessible labels", () => {
+  assert.match(mainSource, /aria-label="Close source editor"/);
+  assert.match(mainSource, /aria-label="Close connector picker"/);
+  assert.match(mainSource, /aria-label="Close model provider setup"/);
+  assert.match(mainSource, /aria-label="Close Telegram setup"/);
+  assert.match(mainSource, /aria-label="Close X API setup"/);
+  assert.match(mainSource, /aria-label="Close Reddit setup"/);
+  assert.match(mainSource, /aria-label="Close Linear setup"/);
+  assert.match(mainSource, /aria-label="Close Google Calendar setup"/);
+  assert.doesNotMatch(mainSource, /<button type="button" onClick=\{[^}]+\}><Icon name="x" \/><\/button>/);
+});
+
 test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {
   assert.match(serverSource, /function telegramDeliveryStatus/);
   assert.match(serverSource, /async function deliverBriefToTelegramWithSoftTimeout/);
