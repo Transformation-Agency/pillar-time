@@ -249,6 +249,22 @@ test("X and Reddit setup warn before discarding unsaved credentials", () => {
   assert.doesNotMatch(mainSource, /aria-label="Close Reddit setup" onClick=\{\(\) => setRedditModal\(false\)\}/);
 });
 
+test("Model and Telegram setup warn before discarding unsaved credentials", () => {
+  assert.match(mainSource, /const closeModelProviderSetup = \(\) => \{/);
+  assert.match(mainSource, /Discard unsaved model provider changes\? API key text, model choice, and Base URL edits will not be saved\./);
+  assert.match(mainSource, /setDetectError\(""\);\n\s+setEditingProvider\(""\);\n\s+return true;/);
+  assert.match(mainSource, /aria-label="Close model provider setup" onClick=\{closeModelProviderSetup\}/);
+  assert.match(mainSource, /<Button type="button" onClick=\{closeModelProviderSetup\}>Cancel<\/Button>/);
+  assert.match(mainSource, /const closeTelegramModal = \(\) => \{/);
+  assert.match(mainSource, /const savedTelegramForm = \{ enabled: state\.telegram\.enabled, botToken: state\.telegram\.botToken, chatId: state\.telegram\.chatId, allowedUsers: state\.telegram\.allowedUsers\.join\(", "\) \};/);
+  assert.match(mainSource, /Discard unsaved Telegram setup changes\? Bot token, chat ID, and allowed-user edits will not be saved\./);
+  assert.match(mainSource, /setTelegramForm\(savedTelegramForm\);\n\s+setTelegramModal\(false\);\n\s+return true;/);
+  assert.match(mainSource, /aria-label="Close Telegram setup" onClick=\{closeTelegramModal\}/);
+  assert.match(mainSource, /<Button type="button" onClick=\{closeTelegramModal\}>Cancel<\/Button>/);
+  assert.doesNotMatch(mainSource, /aria-label="Close model provider setup" onClick=\{\(\) => setEditingProvider\(""\)\}/);
+  assert.doesNotMatch(mainSource, /aria-label="Close Telegram setup" onClick=\{\(\) => setTelegramModal\(false\)\}/);
+});
+
 test("Backend connection errors offer retry and clear after recovery", () => {
   assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
   assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);
