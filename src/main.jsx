@@ -3665,6 +3665,22 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     e.preventDefault();
     mutate("/api/model", { ...model, enabled: true }, "PATCH").then(() => setEditingProvider(""));
   };
+  const closeModelProviderSetup = () => {
+    const savedProvider = state.model.provider || "openai";
+    const savedModel = editingProvider === savedProvider ? state.model.model || defaultModelForProvider(editingProvider) : defaultModelForProvider(editingProvider);
+    const savedBaseUrl = editingProvider === savedProvider ? state.model.baseUrl || "" : "";
+    const hasUnsavedModelChanges = !!model.apiKey || model.model !== savedModel || (model.baseUrl || "") !== savedBaseUrl;
+    if (hasUnsavedModelChanges) {
+      const ok = window.confirm("Discard unsaved model provider changes? API key text, model choice, and Base URL edits will not be saved.");
+      if (!ok) return false;
+    }
+    setModel({ enabled: true, provider: savedProvider, model: state.model.model || defaultModelForProvider(savedProvider), apiKey: "", baseUrl: state.model.baseUrl || "" });
+    setModelOptions(state.model.model ? [state.model.model] : []);
+    setModelOptionsProvider(savedProvider);
+    setDetectError("");
+    setEditingProvider("");
+    return true;
+  };
   const saveXConnector = (e) => {
     e.preventDefault();
     mutate("/api/connectors/x", { ...xConnector, enabled: true }, "PATCH").then(() => setXModal(false));
@@ -3838,6 +3854,19 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const saveTelegram = (e) => {
     e.preventDefault();
     mutate("/api/telegram", { ...telegramForm, enabled: true, allowedUsers: telegramForm.allowedUsers.split(",").map((u) => u.trim()).filter(Boolean) }, "PATCH").then(() => setTelegramModal(false));
+  };
+  const closeTelegramModal = () => {
+    const savedTelegramForm = { enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") };
+    const hasUnsavedTelegramChanges = telegramForm.botToken !== savedTelegramForm.botToken
+      || telegramForm.chatId !== savedTelegramForm.chatId
+      || telegramForm.allowedUsers !== savedTelegramForm.allowedUsers;
+    if (hasUnsavedTelegramChanges) {
+      const ok = window.confirm("Discard unsaved Telegram setup changes? Bot token, chat ID, and allowed-user edits will not be saved.");
+      if (!ok) return false;
+    }
+    setTelegramForm(savedTelegramForm);
+    setTelegramModal(false);
+    return true;
   };
   const detectModels = React.useCallback(async () => {
     const requestProvider = editingProvider || model.provider;
@@ -4172,22 +4201,22 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <p className="hint">Provider credentials live on this Settings page. Source management is not exposed in this build.</p>
       </div>
     </div>}
-    {editingProvider && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingProvider(""); }}>
+    {editingProvider && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeModelProviderSetup(); }}>
       <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Model provider setup" onSubmit={saveModel}>
-        <div className="modal-head"><div><h2>{providerRows.find((row) => row.provider === editingProvider)?.name || "Model provider"}</h2><p>Paste a provider key, choose a model, and save it as the active model provider.</p></div><button type="button" aria-label="Close model provider setup" onClick={() => setEditingProvider("")}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2>{providerRows.find((row) => row.provider === editingProvider)?.name || "Model provider"}</h2><p>Paste a provider key, choose a model, and save it as the active model provider.</p></div><button type="button" aria-label="Close model provider setup" onClick={closeModelProviderSetup}><Icon name="x" /></button></div>
         <Field label="API key" type="password" value={model.apiKey} onChange={(apiKey) => setModel({ ...model, apiKey })} placeholder={(state.model.providerCredentials?.[editingProvider]?.apiKeySaved || (state.model.provider === editingProvider && state.model.apiKeySaved)) ? "Saved. Paste a new key to replace it." : "Paste provider API key"} />
         {visibleModelOptions.length ? <Select label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} options={visibleModelOptions.includes(model.model) || !model.model ? visibleModelOptions : [model.model, ...visibleModelOptions]} /> : <Field label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} placeholder={detecting ? "Detecting models..." : "Enter a model or paste key for auto-detect"} />}
         {detectError && <p className="warn-text">{detectError}</p>}
-        <div className="modal-actions"><Button type="button" onClick={() => setEditingProvider("")}>Cancel</Button><Button type="button" icon="search" onClick={detectModels} disabled={detecting}>{detecting ? "Detecting..." : "Detect models"}</Button><Button icon="save" kind="primary">Save provider</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeModelProviderSetup}>Cancel</Button><Button type="button" icon="search" onClick={detectModels} disabled={detecting}>{detecting ? "Detecting..." : "Detect models"}</Button><Button icon="save" kind="primary">Save provider</Button></div>
       </form>
     </div>}
-    {telegramModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTelegramModal(false); }}>
+    {telegramModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeTelegramModal(); }}>
       <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Telegram delivery setup" onSubmit={saveTelegram}>
-        <div className="modal-head"><div><h2>Telegram delivery</h2><p>Configure bot delivery and command access.</p></div><button type="button" aria-label="Close Telegram setup" onClick={() => setTelegramModal(false)}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2>Telegram delivery</h2><p>Configure bot delivery and command access.</p></div><button type="button" aria-label="Close Telegram setup" onClick={closeTelegramModal}><Icon name="x" /></button></div>
         <Field label="Bot token" type="password" value={telegramForm.botToken} onChange={(botToken) => setTelegramForm({ ...telegramForm, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} />
         <Field label="Chat ID" value={telegramForm.chatId} onChange={(chatId) => setTelegramForm({ ...telegramForm, chatId })} placeholder="-1001234567890 or 123456789" />
         <Field label="Allowed users" value={telegramForm.allowedUsers} onChange={(allowedUsers) => setTelegramForm({ ...telegramForm, allowedUsers })} placeholder="username, teammate, 123456789" />
-        <div className="modal-actions"><Button type="button" onClick={() => setTelegramModal(false)}>Cancel</Button><Button icon="save" kind="primary">Save Telegram</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeTelegramModal}>Cancel</Button><Button icon="save" kind="primary">Save Telegram</Button></div>
       </form>
     </div>}
     {xModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeXModal(); }}>
