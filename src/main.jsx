@@ -52,7 +52,7 @@ const nav = [
 ];
 
 const defaultOwnerName = "You";
-const defaultOpenAiModel = "gpt-5.4-mini";
+const defaultOpenAiModel = "gpt-4.1";
 const defaultGrokModel = "grok-4.3";
 const defaultModelForProvider = (provider) => {
   if (provider === "openai") return defaultOpenAiModel;
@@ -872,6 +872,13 @@ function latestCalendarAgenda(state) {
 function todayTime(state) {
   return state.time || { preferences: {}, suggestions: [], commitments: [], tasks: [], reminders: [], reviews: [], importantDates: [], meetings: [], scheduler: {} };
 }
+function displayCadence(value = "") {
+  return String(value || "")
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
 
 function TimeSuggestionCard({ suggestion, mutate }) {
   const accept = () => mutate("/api/time/commitments", {
@@ -905,7 +912,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     if (!capture.trim()) return;
     mutate("/api/time/tasks", { title: capture.trim(), source: "quick-capture" }).then(() => setCapture(""));
   };
-  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, and the intelligence brief." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate Intelligence</Button>}>
+  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Plan</Button>}>
     <div className="metric-grid">
       <Metric label="Today" value={time.todayKey || "-"} sub={time.preferences?.timezone || "local"} />
       <Metric label="Today’s Three" value={activeCommitments.filter((item) => item.status === "active").length} sub="accepted commitments" />
@@ -926,8 +933,8 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
         </form>
       </section>
       <section className="panel">
-        <PanelTitle icon="calendar" title="Timeline" sub="Calendar context from the latest successful intelligence run." />
-        {agenda.length ? agenda.map((event, index) => <ListRow key={`${event.title || event.summary}-${index}`} title={event.title || event.summary || "Calendar event"} sub={[event.start, event.end].filter(Boolean).join(" to ") || event.when || "Today"} right={event.calendarUrl && <Button icon="calendar" onClick={() => openExternalUrl(event.calendarUrl)}>Open</Button>} />) : <Empty icon="calendar" title="No agenda loaded" body="Connect Google Calendar and generate intelligence to bring today’s events into this view." />}
+        <PanelTitle icon="calendar" title="Timeline" sub="Calendar context from the latest successful day plan." />
+        {agenda.length ? agenda.map((event, index) => <ListRow key={`${event.title || event.summary}-${index}`} title={event.title || event.summary || "Calendar event"} sub={[event.start, event.end].filter(Boolean).join(" to ") || event.when || "Today"} right={event.calendarUrl && <Button icon="calendar" onClick={() => openExternalUrl(event.calendarUrl)}>Open</Button>} />) : <Empty icon="calendar" title="No agenda loaded" body="Connect Google Calendar and generate a day plan to bring today’s events into this view." />}
       </section>
       <section className="panel">
         <PanelTitle icon="reminders" title="Next Reminders" sub="Regular and sporadic nudges, paused by default until you enable them." />
@@ -984,6 +991,7 @@ function Planner({ state, mutate }) {
 function Reminders({ state, mutate }) {
   const time = todayTime(state);
   const prefs = time.preferences || {};
+  const masterRemindersOn = !!prefs.reminderMasterEnabled;
   const emptyReminderForm = { title: "", body: "", type: "regular", scheduleType: "daily", localTime: "09:00", enabled: false, channels: { desktopText: true, telegramText: false }, sporadic: { windowStart: "10:00", windowEnd: "16:00", count: 2, minGapMinutes: 120 } };
   const [form, setForm] = React.useState(emptyReminderForm);
   const savePrefs = (patch) => mutate("/api/time/preferences", { ...prefs, ...patch }, "PATCH");
@@ -1001,13 +1009,17 @@ function Reminders({ state, mutate }) {
     </div>
     <section className="panel">
       <PanelTitle icon="settings" title="Reminder Controls" sub="Everything stays disabled unless the master switch and individual reminder are on." />
+      {!masterRemindersOn && <div className="notice notice-warn">
+        <strong>Master reminders are off</strong>
+        <span>Channel switches are saved as preferences, but no reminder will fire until Master reminders and an individual reminder are both enabled.</span>
+      </div>}
       <div className="toggle-grid">
         {[
           ["reminderMasterEnabled", "Master reminders"],
           ["regularRemindersEnabled", "Regular reminders"],
           ["sporadicRemindersEnabled", "Sporadic reminders"],
         ].map(([key, label]) => <label className="switch-row" key={key}><span>{label}</span><label className="switch"><input type="checkbox" checked={!!prefs[key]} onChange={(event) => savePrefs({ [key]: event.target.checked })} /><span /></label></label>)}
-        {["desktopText", "desktopAudio", "telegramText", "telegramAudio"].map((key) => <label className="switch-row" key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!prefs.channels?.[key]} onChange={(event) => savePrefs({ channels: { ...(prefs.channels || {}), [key]: event.target.checked } })} /><span /></label></label>)}
+        {["desktopText", "desktopAudio", "telegramText", "telegramAudio"].map((key) => <label className={`switch-row ${!masterRemindersOn ? "is-gated" : ""}`} key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!prefs.channels?.[key]} onChange={(event) => savePrefs({ channels: { ...(prefs.channels || {}), [key]: event.target.checked } })} /><span /></label></label>)}
       </div>
     </section>
     <div className="split time-section">
@@ -1048,7 +1060,7 @@ function Reviews({ state, mutate }) {
     <section className="panel">
       <PanelTitle icon="reviews" title="Review Templates" sub="Turn templates on when you are ready for Pillar Time to schedule them." />
       <div className="review-grid">{(time.reviews || []).map((review) => <div className="time-card" key={review.id}>
-        <div className="time-card-head"><div><strong>{review.title}</strong><small>{review.cadence} · {review.description}</small></div><Badge tone={review.enabled ? "ok" : "muted"}>{review.enabled ? "On" : "Off"}</Badge></div>
+        <div className="time-card-head"><div><strong>{review.title}</strong><small>{displayCadence(review.cadence)}{review.description ? ` · ${review.description}` : ""}</small></div><Badge tone={review.enabled ? "ok" : "muted"}>{review.enabled ? "On" : "Off"}</Badge></div>
         <Markdown text={(review.prompts || []).map((question) => `- ${question}`).join("\n")} />
         <Button icon={review.enabled ? "x" : "check"} onClick={() => mutate(`/api/time/reviews/${review.id}`, { enabled: !review.enabled }, "PATCH")}>{review.enabled ? "Disable" : "Enable"}</Button>
       </div>)}</div>
@@ -1945,6 +1957,7 @@ function DeliberationPanel({ deliberation, onRegenerate, busy }) {
 function GeneratingBrief({ runState }) {
   const status = runState?.status || "running";
   const steps = runState?.steps?.length ? runState.steps : [{ key: "run", name: "Generating brief" }];
+  const isExecutiveDay = runState?.runType === "executive_day";
   const [slowStep, setSlowStep] = React.useState(false);
   const activeIndex = steps.findIndex((step) => step.status === "active");
   const doneCount = steps.filter((step) => step.status === "done").length;
@@ -1960,8 +1973,8 @@ function GeneratingBrief({ runState }) {
   return <div className="generating-screen">
     <div className="generating-panel">
       <Badge tone={status === "error" ? "warn" : status === "done" ? "ok" : "muted"}>{status === "error" ? "Needs attention" : status === "done" ? "Delivered" : "Generating"}</Badge>
-      <h1>{status === "error" ? "Brief generation stopped." : status === "done" ? "Brief delivered." : current.name}</h1>
-      <p>{status === "error" ? runState?.error || "Something went wrong while generating the brief." : status === "done" ? "The new brief was saved and sent to Telegram." : `Step ${currentIndex + 1} of ${steps.length}: ${current.output || (workflowLabels[current.key] || current.name || "working").toLowerCase()}.`}</p>
+      <h1>{status === "error" ? "Generation stopped." : status === "done" ? (isExecutiveDay ? "Day plan saved." : "Brief delivered.") : current.name}</h1>
+      <p>{status === "error" ? runState?.error || "Something went wrong while generating." : status === "done" ? (isExecutiveDay ? "The executive day plan was saved." : "The new brief was saved and sent to Telegram.") : `Step ${currentIndex + 1} of ${steps.length}: ${current.output || (workflowLabels[current.key] || current.name || "working").toLowerCase()}.`}</p>
       {status === "running" && current.detail && <p className="generating-detail">{current.detail}</p>}
       <div className={`main-progress ${slowStep ? "working" : ""}`} aria-label="Brief generation progress"><span style={{ width: `${progress}%` }} /></div>
       <div className="generation-step-list">
@@ -2438,6 +2451,11 @@ function Onboarding({ state, mutate, refresh }) {
   React.useEffect(() => {
     setSttStatus(state.runtime?.stt || null);
   }, [state.runtime?.stt]);
+  React.useEffect(() => {
+    if (googleCalendarConnected && calendarMessage.includes("consent opened")) {
+      setCalendarMessage("Google Calendar is connected.");
+    }
+  }, [calendarMessage, googleCalendarConnected]);
   const saveFirstName = async () => {
     const ownerName = firstName.trim();
     if (!ownerName) {
@@ -2830,6 +2848,10 @@ function Onboarding({ state, mutate, refresh }) {
   };
   const saveLinearAccess = async () => {
     setLinearMessage("");
+    if (!linearConnector.apiKey && !state.connectors?.linear?.apiKeySaved && state.connectors?.linear?.credentialStatus !== "env") {
+      setLinearMessage("Paste a Linear personal API key, or skip Linear for now.");
+      return;
+    }
     try {
       await mutate("/api/connectors/linear", { ...linearConnector, enabled: true }, "PATCH");
       setLinearConnector({ enabled: true, apiKey: "" });
@@ -3005,6 +3027,7 @@ function Onboarding({ state, mutate, refresh }) {
         <form className="form onboarding-form" onSubmit={saveExecutiveProfile}>
           <Field label="Executive first name" value={firstName} onChange={(value) => setFirstName(value)} placeholder="First name" required />
           <TextArea label="Operating manual" value={operatingManual} onChange={setOperatingManual} rows={7} placeholder="Preferences, working style, meeting prep rules, protected hours, delegation principles, communication tone, people or projects to remember." />
+          <p className="hint">Example: "Protect deep work before noon. Be direct when I overcommit. Flag meetings that need prep, follow-up, or a written decision."</p>
           <div className="notice">
             <strong>Personal Desktop Mode</strong>
             <span>This build is for one local user. Executive Workspace Mode, assistants, shared approvals, and policy-controlled external action execution are architecture commitments, not enabled in this DMG.</span>
@@ -3029,13 +3052,17 @@ function Onboarding({ state, mutate, refresh }) {
       {step === "reminders" && <section className="onboarding-panel onboarding-panel-wide">
         <h1>Choose reminder defaults.</h1>
         <p>Reminders stay quiet unless the master switch is on and an individual reminder is enabled. Telegram delivery only works after Telegram is paired.</p>
+        {!state.time?.preferences?.reminderMasterEnabled && <div className="notice notice-warn">
+          <strong>Quiet by default</strong>
+          <span>Channel choices are saved now, but nothing fires until Master reminders and an individual reminder are enabled.</span>
+        </div>}
         <div className="toggle-grid">
           {[
             ["reminderMasterEnabled", "Master reminders"],
             ["regularRemindersEnabled", "Regular reminders"],
             ["sporadicRemindersEnabled", "Sporadic reminders"],
           ].map(([key, label]) => <label className="switch-row" key={key}><span>{label}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.[key]} onChange={(event) => saveReminderDefaults({ [key]: event.target.checked })} /><span /></label></label>)}
-          {["desktopText", "telegramText"].map((key) => <label className="switch-row" key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.channels?.[key]} onChange={(event) => saveReminderDefaults({ channels: { ...(state.time?.preferences?.channels || {}), [key]: event.target.checked } })} /><span /></label></label>)}
+          {["desktopText", "telegramText"].map((key) => <label className={`switch-row ${!state.time?.preferences?.reminderMasterEnabled ? "is-gated" : ""}`} key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!state.time?.preferences?.channels?.[key]} onChange={(event) => saveReminderDefaults({ channels: { ...(state.time?.preferences?.channels || {}), [key]: event.target.checked } })} /><span /></label></label>)}
         </div>
         <div className="row"><Button onClick={() => go("today")}>Back</Button><Button kind="primary" onClick={() => go("reviews")}>Continue</Button></div>
       </section>}
@@ -3043,7 +3070,7 @@ function Onboarding({ state, mutate, refresh }) {
         <h1>Turn on planning reviews.</h1>
         <p>These are native planning rituals. Enable the ones you want; you can adjust them later from Reviews.</p>
         <div className="review-grid">{(state.time?.reviews || []).map((review) => <div className="time-card" key={review.id}>
-          <div className="time-card-head"><div><strong>{review.title}</strong><small>{review.cadence}</small></div><Badge tone={review.enabled ? "ok" : "muted"}>{review.enabled ? "On" : "Off"}</Badge></div>
+          <div className="time-card-head"><div><strong>{review.title}</strong><small>{displayCadence(review.cadence)}</small></div><Badge tone={review.enabled ? "ok" : "muted"}>{review.enabled ? "On" : "Off"}</Badge></div>
           <Button icon={review.enabled ? "x" : "check"} onClick={() => toggleReview(review)}>{review.enabled ? "Disable" : "Enable"}</Button>
         </div>)}</div>
         {reviewMessage && <p className={reviewMessage.includes("enabled") || reviewMessage.includes("disabled") ? "ok-text" : "warn-text"}>{reviewMessage}</p>}
@@ -3214,6 +3241,10 @@ function Onboarding({ state, mutate, refresh }) {
             <strong>How it changes the brief</strong>
             <span>When connected, Brief Setup gets a first section called Today's Calendar. You can edit or disable that section later, and choose which calendars are included from Settings.</span>
           </div>
+          <div className="notice">
+            <strong>Why Google may show Transformation Agency</strong>
+            <span>Pillar Time uses a Transformation Agency auth broker to complete the local desktop OAuth handoff. Calendar data is still stored locally in this app.</span>
+          </div>
           <div className="setup-link-row">
             <Button type="button" icon="external" onClick={startCalendarOAuth}>{googleCalendarConnected ? "Reconnect Google Calendar" : "Connect Google Calendar"}</Button>
             <Button type="button" icon="run" onClick={refreshCalendarStatus}>Refresh status</Button>
@@ -3236,7 +3267,7 @@ function Onboarding({ state, mutate, refresh }) {
       </section>}
       {step === "schedule" && <section className="onboarding-panel">
         <h1>Choose delivery time.</h1>
-        <p>This can be daily or weekly. You can change it later from the home screen.</p>
+        <p>This can be daily or weekly. You can change it later from Settings.</p>
         <div className="delivery-block">
           <div className="delivery-row">
             <label className="delivery-field"><Calendar className="ico" /><select value={state.briefConfig.deliveryFrequency || "Daily"} onChange={(event) => saveDelivery({ deliveryFrequency: event.target.value })}><option>Daily</option><option>Weekly</option></select></label>
@@ -3252,7 +3283,7 @@ function Onboarding({ state, mutate, refresh }) {
         <div className="readiness-list">
           {[["Executive profile", reviewReadiness.ownerNameReady, false], ["Schedule set", reviewReadiness.scheduleSet, false], ["Today seeded", (state.time?.commitments || []).length > 0, true], ["Reminder defaults", !!state.time?.preferences?.reminderMasterEnabled, true], ["Planning reviews", (state.time?.reviews || []).some((review) => review.enabled), true], ["Model connected", reviewReadiness.modelReady, true], ["Brief prompt saved", reviewReadiness.briefPromptSaved, true], ["Linear connected", linearConnected, true], ["Google Calendar", googleCalendarConnected, true], ["Telegram paired", reviewReadiness.telegramReady, true]].map(([label, ok, optional]) => <div key={label}><Icon name={ok ? "check" : optional ? "volume" : "x"} /><span>{label}</span><Badge tone={ok ? "ok" : optional ? "muted" : "warn"}>{ok ? "Done" : optional ? "Optional" : "Needs setup"}</Badge></div>)}
         </div>
-        <div className="row"><Button onClick={() => go(firstIncomplete())}>Fix missing step</Button><Button onClick={skipOnboarding}>Finish later</Button><Button icon="check" kind="accent" disabled={!canComplete} onClick={complete}>Finish onboarding</Button></div>
+        <div className="row">{!canComplete && <Button onClick={() => go(firstIncomplete())}>Fix required step</Button>}<Button onClick={skipOnboarding}>Finish later</Button><Button icon="check" kind="accent" disabled={!canComplete} onClick={complete}>Finish onboarding</Button></div>
       </section>}
     </main>
   </div>;
@@ -3421,6 +3452,10 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   };
   const enableLinearConnector = async () => {
     setLinearMessage("");
+    if (!linearConnector.apiKey && !state.connectors?.linear?.apiKeySaved && state.connectors?.linear?.credentialStatus !== "env") {
+      setLinearMessage("Paste a Linear personal API key, or leave Linear disabled for now.");
+      return;
+    }
     try {
       await mutate("/api/connectors/linear", { ...linearConnector, enabled: true }, "PATCH");
       setLinearConnector({ enabled: true, apiKey: "" });
@@ -3931,9 +3966,10 @@ function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, [requestRoute]);
-  const runWorkflow = async () => {
-    const steps = state?.runtime?.workflowSteps?.length ? state.runtime.workflowSteps : [{ key: "run", name: "Generating brief" }];
-    setRunState({ status: "running", stepIndex: 0, error: "", steps });
+  const runWorkflow = async ({ runType = "executive_day", trigger } = {}) => {
+    const stepSource = runType === "executive_day" ? state?.runtime?.executiveWorkflowSteps : state?.runtime?.workflowSteps;
+    const steps = stepSource?.length ? stepSource : [{ key: "run", name: runType === "executive_day" ? "Generating day plan" : "Generating brief" }];
+    setRunState({ status: "running", stepIndex: 0, error: "", steps, runType });
     requestRoute("generating");
     const applyRunState = (run) => {
       const runSteps = run?.steps?.length ? run.steps : steps;
@@ -3946,11 +3982,12 @@ function App() {
         error: run?.error || "",
         steps: runSteps,
         runId: run?.id,
+        runType: run?.artifact?.runType || runType,
       });
       return nextStatus;
     };
     try {
-      const result = await api("/api/workflow-runs", { method: "POST", body: JSON.stringify({ trigger: "Manual · Generate and deliver brief" }) });
+      const result = await api("/api/workflow-runs", { method: "POST", body: JSON.stringify({ runType, trigger: trigger || (runType === "executive_day" ? "Manual · Generate executive day plan" : "Manual · Generate and deliver brief") }) });
       let run = result.run;
       let nextStatus = applyRunState(run);
       while (run?.id && nextStatus === "running") {
@@ -3972,13 +4009,13 @@ function App() {
   if (!state) return <div className="boot">Loading Pillar Time...</div>;
   if (!state.onboarding?.completed) return <Onboarding state={state} mutate={mutate} refresh={refresh} />;
   const screens = {
-    today: <Today state={state} mutate={mutate} runWorkflow={runWorkflow} setRoute={requestRoute} />,
+    today: <Today state={state} mutate={mutate} runWorkflow={() => runWorkflow({ runType: "executive_day" })} setRoute={requestRoute} />,
     planner: <Planner state={state} mutate={mutate} />,
     reminders: <Reminders state={state} mutate={mutate} />,
     reviews: <Reviews state={state} mutate={mutate} />,
     meetings: <Meetings state={state} mutate={mutate} />,
-    overview: <Overview state={state} setRoute={requestRoute} runWorkflow={runWorkflow} mutate={mutate} />,
-    briefs: <Briefs state={state} runWorkflow={runWorkflow} refresh={refresh} />,
+    overview: <Overview state={state} setRoute={requestRoute} runWorkflow={() => runWorkflow({ runType: "executive_day" })} mutate={mutate} />,
+    briefs: <Briefs state={state} runWorkflow={() => runWorkflow({ runType: "intelligence" })} refresh={refresh} />,
     generating: <GeneratingBrief runState={runState} />,
     briefSetup: <BriefSetup state={state} mutate={mutate} />,
     linear: <Linear state={state} refresh={refresh} />,

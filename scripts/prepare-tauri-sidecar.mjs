@@ -9,7 +9,7 @@ const tauriDir = path.join(root, "src-tauri");
 const resourcesDir = path.join(tauriDir, "resources");
 const backendDir = path.join(resourcesDir, "backend");
 const whisperResourcesDir = path.join(resourcesDir, "whisper");
-const whisperVendorDir = process.env.PILLAR_WHISPER_VENDOR_DIR || path.join(root, "vendor", "whisper");
+const whisperVendorDir = process.env.PILLAR_TIME_WHISPER_VENDOR_DIR || path.join(root, "vendor", "whisper");
 const binariesDir = path.join(tauriDir, "binaries");
 const sidecarName = "pillar-time-backend";
 const legacySidecarName = "jack-daily-brief-backend";
@@ -76,7 +76,7 @@ function copyRuntimePackage(packageName, copied = new Set()) {
 }
 
 function targetTriple() {
-  if (process.env.PILLAR_TARGET_TRIPLE) return process.env.PILLAR_TARGET_TRIPLE;
+  if (process.env.PILLAR_TIME_TARGET_TRIPLE) return process.env.PILLAR_TIME_TARGET_TRIPLE;
   if (process.env.CARGO_BUILD_TARGET) return process.env.CARGO_BUILD_TARGET;
   try {
     return execFileSync("rustc", ["--print", "host-tuple"], { encoding: "utf8" }).trim();
@@ -89,7 +89,7 @@ function targetTriple() {
 const exeSuffix = process.platform === "win32" ? ".exe" : "";
 
 function copyNodeSidecar(filePath) {
-  const nodeBinary = process.env.PILLAR_NODE_SIDECAR_PATH || process.execPath;
+  const nodeBinary = process.env.PILLAR_TIME_NODE_SIDECAR_PATH || process.execPath;
   fs.copyFileSync(nodeBinary, filePath);
   fs.chmodSync(filePath, 0o755);
 }
@@ -168,7 +168,7 @@ if (fs.existsSync(whisperVendorDir)) {
     copyBundleAsset(vendorModelDir, path.join(whisperResourcesDir, "models"));
   }
   normalizeWhisperArtifacts(whisperResourcesDir);
-  const vendorWhisperBinary = process.env.PILLAR_WHISPER_CLI_PATH || path.join(whisperVendorDir, "bin", "whisper-cli");
+  const vendorWhisperBinary = process.env.PILLAR_TIME_WHISPER_CLI_PATH || path.join(whisperVendorDir, "bin", "whisper-cli");
   if (fs.existsSync(vendorWhisperBinary)) {
     copyBundleAsset(vendorWhisperBinary, path.join(binariesDir, `${whisperSidecarName}-${hostTriple}${exeSuffix}`));
     fs.chmodSync(path.join(binariesDir, `${whisperSidecarName}-${hostTriple}${exeSuffix}`), 0o755);
@@ -186,7 +186,7 @@ for (const file of fs.readdirSync(binariesDir)) {
 
 copyNodeSidecar(path.join(binariesDir, `${sidecarName}-${hostTriple}${exeSuffix}`));
 if (fs.existsSync(whisperVendorDir)) {
-  const vendorWhisperBinary = process.env.PILLAR_WHISPER_CLI_PATH || path.join(whisperVendorDir, "bin", "whisper-cli");
+  const vendorWhisperBinary = process.env.PILLAR_TIME_WHISPER_CLI_PATH || path.join(whisperVendorDir, "bin", "whisper-cli");
   if (fs.existsSync(vendorWhisperBinary)) {
     const whisperSidecarPath = path.join(binariesDir, `${whisperSidecarName}-${hostTriple}${exeSuffix}`);
     copyBundleAsset(vendorWhisperBinary, whisperSidecarPath);

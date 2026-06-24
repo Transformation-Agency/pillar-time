@@ -50,7 +50,7 @@ button { cursor: pointer; }
   z-index: 10;
   height: 96px;
   display: grid;
-  grid-template-columns: minmax(330px, auto) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(250px, max-content) minmax(0, 1fr) auto;
   align-items: center;
   gap: 18px;
   padding: 0 max(32px, calc((100vw - 1220px) / 2 + 32px));
@@ -61,6 +61,8 @@ button { cursor: pointer; }
 }
 .brand {
   justify-self: start;
+  min-width: 0;
+  max-width: 100%;
   border: 0;
   background: transparent;
   display: flex;
@@ -73,6 +75,7 @@ button { cursor: pointer; }
   align-items: center;
   gap: 14px;
   min-width: 0;
+  max-width: 100%;
 }
 .brand-lockup-icon {
   display: block;
@@ -85,6 +88,7 @@ button { cursor: pointer; }
   display: inline-flex;
   align-items: baseline;
   gap: 11px;
+  min-width: 0;
   color: #11100e;
   white-space: nowrap;
 }
@@ -139,11 +143,12 @@ button { cursor: pointer; }
 .nav {
   min-width: 0;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: stretch;
   gap: 12px;
   height: 100%;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 .nav::-webkit-scrollbar { display: none; }
@@ -160,11 +165,11 @@ button { cursor: pointer; }
   font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 @media (max-width: 980px) {
   .nav {
-    justify-content: flex-start;
     overflow-x: auto;
   }
 }
@@ -201,6 +206,21 @@ button { cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+@media (max-width: 1360px) and (min-width: 1181px) {
+  .app-header {
+    gap: 14px;
+    padding-inline: 24px;
+  }
+  .brand-lockup { gap: 11px; }
+  .brand-lockup-icon { width: 50px; height: 50px; }
+  .brand-wordmark { gap: 8px; }
+  .brand-wordmark-main { font-size: 34px; letter-spacing: 6px; }
+  .brand-wordmark-pillar { width: 15px; height: 29px; margin-right: 4px; }
+  .brand-wordmark-product { font-size: 29px; }
+  .nav { gap: 9px; }
+  .nav-item { gap: 7px; font-size: 13px; }
 }
 .help-menu-button {
   display: inline-flex;
@@ -693,6 +713,12 @@ textarea { resize: vertical; }
   border-color: #b85d50;
   color: #fffaf5;
 }
+.btn.accent:hover,
+.btn.accent:focus-visible {
+  background: linear-gradient(180deg, #b95f52, #9d4b40);
+  border-color: #9d4b40;
+  color: #fff;
+}
 .btn:disabled { opacity: .55; cursor: not-allowed; }
 .badge {
   display: inline-flex;
@@ -833,6 +859,13 @@ td {
   background: rgba(255,255,255,.54);
   padding: 12px 14px;
   font-weight: 800;
+}
+.switch-row.is-gated {
+  color: var(--muted);
+  background: rgba(255,255,255,.42);
+}
+.switch-row.is-gated .switch span {
+  opacity: .72;
 }
 .mono, pre { font-family: var(--mono); }
 pre {

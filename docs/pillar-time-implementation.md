@@ -47,7 +47,7 @@ New local endpoints:
 
 ## Migration Notes
 
-No destructive migration is performed. Pillar Time prefers `PILLAR_TIME_DB_PATH` and `PILLAR_TIME_DATA_DIR`, with legacy `PILLAR_DB_PATH` and `PILLAR_DATA_DIR` still supported for compatibility. The desktop shell sets `PILLAR_TIME_APP_MODE` and `PILLAR_TIME_DATA_DIR`.
+No destructive migration is performed. Pillar Time uses `PILLAR_TIME_DB_PATH` and `PILLAR_TIME_DATA_DIR` for explicit local overrides and intentionally does not honor Pillar Brief or Pillar Law data-path variables. The desktop shell sets `PILLAR_TIME_APP_MODE`, `PILLAR_TIME_DESKTOP`, `PILLAR_TIME_BACKEND_DIR`, and `PILLAR_TIME_DATA_DIR`.
 
 The migration creates a marker file named `.pillar-time-migration-backup-created` after the backup succeeds. If backup creation fails, the backend writes `pillar-time-migration-failed.json` and stops before opening SQLite.
 

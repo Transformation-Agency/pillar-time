@@ -28,7 +28,7 @@ fn desktop_app_version() -> String {
 }
 
 fn project_root() -> PathBuf {
-    if let Ok(root) = std::env::var("PILLAR_PROJECT_ROOT") {
+    if let Ok(root) = std::env::var("PILLAR_TIME_PROJECT_ROOT") {
         return PathBuf::from(root);
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -167,8 +167,8 @@ fn spawn_backend(app: &tauri::App) -> Result<Child, String> {
         .env("NODE_ENV", "production")
         .env("NODE_OPTIONS", "--no-warnings")
         .env("PILLAR_TIME_APP_MODE", "desktop")
-        .env("PILLAR_DESKTOP", "1")
-        .env("PILLAR_BACKEND_DIR", backend_dir)
+        .env("PILLAR_TIME_DESKTOP", "1")
+        .env("PILLAR_TIME_BACKEND_DIR", backend_dir)
         .env("PILLAR_TIME_DATA_DIR", data_dir)
         .env("HOST", "127.0.0.1")
         .env("PORT", BACKEND_PORT.to_string())

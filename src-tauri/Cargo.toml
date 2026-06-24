@@ -1,6 +1,6 @@
 [package]
 name = "pillar-time"
-version = "0.1.9"
+version = "0.1.10"
 description = "Pillar Time desktop app"
 authors = ["Pillar Time"]
 edition = "2021"

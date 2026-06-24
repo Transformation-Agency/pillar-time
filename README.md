@@ -25,7 +25,7 @@ npm run check
 npm run dev
 ```
 
-Open `http://127.0.0.1:42817/#/today`.
+Open `http://127.0.0.1:42818/#/today`.
 
 For an isolated local database:
 
@@ -63,6 +63,6 @@ The Tauri product name is `Pillar Time`, bundle identifier is `com.pillartime.de
 
 ## Privacy
 
-Pillar Time stores local state in SQLite. The desktop app uses `PILLAR_TIME_DATA_DIR` in the app data directory. The backend still accepts legacy `PILLAR_DATA_DIR` and `PILLAR_DB_PATH` variables for migration compatibility.
+Pillar Time stores local state in SQLite. The desktop app uses `PILLAR_TIME_DATA_DIR` in the app data directory. It does not honor Pillar Brief or Pillar Law data-path variables; use `PILLAR_TIME_DB_PATH` only when intentionally overriding the local database.
 
 Before using an existing Pillar Brief database, Pillar Time attempts to create a one-time pre-migration backup next to the database.

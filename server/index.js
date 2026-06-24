@@ -54,12 +54,12 @@ function loadEnvFiles(paths) {
 
 loadEnvFiles([path.join(process.cwd(), ".env"), path.join(process.cwd(), ".env.local"), path.join(root, ".env"), path.join(root, ".env.local")]);
 
-const appMode = process.env.PILLAR_TIME_APP_MODE || process.env.PILLAR_APP_MODE || (process.env.PILLAR_DESKTOP ? "desktop" : "web");
+const appMode = process.env.PILLAR_TIME_APP_MODE || (process.env.PILLAR_TIME_DESKTOP ? "desktop" : "web");
 const isDesktop = appMode === "desktop";
-const dataDir = process.env.PILLAR_TIME_DATA_DIR ? path.resolve(process.env.PILLAR_TIME_DATA_DIR) : process.env.PILLAR_DATA_DIR ? path.resolve(process.env.PILLAR_DATA_DIR) : path.join(root, "data");
+const dataDir = process.env.PILLAR_TIME_DATA_DIR ? path.resolve(process.env.PILLAR_TIME_DATA_DIR) : path.join(root, "data");
 fs.mkdirSync(dataDir, { recursive: true });
 loadEnvFiles([path.join(dataDir, ".env"), path.join(dataDir, ".env.local")]);
-const dbPath = process.env.PILLAR_TIME_DB_PATH ? path.resolve(process.env.PILLAR_TIME_DB_PATH) : process.env.PILLAR_DB_PATH ? path.resolve(process.env.PILLAR_DB_PATH) : path.join(dataDir, "pillar-time.sqlite");
+const dbPath = process.env.PILLAR_TIME_DB_PATH ? path.resolve(process.env.PILLAR_TIME_DB_PATH) : path.join(dataDir, "pillar-time.sqlite");
 const execFileAsync = promisify(execFile);
 const audioDir = path.join(dataDir, "audio");
 fs.mkdirSync(audioDir, { recursive: true });
@@ -660,14 +660,14 @@ function whisperBinaryCandidates() {
     platformBinaryName("whisper"),
   ];
   const roots = [
-    process.env.PILLAR_WHISPER_DIR,
+    process.env.PILLAR_TIME_WHISPER_DIR,
     path.dirname(process.execPath || ""),
     path.join(dataDir, "whisper"),
     path.join(root, "vendor", "whisper"),
     path.join(root, "whisper"),
     path.join(root, "..", "whisper"),
-    process.env.PILLAR_BACKEND_DIR ? path.join(process.env.PILLAR_BACKEND_DIR, "..", "whisper") : "",
-    process.env.PILLAR_BACKEND_DIR ? path.join(process.env.PILLAR_BACKEND_DIR, "whisper") : "",
+    process.env.PILLAR_TIME_BACKEND_DIR ? path.join(process.env.PILLAR_TIME_BACKEND_DIR, "..", "whisper") : "",
+    process.env.PILLAR_TIME_BACKEND_DIR ? path.join(process.env.PILLAR_TIME_BACKEND_DIR, "whisper") : "",
   ].filter(Boolean);
   return roots.flatMap((dir) => [
     ...names.map((name) => path.join(dir, name)),
@@ -682,8 +682,8 @@ function whisperModelCandidates() {
     path.join(dataDir, "whisper", "models", whisperModelFile),
     path.join(root, "vendor", "whisper", "models", whisperModelFile),
     path.join(root, "..", "whisper", "models", whisperModelFile),
-    process.env.PILLAR_BACKEND_DIR ? path.join(process.env.PILLAR_BACKEND_DIR, "..", "whisper", "models", whisperModelFile) : "",
-    process.env.PILLAR_BACKEND_DIR ? path.join(process.env.PILLAR_BACKEND_DIR, "whisper", "models", whisperModelFile) : "",
+    process.env.PILLAR_TIME_BACKEND_DIR ? path.join(process.env.PILLAR_TIME_BACKEND_DIR, "..", "whisper", "models", whisperModelFile) : "",
+    process.env.PILLAR_TIME_BACKEND_DIR ? path.join(process.env.PILLAR_TIME_BACKEND_DIR, "whisper", "models", whisperModelFile) : "",
   ].filter(Boolean);
 }
 
@@ -2441,8 +2441,8 @@ function linearPublicConnector(row = get("SELECT * FROM connector_credentials WH
 function redditCredential() {
   const row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: REDDIT_PROVIDER });
   const data = parse(row?.api_key, {});
-  const envClientId = process.env.REDDIT_CLIENT_ID || process.env.PILLAR_REDDIT_CLIENT_ID || "";
-  const envClientSecret = process.env.REDDIT_CLIENT_SECRET || process.env.PILLAR_REDDIT_CLIENT_SECRET || "";
+  const envClientId = process.env.PILLAR_TIME_REDDIT_CLIENT_ID || "";
+  const envClientSecret = process.env.PILLAR_TIME_REDDIT_CLIENT_SECRET || "";
   return {
     row,
     enabled: !!row?.enabled || !!envClientId,
@@ -2458,8 +2458,8 @@ function redditCredential() {
 
 function redditPublicConnector({ row, data, enabled } = {}) {
   const source = data || parse(row?.api_key, {});
-  const hasClientId = !!(source.clientId || process.env.REDDIT_CLIENT_ID || process.env.PILLAR_REDDIT_CLIENT_ID);
-  const isEnabled = !!enabled || !!process.env.REDDIT_CLIENT_ID || !!process.env.PILLAR_REDDIT_CLIENT_ID;
+  const hasClientId = !!(source.clientId || process.env.PILLAR_TIME_REDDIT_CLIENT_ID);
+  const isEnabled = !!enabled || !!process.env.PILLAR_TIME_REDDIT_CLIENT_ID;
   return {
     provider: REDDIT_PROVIDER,
     enabled: isEnabled,
@@ -2560,7 +2560,7 @@ function redditOAuthPathForSource(source) {
 
 const GOOGLE_CALENDAR_PROVIDER = "google_calendar";
 function googleCalendarLocalOAuthConfig() {
-  const file = String(process.env.PILLAR_GOOGLE_CALENDAR_CLIENT_JSON || "").trim();
+  const file = String(process.env.PILLAR_TIME_GOOGLE_CALENDAR_CLIENT_JSON || "").trim();
   if (!file) return { clientId: "", clientSecret: "" };
   try {
     const parsed = JSON.parse(fs.readFileSync(path.resolve(file), "utf8"));
@@ -2570,15 +2570,15 @@ function googleCalendarLocalOAuthConfig() {
       clientSecret: String(config?.client_secret || "").trim(),
     };
   } catch (error) {
-    console.error("Could not read PILLAR_GOOGLE_CALENDAR_CLIENT_JSON:", error.message || error);
+    console.error("Could not read PILLAR_TIME_GOOGLE_CALENDAR_CLIENT_JSON:", error.message || error);
     return { clientId: "", clientSecret: "" };
   }
 }
 const GOOGLE_CALENDAR_LOCAL_OAUTH = googleCalendarLocalOAuthConfig();
-const GOOGLE_CALENDAR_DESKTOP_CLIENT_ID = process.env.PILLAR_GOOGLE_CALENDAR_CLIENT_ID || GOOGLE_CALENDAR_LOCAL_OAUTH.clientId || "190790037747-8mou84ivna7taems83u92t7fpfsd12m3.apps.googleusercontent.com";
-const GOOGLE_CALENDAR_CLIENT_SECRET = process.env.PILLAR_GOOGLE_CALENDAR_CLIENT_SECRET || GOOGLE_CALENDAR_LOCAL_OAUTH.clientSecret || "";
-const GOOGLE_CALENDAR_AUTH_BROKER_URL = String(process.env.PILLAR_GOOGLE_CALENDAR_AUTH_BROKER_URL || "https://auth.pillar.transformationagency.com").replace(/\/+$/, "");
-const GOOGLE_CALENDAR_REDIRECT_URI = process.env.PILLAR_GOOGLE_CALENDAR_REDIRECT_URI || "";
+const GOOGLE_CALENDAR_DESKTOP_CLIENT_ID = process.env.PILLAR_TIME_GOOGLE_CALENDAR_CLIENT_ID || GOOGLE_CALENDAR_LOCAL_OAUTH.clientId || "190790037747-8mou84ivna7taems83u92t7fpfsd12m3.apps.googleusercontent.com";
+const GOOGLE_CALENDAR_CLIENT_SECRET = process.env.PILLAR_TIME_GOOGLE_CALENDAR_CLIENT_SECRET || GOOGLE_CALENDAR_LOCAL_OAUTH.clientSecret || "";
+const GOOGLE_CALENDAR_AUTH_BROKER_URL = String(process.env.PILLAR_TIME_GOOGLE_CALENDAR_AUTH_BROKER_URL || "https://auth.pillar.transformationagency.com").replace(/\/+$/, "");
+const GOOGLE_CALENDAR_REDIRECT_URI = process.env.PILLAR_TIME_GOOGLE_CALENDAR_REDIRECT_URI || "";
 const GOOGLE_CALENDAR_SCOPES = [
   "https://www.googleapis.com/auth/calendar.events.readonly",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
@@ -2682,7 +2682,7 @@ async function exchangeGoogleCalendarCode({ clientId, clientSecret, code, redire
   if (!response.ok) {
     const message = payload.error_description || payload.error || `Google OAuth token exchange failed: ${response.status} ${response.statusText}`;
     if (/client_secret/i.test(message) && !clientSecret) {
-      throw new Error("This Google OAuth client requires its desktop client secret for the final token exchange. Add PILLAR_GOOGLE_CALENDAR_CLIENT_SECRET locally, then reconnect Google Calendar.");
+      throw new Error("This Google OAuth client requires its desktop client secret for the final token exchange. Add PILLAR_TIME_GOOGLE_CALENDAR_CLIENT_SECRET locally, then reconnect Google Calendar.");
     }
     throw new Error(message);
   }
@@ -4315,8 +4315,25 @@ function workflowTemplate(config = briefConfig()) {
   ];
 }
 
-function workflowPlan(config = briefConfig()) {
-  return workflowTemplate(config).map(([key, name, group], index) => ({
+function executiveWorkflowTemplate() {
+  return [
+    ["context", "Load executive context", "retrieve"],
+    ["calendar", "Retrieve calendar and commitments", "retrieve"],
+    ["normalize", "Normalize day signals", "analyze"],
+    ["risks", "Detect risks and prep gaps", "analyze"],
+    ["rank", "Choose highest-leverage focus", "analyze"],
+    ["render", "Render executive day plan", "generate"],
+    ["save", "Save day artifact", "deliver"],
+    ["telegram", "Deliver optional Telegram brief", "deliver"],
+  ];
+}
+
+function workflowTemplateForRunType(runType = "intelligence", config = briefConfig()) {
+  return runType === "executive_day" ? executiveWorkflowTemplate() : workflowTemplate(config);
+}
+
+function workflowPlan(config = briefConfig(), runType = "intelligence") {
+  return workflowTemplateForRunType(runType, config).map(([key, name, group], index) => ({
     key,
     name,
     group,
@@ -4324,9 +4341,9 @@ function workflowPlan(config = briefConfig()) {
   }));
 }
 
-function workflowProgressSteps({ activeKey = "fetch", completed = new Set(), outputs = {}, config = briefConfig() } = {}) {
+function workflowProgressSteps({ activeKey = "fetch", completed = new Set(), outputs = {}, config = briefConfig(), runType = "intelligence" } = {}) {
   const completedSet = completed instanceof Set ? completed : new Set(completed || []);
-  return workflowTemplate(config).map(([key, name, group], index) => ({
+  return workflowTemplateForRunType(runType, config).map(([key, name, group], index) => ({
     n: index + 1,
     key,
     name,
@@ -4341,7 +4358,7 @@ function workflowProgressSteps({ activeKey = "fetch", completed = new Set(), out
 function state() {
   const prefs = timePreferences();
   const todayKey = localDateKey(new Date(), prefs.timezone);
-  return { sources: sources(), lenses: lenses(), councils: councils(), documents: documents(), workflowRuns: workflowRuns(), approvals: approvals(), auditLogs: audits(), telegram: telegramSettings(), model: modelSettings(), tts: ttsSettings(), connectors: connectorSettings(), briefConfig: briefConfig(), onboarding: onboardingState(), trustedContext: trustedContextState(), time: { preferences: prefs, todayKey, suggestions: timeSuggestions(), commitments: dailyCommitments(todayKey), tasks: timeTasks(), reminders: reminders(), reviews: reviewTemplates(), importantDates: importantDates(), meetings: meetingRecords(), scheduler: schedulerHealth() }, runtime: { mode: appMode, isDesktop, dataDir, workflowSteps: workflowPlan() } };
+  return { sources: sources(), lenses: lenses(), councils: councils(), documents: documents(), workflowRuns: workflowRuns(), approvals: approvals(), auditLogs: audits(), telegram: telegramSettings(), model: modelSettings(), tts: ttsSettings(), connectors: connectorSettings(), briefConfig: briefConfig(), onboarding: onboardingState(), trustedContext: trustedContextState(), time: { preferences: prefs, todayKey, suggestions: timeSuggestions(), commitments: dailyCommitments(todayKey), tasks: timeTasks(), reminders: reminders(), reviews: reviewTemplates(), importantDates: importantDates(), meetings: meetingRecords(), scheduler: schedulerHealth() }, runtime: { mode: appMode, isDesktop, dataDir, workflowSteps: workflowPlan(), executiveWorkflowSteps: workflowPlan(briefConfig(), "executive_day") } };
 }
 function briefConfig() {
   const r = get("SELECT * FROM brief_config WHERE id = 1");
@@ -5490,6 +5507,348 @@ function saveBriefDocument({ runId, artifact }) {
   return docId;
 }
 
+async function fetchCalendarContextForExecutive({ useRecentCache = true, onProgress } = {}) {
+  const calendarSources = sources().filter((s) => s.status === "active" && s.approvalStatus === "approved" && s.type === "Calendar");
+  const calendarResults = [];
+  let checked = 0;
+  for (const source of calendarSources) {
+    try {
+      const cached = useRecentCache ? recentSourceCache(source) : null;
+      calendarResults.push(cached
+        ? { sourceId: source.id, sourceName: source.name, agenda: source.config?.lastAgenda || [], ...cached }
+        : { sourceId: source.id, sourceName: source.name, ...(await fetchGoogleCalendarSource(source)) });
+    } catch (error) {
+      calendarResults.push({ sourceId: source.id, sourceName: source.name, ok: false, error: error.message || "Google Calendar fetch failed", agenda: [] });
+      audit("calendar.fetch_failed", "source", source.id, error.message || "Google Calendar fetch failed", {}, "system");
+    } finally {
+      checked += 1;
+      onProgress?.({
+        output: `${checked} of ${calendarSources.length} calendar source${calendarSources.length === 1 ? "" : "s"} checked`,
+        detail: `Calendar: ${source.name}`,
+      });
+    }
+  }
+  return {
+    calendarSources,
+    calendarResults,
+    calendarAgenda: dedupeCalendarAgenda(calendarResults.flatMap((result) => result.agenda || [])),
+  };
+}
+
+function formatAgendaLine(event = {}) {
+  const when = event.time || [event.start, event.end].filter(Boolean).join(" to ") || "Today";
+  const title = event.title || event.summary || "Calendar event";
+  const calendar = event.calendar ? ` (${event.calendar})` : "";
+  return `${when}: ${title}${calendar}`;
+}
+
+function executiveIssueFromCandidate(candidate = {}, index = 0) {
+  return {
+    id: candidate.id || `executive-${index + 1}`,
+    title: candidate.title || "Untitled priority",
+    sourceName: candidate.source || "Pillar Time",
+    sourceType: "Executive",
+    summary: candidate.reason || candidate.notes || "High-leverage candidate for today.",
+    whyJackShouldCare: candidate.reason || "This is one of the strongest available uses of attention today.",
+    relevanceScore: Math.min(1, Math.max(0.1, Number(candidate.score || 60) / 100)),
+    risingScore: candidate.dueAt ? 0.4 : 0.2,
+    publishedAt: candidate.dueAt || now(),
+    url: "",
+  };
+}
+
+function buildExecutiveRisks({ commitments = [], tasks = [], calendarAgenda = [], connectorDiagnostics = {}, prefs = timePreferences() } = {}) {
+  const risks = [];
+  if (!commitments.length) {
+    risks.push({ severity: "medium", title: "Today's Three is empty", detail: "Choose or accept a small number of commitments before the day gets negotiated by incoming demands." });
+  }
+  const meetings = calendarAgenda.filter((event) => !String(event.start || "").match(/^\d{4}-\d{2}-\d{2}$/));
+  if (meetings.length >= 5) {
+    risks.push({ severity: "medium", title: "Meeting load is high", detail: `${meetings.length} timed calendar events are on the agenda. Protect transition time and avoid adding avoidable commitments.` });
+  }
+  const waiting = tasks.filter((task) => task.waitingOn).slice(0, 3);
+  for (const task of waiting) {
+    risks.push({ severity: "low", title: `Waiting on ${task.waitingOn}`, detail: task.title });
+  }
+  const dateKey = localDateKey(new Date(), prefs.timezone);
+  const dueToday = tasks.filter((task) => task.dueAt && String(task.dueAt).slice(0, 10) === dateKey).slice(0, 3);
+  for (const task of dueToday) {
+    risks.push({ severity: "medium", title: "Due today", detail: task.title });
+  }
+  if (connectorDiagnostics.model?.status !== "ready") {
+    risks.push({ severity: "low", title: "Model connector is not configured", detail: "This report used deterministic local planning instead of model synthesis." });
+  }
+  if (connectorDiagnostics.calendar?.status !== "ready") {
+    risks.push({ severity: "medium", title: "Calendar is not connected", detail: "Schedule analysis may miss meetings, hard blocks, and prep windows." });
+  }
+  return risks;
+}
+
+function renderExecutiveDayBrief({ dateKey, timezone, calendarAgenda = [], todaysThree = [], rankedDayCandidates = [], risks = [], connectorDiagnostics = {}, coverageNotes = [] } = {}) {
+  const agendaLines = calendarAgenda.length
+    ? calendarAgenda.slice(0, 12).map((event) => `- ${formatAgendaLine(event)}`)
+    : ["- No calendar agenda loaded for today."];
+  const threeLines = todaysThree.length
+    ? todaysThree.map((item, index) => `- ${index + 1}. ${item.title}${item.reason ? ` - ${item.reason}` : ""}`)
+    : ["- Choose Today's Three. The day needs a small explicit target before anything else gets optimized."];
+  const leverageLines = rankedDayCandidates.length
+    ? rankedDayCandidates.slice(0, 8).map((item) => `- ${item.title}${item.estimateMinutes ? ` (${item.estimateMinutes} min)` : ""}: ${item.reason || item.source || "Worth considering today."}`)
+    : ["- No ranked candidates yet. Capture one obligation or connect Linear/Calendar to sharpen the plan."];
+  const riskLines = risks.length
+    ? risks.slice(0, 8).map((risk) => `- ${risk.title}: ${risk.detail}`)
+    : ["- No deterministic risks detected from the local context available."];
+  const diagnosticLines = [
+    `- Calendar: ${connectorDiagnostics.calendar?.status || "unknown"}`,
+    `- Linear: ${connectorDiagnostics.linear?.status || "unknown"}`,
+    `- Model: ${connectorDiagnostics.model?.status || "unknown"}`,
+    ...coverageNotes.map((note) => `- ${note}`),
+  ];
+  return [
+    `# Executive Day Plan: ${dateKey}`,
+    "",
+    "## Executive Read",
+    `Pillar Time built this from local commitments, tasks, reminders, reviews, and calendar context for ${timezone}. ${connectorDiagnostics.model?.status === "ready" ? "Model synthesis is available, but this run uses the deterministic executive-day path first." : "The model connector is not ready, so this is a deterministic plan instead of a stopped workflow."}`,
+    "",
+    "The plain read: pick the few commitments that actually relieve pressure, protect the time they need, and treat everything else as negotiable until it proves otherwise.",
+    "",
+    "## Today's Calendar & Prep",
+    ...agendaLines,
+    "",
+    "## Today's Three",
+    ...threeLines,
+    "",
+    "## Highest Leverage Today",
+    ...leverageLines,
+    "",
+    "## Risks & Watchouts",
+    ...riskLines,
+    "",
+    "## Approval Queue",
+    "- No generated external actions were executed. Linear and calendar writes still require explicit approval.",
+    "",
+    "## Coverage Notes",
+    ...diagnosticLines,
+  ].join("\n");
+}
+
+function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], calendarResults = [] } = {}) {
+  const config = briefConfig();
+  const prefs = timePreferences();
+  const dateKey = localDateKey(new Date(generatedAt), prefs.timezone);
+  const commitments = dailyCommitments(dateKey);
+  const tasks = timeTasks();
+  const suggestions = timeSuggestions();
+  const rankedDayCandidates = suggestions.slice(0, 8);
+  const todaysThree = commitments.length
+    ? commitments.slice(0, 3).map((commitment) => ({
+      id: commitment.id,
+      title: commitment.title,
+      notes: commitment.notes,
+      reason: commitment.notes || "Already selected as a protected commitment.",
+      source: "commitment",
+      score: 92 - commitment.rank,
+      estimateMinutes: 30,
+      leverageCategory: "leadership",
+    }))
+    : rankedDayCandidates.slice(0, 3);
+  const connectors = connectorSettings();
+  const model = modelSettings();
+  const connectorDiagnostics = {
+    calendar: {
+      status: connectors.googleCalendar?.status || "missing",
+      events: calendarAgenda.length,
+      failures: calendarResults.filter((result) => result.ok === false).map((result) => result.error).filter(Boolean).slice(0, 3),
+    },
+    linear: {
+      status: connectors.linear?.status || "missing",
+      enabled: connectors.linear?.enabled !== false,
+    },
+    model: {
+      status: model.status,
+      provider: model.provider,
+      model: model.model,
+    },
+  };
+  const coverageNotes = [];
+  if (!calendarAgenda.length) coverageNotes.push("No timed calendar events were available to the executive-day planner.");
+  if (connectorDiagnostics.calendar.failures?.length) coverageNotes.push(`Calendar fetch degraded: ${connectorDiagnostics.calendar.failures[0]}`);
+  if (connectorDiagnostics.linear.status !== "ready") coverageNotes.push("Linear was not ready, so Linear issues were not included in deterministic ranking.");
+  if (connectorDiagnostics.model.status !== "ready") coverageNotes.push("Model connector was not ready; deterministic fallback rendered the plan.");
+  const risks = buildExecutiveRisks({ commitments, tasks, calendarAgenda, connectorDiagnostics, prefs });
+  const selectedIssues = (todaysThree.length ? todaysThree : rankedDayCandidates.slice(0, 3)).map(executiveIssueFromCandidate);
+  const artifact = {
+    runType: "executive_day",
+    title: `Executive day plan: ${dateKey}`,
+    generatedAt,
+    briefConfig: config,
+    calendarAgenda,
+    calendarFetches: calendarResults,
+    linearContext: { status: connectorDiagnostics.linear.status },
+    commitments,
+    tasks: tasks.slice(0, 20),
+    reminders: reminders().filter((reminder) => reminder.enabled).slice(0, 12),
+    reviews: reviewTemplates().filter((review) => review.enabled),
+    importantDates: importantDates().filter((item) => item.enabled !== false).slice(0, 12),
+    meetings: meetingRecords().slice(0, 12),
+    rankedDayCandidates,
+    todaysThree,
+    risks,
+    proposedActions: [],
+    approvalItems: [],
+    connectorDiagnostics,
+    coverageNotes,
+    selectedIssues,
+    selectedIssueClusters: [],
+    evidencePackets: [],
+    candidateScan: { totalCandidates: rankedDayCandidates.length, scannedAt: generatedAt, mode: "executive_day" },
+    strategicBrief: {
+      mode: "deterministic-executive-day",
+      executiveRead: "Deterministic executive-day plan generated from local context.",
+      topIssues: selectedIssues,
+      coverageNotes,
+    },
+    whyJackShouldCare: todaysThree.map((item) => `${item.title}: ${item.reason || "Protect this if it is still true."}`).join("\n"),
+    implications: risks.map((risk) => `${risk.title}: ${risk.detail}`),
+    doctrineImpact: [],
+    analyzer: { behavior: "Deterministic executive-day analysis", members: [], synthesis: "Local planning artifact generated without requiring model synthesis." },
+    council: { name: "Executive Day Planner", members: [], synthesis: "No model council was invoked for this deterministic fallback." },
+    jackPov: `${config.ownerName && config.ownerName !== "You" ? config.ownerName : "You"} should use this as a starting plan, not an autopilot decision.`,
+  };
+  artifact.onePageBrief = renderExecutiveDayBrief({
+    dateKey,
+    timezone: prefs.timezone,
+    calendarAgenda,
+    todaysThree,
+    rankedDayCandidates,
+    risks,
+    connectorDiagnostics,
+    coverageNotes,
+  });
+  return artifact;
+}
+
+async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
+  const runId = options.runId || id("run");
+  const started = now();
+  const completedKeys = new Set();
+  const stepOutputs = {};
+  const progressDelay = (ms = 180) => new Promise((resolve) => setTimeout(resolve, ms));
+  const writeProgress = (activeKey) => {
+    run("UPDATE workflow_runs SET steps_json=$steps, artifact_json=$artifact WHERE id=$id", {
+      $id: runId,
+      $steps: json(workflowProgressSteps({ activeKey, completed: completedKeys, outputs: stepOutputs, runType: "executive_day" })),
+      $artifact: json({ runType: "executive_day", progressUpdatedAt: now(), activeStep: activeKey }),
+    });
+  };
+  const finishProgress = (key, output = "Done", detail = "") => {
+    completedKeys.add(key);
+    stepOutputs[key] = { output, detail };
+  };
+  run(`INSERT INTO workflow_runs (id, label, trigger, status, started_at, completed_at, steps_json, artifact_json)
+       VALUES ($id, 'Generating executive day plan', $trigger, 'running', $started, NULL, $steps, '{}')`, {
+    $id: runId,
+    $trigger: trigger,
+    $started: started,
+    $steps: json(workflowProgressSteps({ activeKey: "context", completed: completedKeys, outputs: stepOutputs, runType: "executive_day" })),
+  });
+  audit("run.started", "workflow_run", runId, `Trigger: ${trigger}`, { runType: "executive_day" }, "system");
+  try {
+    writeProgress("context");
+    await progressDelay();
+    const prefs = timePreferences();
+    const dateKey = localDateKey(new Date(), prefs.timezone);
+    finishProgress("context", `Loaded local context for ${dateKey}`, `${timeTasks().length} task(s), ${dailyCommitments(dateKey).length} protected commitment(s)`);
+
+    writeProgress("calendar");
+    const { calendarResults, calendarAgenda } = await fetchCalendarContextForExecutive({
+      useRecentCache: true,
+      onProgress: ({ output, detail }) => {
+        stepOutputs.calendar = { output, detail };
+        writeProgress("calendar");
+      },
+    });
+    finishProgress("calendar", `${calendarAgenda.length} calendar event${calendarAgenda.length === 1 ? "" : "s"} loaded`, calendarResults.length ? "Calendar adapter completed." : "No active Calendar source configured.");
+
+    writeProgress("normalize");
+    await progressDelay();
+    finishProgress("normalize", "Executive records normalized", "Calendar, commitments, tasks, reminders, reviews, and connector status prepared.");
+
+    writeProgress("risks");
+    await progressDelay();
+    const artifact = buildExecutiveDayArtifact({ generatedAt: now(), calendarAgenda, calendarResults });
+    finishProgress("risks", `${artifact.risks.length} risk/watchout${artifact.risks.length === 1 ? "" : "s"} detected`);
+
+    writeProgress("rank");
+    await progressDelay();
+    finishProgress("rank", `${artifact.todaysThree.length || artifact.rankedDayCandidates.length} focus candidate${(artifact.todaysThree.length || artifact.rankedDayCandidates.length) === 1 ? "" : "s"} selected`);
+
+    writeProgress("render");
+    await progressDelay();
+    finishProgress("render", "Executive day plan rendered", artifact.connectorDiagnostics.model.status === "ready" ? "Deterministic executive plan rendered without needing a model call." : "Model connector was not ready; deterministic fallback completed.");
+
+    writeProgress("save");
+    await progressDelay();
+    artifact.briefDocumentId = saveBriefDocument({ runId, artifact });
+    finishProgress("save", artifact.briefDocumentId ? "Executive artifact and document saved" : "Executive artifact saved");
+
+    writeProgress("telegram");
+    await progressDelay();
+    let telegramDelivery;
+    try {
+      telegramDelivery = await deliverBriefToTelegram({ runId, artifact });
+    } catch (error) {
+      telegramDelivery = { ok: false, error: error.message || "Telegram delivery failed", failedAt: now() };
+      run("UPDATE telegram_settings SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE id=1", { $t: now(), $err: telegramDelivery.error });
+      audit("telegram.delivery_failed", "workflow_run", runId, telegramDelivery.error, {}, "system");
+    }
+    artifact.telegramDelivery = telegramDelivery;
+    finishProgress("telegram", telegramDelivery?.ok
+      ? `Delivered to Telegram in ${telegramDelivery.chunks || 1} message${telegramDelivery.chunks === 1 ? "" : "s"}`
+      : telegramDelivery?.skipped
+        ? telegramDelivery.reason
+        : telegramDelivery?.error || "Telegram delivery failed");
+
+    const steps = workflowTemplateForRunType("executive_day").map(([key, name, group], index) => ({
+      n: index + 1,
+      key,
+      name,
+      group,
+      status: "done",
+      ms: 20 + index * 5,
+      output: stepOutputs[key]?.output || "Completed",
+      detail: stepOutputs[key]?.detail || "",
+    }));
+    const completed = now();
+    run(`INSERT INTO workflow_runs (id, label, trigger, status, started_at, completed_at, steps_json, artifact_json)
+         VALUES ($id, $label, $trigger, 'completed', $started, $completed, $steps, $artifact)
+         ON CONFLICT(id) DO UPDATE SET label=excluded.label, status='completed', completed_at=excluded.completed_at, steps_json=excluded.steps_json, artifact_json=excluded.artifact_json`, {
+      $id: runId, $label: artifact.title, $trigger: trigger, $started: started, $completed: completed, $steps: json(steps), $artifact: json(artifact),
+    });
+    audit("artifact.saved", "workflow_run", runId, "Executive day artifact persisted", { runType: "executive_day" }, "system");
+    return workflowRuns().find((r) => r.id === runId);
+  } catch (error) {
+    const completed = now();
+    const failedSteps = workflowProgressSteps({ activeKey: "", completed: completedKeys, outputs: stepOutputs, runType: "executive_day" });
+    const failedIndex = Math.max(0, failedSteps.findIndex((step) => step.status !== "done"));
+    failedSteps[failedIndex] = {
+      ...failedSteps[failedIndex],
+      status: "error",
+      output: error.message || "Executive day workflow failed",
+      detail: "Generation stopped before saving or delivering a day plan.",
+    };
+    run(`UPDATE workflow_runs
+         SET status='failed', completed_at=$completed, error=$error, steps_json=$steps, artifact_json=$artifact
+         WHERE id=$id`, {
+      $id: runId,
+      $completed: completed,
+      $error: error.message || "Executive day workflow failed",
+      $steps: json(failedSteps),
+      $artifact: json({ runType: "executive_day", error: error.message || "Executive day workflow failed", failedAt: completed }),
+    });
+    throw error;
+  }
+}
+
 async function executeWorkflow(trigger = "Manual", options = {}) {
   const runId = options.runId || id("run");
   const started = now();
@@ -6506,9 +6865,12 @@ app.patch("/api/documents/:id", (req, res) => {
 
 app.post("/api/workflow-runs", async (req, res) => {
   const trigger = req.body?.trigger || "Manual";
+  const runType = req.body?.runType === "intelligence" ? "intelligence" : "executive_day";
   const runId = id("run");
   try {
-    const promise = executeWorkflow(trigger, { runId });
+    const promise = runType === "executive_day"
+      ? executeExecutiveDayWorkflow(trigger, { runId })
+      : executeWorkflow(trigger, { runId });
     if (req.body?.wait === true) {
       const run = await promise;
       return res.json({ state: state(), run });
@@ -6967,6 +7329,18 @@ app.patch("/api/connectors/:provider", (req, res) => {
     const apiKey = Object.prototype.hasOwnProperty.call(b, "apiKey") ? String(b.apiKey || "").trim() : savedLinearApiKey(current);
     const enabled = b.enabled !== false;
     const missing = enabled && !apiKey && !linearApiKey();
+    if (missing) {
+      const message = "Paste a Linear personal API key, or configure LINEAR_API_KEY before enabling Linear.";
+      run(`INSERT INTO connector_credentials (provider, api_key, enabled, last_error, updated_at)
+           VALUES ($provider, '', 0, $err, $t)
+           ON CONFLICT(provider) DO UPDATE SET enabled=0, last_error=$err, updated_at=$t`, {
+        $provider: LINEAR_PROVIDER,
+        $err: message,
+        $t: now(),
+      });
+      audit("connector.settings_rejected", "connector", LINEAR_PROVIDER, message, { keySource: "missing" }, "system");
+      return res.status(400).json({ error: message, state: state() });
+    }
     run(`INSERT INTO connector_credentials (provider, api_key, enabled, last_error, updated_at)
          VALUES ($provider, $apiKey, $enabled, $err, $t)
          ON CONFLICT(provider) DO UPDATE SET api_key=$apiKey, enabled=$enabled, last_error=$err, updated_at=$t`, {
@@ -7254,7 +7628,7 @@ if (process.env.NODE_ENV === "production") {
   app.use(vite.middlewares);
 }
 
-const port = Number(process.env.PORT || 5173);
+const port = Number(process.env.PORT || 42818);
 const host = process.env.HOST || "127.0.0.1";
 const googleCalendarCallbackPort = GOOGLE_CALENDAR_REDIRECT_URI ? Number(new URL(GOOGLE_CALENDAR_REDIRECT_URI).port || 80) : 0;
 const server = app.listen(port, host);
