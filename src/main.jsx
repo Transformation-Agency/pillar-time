@@ -3104,6 +3104,8 @@ function Onboarding({ state, mutate, refresh }) {
     }
   };
   const installFfmpeg = async () => {
+    const ok = window.confirm("Install FFmpeg with Homebrew now? Pillar Time will run a local Homebrew install so podcast audio can be processed.");
+    if (!ok) return;
     setFfmpegBusy(true);
     setFfmpegMessage("Installing FFmpeg with Homebrew...");
     try {
@@ -3132,6 +3134,8 @@ function Onboarding({ state, mutate, refresh }) {
     }
   };
   const installSttModel = async () => {
+    const ok = window.confirm("Download the local Whisper model now? This stores the speech-to-text model on this Mac for voice input and transcription.");
+    if (!ok) return;
     setSttBusy(true);
     setSttMessage("Downloading Whisper model...");
     try {
@@ -3888,6 +3892,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     }
   };
   const installFfmpeg = async () => {
+    const ok = window.confirm("Install FFmpeg with Homebrew now? Pillar Time will run a local Homebrew install so podcast audio can be processed.");
+    if (!ok) return;
     setFfmpegBusy(true);
     setFfmpegMessage("Installing FFmpeg with Homebrew...");
     try {
@@ -3914,6 +3920,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     }
   };
   const installSttModel = async () => {
+    const ok = window.confirm("Download the local Whisper model now? This stores the speech-to-text model on this Mac for voice input and transcription.");
+    if (!ok) return;
     setSettingsSttBusy(true);
     setSettingsSttMessage("Downloading Whisper model...");
     try {

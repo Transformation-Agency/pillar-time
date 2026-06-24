@@ -202,6 +202,16 @@ test("Connector picker sends ElevenLabs users to audio settings", () => {
   assert.doesNotMatch(mainSource, /<button type="button" onClick=\{\(\) => setConnectorModal\(false\)\}><Icon name="volume" \/><strong>ElevenLabs audio<\/strong><span>Use the Audio Briefs settings below\.<\/span><\/button>/);
 });
 
+test("Local dependency installers ask for consent before starting", () => {
+  const ffmpegConsent = /Install FFmpeg with Homebrew now\? Pillar Time will run a local Homebrew install so podcast audio can be processed\./g;
+  const whisperConsent = /Download the local Whisper model now\? This stores the speech-to-text model on this Mac for voice input and transcription\./g;
+  assert.equal([...mainSource.matchAll(ffmpegConsent)].length, 2);
+  assert.equal([...mainSource.matchAll(whisperConsent)].length, 2);
+  assert.match(mainSource, /const ok = window\.confirm\("Install FFmpeg with Homebrew now\? Pillar Time will run a local Homebrew install so podcast audio can be processed\."\);\n\s+if \(!ok\) return;\n\s+setFfmpegBusy\(true\);/);
+  assert.match(mainSource, /const ok = window\.confirm\("Download the local Whisper model now\? This stores the speech-to-text model on this Mac for voice input and transcription\."\);\n\s+if \(!ok\) return;\n\s+setSttBusy\(true\);/);
+  assert.match(mainSource, /const ok = window\.confirm\("Download the local Whisper model now\? This stores the speech-to-text model on this Mac for voice input and transcription\."\);\n\s+if \(!ok\) return;\n\s+setSettingsSttBusy\(true\);/);
+});
+
 test("Backend connection errors offer retry and clear after recovery", () => {
   assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
   assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);
