@@ -132,6 +132,18 @@ test("Planning removal actions ask for confirmation before hiding active items",
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/reminders\/\$\{reminder\.id\}`, \{ archive: true \}, "PATCH"\)\}/);
 });
 
+test("High-use placeholder and table controls expose accessible labels", () => {
+  assert.match(mainSource, /aria-label="Quick capture task or obligation"/);
+  assert.match(mainSource, /aria-label="Important date title"/);
+  assert.match(mainSource, /aria-label="Important date start date"/);
+  assert.match(mainSource, /aria-label="Important date end date"/);
+  assert.match(mainSource, /aria-label="Search sources"/);
+  assert.match(mainSource, /aria-label=\{`State for \$\{issue\.identifier \|\| issue\.title\}`\}/);
+  assert.match(mainSource, /aria-label=\{`Comment on \$\{issue\.identifier \|\| issue\.title\}`\}/);
+  assert.match(mainSource, /aria-label="Search briefs"/);
+  assert.match(mainSource, /aria-label="Starter commitment for Today's Three"/);
+});
+
 test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {
   assert.match(serverSource, /function telegramDeliveryStatus/);
   assert.match(serverSource, /async function deliverBriefToTelegramWithSoftTimeout/);
