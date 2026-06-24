@@ -110,6 +110,18 @@ test("Modal close buttons have accessible labels", () => {
   assert.doesNotMatch(mainSource, /<button type="button" onClick=\{[^}]+\}><Icon name="x" \/><\/button>/);
 });
 
+test("Modal panels expose dialog semantics", () => {
+  assert.match(mainSource, /role="dialog" aria-modal="true" aria-label=\{editingSource \? "Edit source" : "Add source"\}/);
+  assert.match(mainSource, /className="modal-card live-preview-modal" role="dialog" aria-modal="true" aria-label="Live preview"/);
+  assert.match(mainSource, /className="modal-card connector-modal" role="dialog" aria-modal="true" aria-label="Add connector"/);
+  assert.match(mainSource, /className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Model provider setup"/);
+  assert.match(mainSource, /className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Telegram delivery setup"/);
+  assert.match(mainSource, /className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="X search API setup"/);
+  assert.match(mainSource, /className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Reddit OAuth setup"/);
+  assert.match(mainSource, /className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Linear setup"/);
+  assert.match(mainSource, /className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Google Calendar setup"/);
+});
+
 test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {
   assert.match(serverSource, /function telegramDeliveryStatus/);
   assert.match(serverSource, /async function deliverBriefToTelegramWithSoftTimeout/);
