@@ -3669,6 +3669,15 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     e.preventDefault();
     mutate("/api/connectors/x", { ...xConnector, enabled: true }, "PATCH").then(() => setXModal(false));
   };
+  const closeXModal = () => {
+    if (xConnector.apiKey) {
+      const ok = window.confirm("Discard unsaved X API token? The pasted bearer token will not be saved.");
+      if (!ok) return false;
+    }
+    setXConnector({ enabled: true, apiKey: "" });
+    setXModal(false);
+    return true;
+  };
   const saveRedditConnector = async (e) => {
     e.preventDefault();
     setRedditMessage("");
@@ -3680,6 +3689,20 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     } catch (error) {
       setRedditMessage(error.message || "Could not save Reddit connector.");
     }
+  };
+  const closeRedditModal = () => {
+    const savedGrantType = state.connectors?.reddit?.grantType || "client_credentials";
+    const hasUnsavedRedditChanges = !!redditConnector.clientId
+      || !!redditConnector.clientSecret
+      || redditConnector.grantType !== savedGrantType
+      || redditConnector.deviceId !== "DO_NOT_TRACK_THIS_DEVICE";
+    if (hasUnsavedRedditChanges) {
+      const ok = window.confirm("Discard unsaved Reddit OAuth changes? Client credentials and grant-type edits will not be saved.");
+      if (!ok) return false;
+    }
+    setRedditConnector({ enabled: true, clientId: "", clientSecret: "", grantType: savedGrantType, deviceId: "DO_NOT_TRACK_THIS_DEVICE" });
+    setRedditModal(false);
+    return true;
   };
   const testRedditConnector = async () => {
     setRedditMessage("");
@@ -4167,16 +4190,16 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <div className="modal-actions"><Button type="button" onClick={() => setTelegramModal(false)}>Cancel</Button><Button icon="save" kind="primary">Save Telegram</Button></div>
       </form>
     </div>}
-    {xModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setXModal(false); }}>
+    {xModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeXModal(); }}>
       <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="X search API setup" onSubmit={saveXConnector}>
-        <div className="modal-head"><div><h2>X search API</h2><p>Add or replace the official bearer token used for X search.</p></div><button type="button" aria-label="Close X API setup" onClick={() => setXModal(false)}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2>X search API</h2><p>Add or replace the official bearer token used for X search.</p></div><button type="button" aria-label="Close X API setup" onClick={closeXModal}><Icon name="x" /></button></div>
         <Field label="Bearer token" type="password" value={xConnector.apiKey} onChange={(apiKey) => setXConnector({ ...xConnector, apiKey })} placeholder={state.connectors?.x?.apiKeySaved ? "Saved. Paste a new token to replace it." : "Paste X bearer token"} />
-        <div className="modal-actions"><Button type="button" onClick={() => setXModal(false)}>Cancel</Button><Button icon="save" kind="primary">Save X API</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeXModal}>Cancel</Button><Button icon="save" kind="primary">Save X API</Button></div>
       </form>
     </div>}
-    {redditModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRedditModal(false); }}>
+    {redditModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeRedditModal(); }}>
       <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Reddit OAuth setup" onSubmit={saveRedditConnector}>
-        <div className="modal-head"><div><h2>Reddit OAuth API</h2><p>Use an official Reddit app token for subreddit sources instead of public RSS/JSON endpoints.</p></div><button type="button" aria-label="Close Reddit setup" onClick={() => setRedditModal(false)}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2>Reddit OAuth API</h2><p>Use an official Reddit app token for subreddit sources instead of public RSS/JSON endpoints.</p></div><button type="button" aria-label="Close Reddit setup" onClick={closeRedditModal}><Icon name="x" /></button></div>
         <div className={`notice ${redditConnected ? "" : "notice-warn"}`}>
           <strong>{redditConnected ? "Reddit OAuth ready" : "Reddit OAuth not configured"}</strong>
           <span>{state.connectors?.reddit?.lastError || redditMessage || "Create a Reddit app, then paste the client ID and optional client secret here."}</span>
@@ -4186,7 +4209,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <Field label="Client secret" type="password" value={redditConnector.clientSecret} onChange={(clientSecret) => setRedditConnector({ ...redditConnector, clientSecret })} placeholder={state.connectors?.reddit?.apiKeySaved ? "Saved if configured. Paste to replace it." : "Required for script/web app; blank for installed app"} />
         {redditConnector.grantType === "installed_client" && <Field label="Device ID" value={redditConnector.deviceId} onChange={(deviceId) => setRedditConnector({ ...redditConnector, deviceId })} placeholder="DO_NOT_TRACK_THIS_DEVICE" />}
         {redditMessage && <p className={redditMessage.includes("ready") || redditMessage.includes("saved") ? "ok-text" : "warn-text"}>{redditMessage}</p>}
-        <div className="modal-actions"><Button type="button" onClick={() => setRedditModal(false)}>Cancel</Button><Button type="button" icon="run" onClick={testRedditConnector}>Test</Button><Button icon="save" kind="primary">Save Reddit OAuth</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeRedditModal}>Cancel</Button><Button type="button" icon="run" onClick={testRedditConnector}>Test</Button><Button icon="save" kind="primary">Save Reddit OAuth</Button></div>
       </form>
     </div>}
     {linearModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeLinearModal(); }}>
