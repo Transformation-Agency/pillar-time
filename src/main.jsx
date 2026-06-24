@@ -1014,7 +1014,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     if (contextText.trim()) await saveContext({ preventDefault() {} });
     await runWorkflow();
   };
-  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Plan</Button>}>
+  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<div className="row tight-row"><Button icon="briefs" onClick={() => setRoute("briefs")} disabled={!latestArtifact}>View Brief</Button><Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Plan</Button></div>}>
     <ProposedCalendarTiles artifact={latestArtifact} approvals={state.approvals || []} mutate={mutate} />
     <div className="metric-grid">
       <Metric label="Today" value={time.todayKey || "-"} sub={time.preferences?.timezone || "local"} />
@@ -4113,7 +4113,11 @@ function App() {
       const result = await api("/api/workflow-runs", { method: "POST", body: JSON.stringify({ runType, trigger: trigger || (runType === "executive_day" ? "Manual · Generate executive day plan" : "Manual · Generate and deliver brief") }) });
       let run = result.run;
       let nextStatus = applyRunState(run);
+      const pollStartedAt = Date.now();
       while (run?.id && nextStatus === "running") {
+        if (Date.now() - pollStartedAt > 180000) {
+          throw new Error("Generation is taking too long. The app stopped waiting so the screen does not hang; refresh Today and start a new run if it did not finish.");
+        }
         await new Promise((resolve) => setTimeout(resolve, 300));
         const polled = await api(`/api/workflow-runs/${run.id}`);
         run = polled.run;

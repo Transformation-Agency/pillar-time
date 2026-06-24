@@ -4274,10 +4274,40 @@ function trustedContextState() {
 }
 
 function workflowRuns() {
+  expireStaleWorkflowRuns();
   return all("SELECT * FROM workflow_runs ORDER BY started_at DESC").map((r) => ({
     id: r.id, label: r.label, trigger: r.trigger, status: r.status, startedAt: r.started_at,
     completedAt: r.completed_at, runType: r.run_type || parse(r.artifact_json, {})?.runType || "intelligence", steps: parse(r.steps_json, []), artifact: hydrateArtifact(parse(r.artifact_json, {})), error: r.error,
   }));
+}
+
+function expireStaleWorkflowRuns(maxAgeMinutes = 20) {
+  const cutoffMs = Date.now() - maxAgeMinutes * 60 * 1000;
+  for (const row of all("SELECT * FROM workflow_runs WHERE status='running'")) {
+    const startedMs = Date.parse(row.started_at || "");
+    if (!Number.isFinite(startedMs) || startedMs >= cutoffMs) continue;
+    const artifact = parse(row.artifact_json, {});
+    const steps = parse(row.steps_json, []).map((step) => (
+      step.status === "active"
+        ? { ...step, status: "error", output: "Workflow expired after losing its completion signal.", detail: "Start a new run; any completed delivery may already have been sent." }
+        : step
+    ));
+    if (steps.length && !steps.some((step) => step.status === "error")) {
+      steps[steps.length - 1] = { ...steps[steps.length - 1], status: "error", output: "Workflow expired after losing its completion signal." };
+    }
+    const completed = now();
+    const error = "Workflow expired after running for more than 20 minutes. Start a new run if needed.";
+    run(`UPDATE workflow_runs
+         SET status='failed', completed_at=$completed, error=$error, steps_json=$steps, artifact_json=$artifact
+         WHERE id=$id AND status='running'`, {
+      $id: row.id,
+      $completed: completed,
+      $error: error,
+      $steps: json(steps),
+      $artifact: json({ ...artifact, expiredAt: completed, error }),
+    });
+    audit("run.expired", "workflow_run", row.id, error, { startedAt: row.started_at }, "system");
+  }
 }
 function approvals() {
   return all("SELECT * FROM approval_items ORDER BY created_at DESC").map((r) => ({
@@ -4422,7 +4452,7 @@ function executiveWorkflowTemplate() {
   return [
     ["context", "Load executive context", "retrieve"],
     ["calendar", "Retrieve calendar and commitments", "retrieve"],
-    ["normalize", "Normalize day signals", "analyze"],
+    ["normalize", "Refresh Linear and intelligence", "analyze"],
     ["risks", "Detect risks and prep gaps", "analyze"],
     ["rank", "Choose highest-leverage focus", "analyze"],
     ["render", "Render executive day plan", "generate"],
@@ -5638,6 +5668,164 @@ async function fetchCalendarContextForExecutive({ useRecentCache = true, onProgr
   };
 }
 
+function linearPriorityToExecutivePriority(priority = 0) {
+  const value = Number(priority || 0);
+  if (value === 1 || value === 2) return "high";
+  if (value === 4) return "low";
+  return "normal";
+}
+
+function linearIssueToExecutiveTask(issue = {}) {
+  const identifier = issue.identifier || issue.id || "Linear";
+  const projectName = issue.project?.name || "";
+  const stateName = issue.state?.name || issue.state?.type || "";
+  return {
+    id: issue.id || identifier,
+    title: `${identifier}: ${issue.title || "Untitled Linear issue"}`,
+    notes: [
+      issue.description ? stripHtml(issue.description).slice(0, 600) : "",
+      issue.url ? `Linear: ${issue.url}` : "",
+    ].filter(Boolean).join("\n\n"),
+    domain: "work",
+    project: projectName,
+    goal: projectName || issue.team?.name || "Linear execution",
+    owner: issue.assignee?.displayName || issue.assignee?.name || "",
+    status: issue.state?.type === "started" ? "in_progress" : "inbox",
+    dueAt: issue.dueDate || "",
+    estimateMinutes: issue.priority === 1 ? 60 : 45,
+    priority: linearPriorityToExecutivePriority(issue.priority),
+    leverageCategory: issue.dueDate ? "deadline" : issue.state?.type === "started" ? "unblock" : "deepWork",
+    waitingOn: /blocked|waiting/i.test(`${stateName} ${issue.title || ""}`) ? stateName || "Linear blocker" : "",
+    source: "linear",
+    sourceSystem: "linear",
+    externalRef: { provider: "linear", id: issue.id, identifier, url: issue.url || "" },
+    updatedAt: issue.updatedAt || "",
+  };
+}
+
+async function fetchLinearContextForExecutive({ onProgress } = {}) {
+  const connector = linearPublicConnector();
+  if (connector.status !== "ready") {
+    return {
+      status: connector.status,
+      enabled: connector.enabled,
+      issues: [],
+      issueTasks: [],
+      groups: [],
+      fetchedAt: now(),
+      warning: connector.lastError || "Linear is not ready.",
+    };
+  }
+  onProgress?.({ output: "Refreshing Linear issues", detail: "Loading assigned open work from Linear." });
+  try {
+    const client = linearClient();
+    const result = await promiseWithTimeout(client.issues({ teamKey: DEFAULT_LINEAR_TEAM_KEY, assignee: "me", first: 50, pages: 2 }), 30000, "Linear refresh timed out after 30 seconds");
+    const fetchedAt = now();
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: fetchedAt });
+    const issues = result.issues || [];
+    return {
+      status: "ready",
+      enabled: true,
+      teamKey: DEFAULT_LINEAR_TEAM_KEY,
+      viewer: result.viewer || null,
+      issues,
+      issueTasks: issues.map(linearIssueToExecutiveTask),
+      groups: groupIssuesByProject(issues),
+      fetchedAt,
+    };
+  } catch (error) {
+    const fetchedAt = now();
+    run("UPDATE connector_credentials SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: fetchedAt, $err: error.message || "Linear refresh failed" });
+    audit("linear.fetch_failed", "connector", LINEAR_PROVIDER, error.message || "Linear refresh failed", {}, "system");
+    return {
+      status: "failed",
+      enabled: true,
+      issues: [],
+      issueTasks: [],
+      groups: [],
+      fetchedAt,
+      error: error.message || "Linear refresh failed",
+    };
+  }
+}
+
+async function fetchIntelligenceContextForExecutive({ onProgress } = {}) {
+  try {
+    onProgress?.({ output: "Refreshing configured intelligence sources", detail: "RSS, web, Reddit, X, podcast, and calendar sources are checked as configured." });
+    const collection = await fetchSourceCollection({
+      useRecentCache: true,
+      onProgress: ({ output, detail }) => onProgress?.({ output, detail }),
+    });
+    const rigorousInputs = await buildRigorousBriefInputs({
+      activeSources: collection.activeSources,
+      sourceResults: collection.sourceResults,
+      itemCount: collection.itemCount,
+    });
+    let strategicBrief = {
+      mode: "deterministic-intelligence-summary",
+      headline: rigorousInputs.selectedIssueClusters?.length
+        ? `${rigorousInputs.selectedIssueClusters.length} intelligence cluster${rigorousInputs.selectedIssueClusters.length === 1 ? "" : "s"} selected`
+        : "No intelligence clusters selected",
+      sectionResponses: {},
+      whyJackShouldCare: [],
+      futureImplications: [],
+      doctrineProjectImpact: [],
+      councilSynthesis: "",
+      jackPov: "",
+    };
+    if (modelSettings().status === "ready" && rigorousInputs.selectedIssues?.length) {
+      strategicBrief = await promiseWithTimeout(synthesizeStrategicBrief({
+        selectedIssues: rigorousInputs.selectedIssues,
+        sourceResults: collection.sourceResults,
+        selectedIssueClusters: rigorousInputs.selectedIssueClusters,
+        evidencePackets: rigorousInputs.evidencePackets,
+        candidateScan: rigorousInputs.candidateScan,
+        coverageDiagnostics: rigorousInputs.coverageDiagnostics,
+        calendarAgenda: rigorousInputs.calendarAgenda,
+        trustedContextEnvelope: createTrustedContextEnvelope({
+          mode: "internal_administrative_action",
+          task: "combined executive day and intelligence brief",
+          requestedActionType: "analysis",
+          requestedHorizon: "today",
+        }, { persist: true }),
+      }), 90000, "Intelligence synthesis timed out after 90 seconds");
+    }
+    return {
+      ok: true,
+      fetchedAt: now(),
+      ...collection,
+      ...rigorousInputs,
+      strategicBrief,
+    };
+  } catch (error) {
+    audit("intelligence.fetch_failed", "workflow_run", "executive_day", error.message || "Intelligence refresh failed", {}, "system");
+    return {
+      ok: false,
+      fetchedAt: now(),
+      error: error.message || "Intelligence refresh failed",
+      activeSources: [],
+      sourceResults: [],
+      itemCount: 0,
+      selectedIssues: [],
+      selectedIssueClusters: [],
+      evidencePackets: [],
+      candidateScan: { totalCandidates: 0, scannedAt: now(), mode: "executive_day_intelligence_failed" },
+      coverageDiagnostics: { warnings: [error.message || "Intelligence refresh failed"] },
+      coverageNotes: [error.message || "Intelligence refresh failed"],
+      strategicBrief: {
+        mode: "failed-intelligence-refresh",
+        headline: "Intelligence refresh failed",
+        sectionResponses: {},
+        whyJackShouldCare: [],
+        futureImplications: [],
+        doctrineProjectImpact: [],
+        councilSynthesis: "",
+        jackPov: "",
+      },
+    };
+  }
+}
+
 function formatAgendaLine(event = {}) {
   const when = event.time || [event.start, event.end].filter(Boolean).join(" to ") || "Today";
   const title = event.title || event.summary || "Calendar event";
@@ -5779,7 +5967,7 @@ async function runLlmCalendarJudgmentPasses(artifact = {}) {
   };
 }
 
-function renderExecutiveDayBrief({ dateKey, timezone, calendarAgenda = [], todaysThree = [], rankedDayCandidates = [], proposedCalendarBlocks = [], risks = [], connectorDiagnostics = {}, coverageNotes = [], oneQuestionYouAreAvoiding = "" } = {}) {
+function renderExecutiveDayBrief({ dateKey, timezone, calendarAgenda = [], todaysThree = [], rankedDayCandidates = [], proposedCalendarBlocks = [], risks = [], connectorDiagnostics = {}, coverageNotes = [], oneQuestionYouAreAvoiding = "", selectedIssues = [] } = {}) {
   const agendaLines = calendarAgenda.length
     ? calendarAgenda.slice(0, 12).map((event) => `- ${formatAgendaLine(event)}`)
     : ["- No calendar agenda loaded for today."];
@@ -5792,6 +5980,9 @@ function renderExecutiveDayBrief({ dateKey, timezone, calendarAgenda = [], today
   const riskLines = risks.length
     ? risks.slice(0, 8).map((risk) => `- ${risk.title}: ${risk.detail}`)
     : ["- No deterministic risks detected from the local context available."];
+  const intelligenceLines = selectedIssues.length
+    ? selectedIssues.slice(0, 8).map((issue) => `- ${issue.title}${issue.sourceName ? ` (${issue.sourceName})` : ""}`)
+    : ["- No intelligence issues were selected in this combined run."];
   const calendarPlanLines = proposedCalendarBlocks.length
     ? proposedCalendarBlocks.slice(0, 10).map((block) => `- ${new Date(block.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}-${new Date(block.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${block.title} (${block.category})`)
     : ["- No new calendar blocks proposed. Capture commitments or connect Linear/Calendar to make schedule planning sharper."];
@@ -5818,6 +6009,9 @@ function renderExecutiveDayBrief({ dateKey, timezone, calendarAgenda = [], today
     "## Highest Leverage Today",
     ...leverageLines,
     "",
+    "## Intelligence Brief",
+    ...intelligenceLines,
+    "",
     "## Proposed Calendar",
     ...calendarPlanLines,
     "",
@@ -5835,12 +6029,14 @@ function renderExecutiveDayBrief({ dateKey, timezone, calendarAgenda = [], today
   ].join("\n");
 }
 
-function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], calendarResults = [] } = {}) {
+function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], calendarResults = [], linearContext = {}, intelligenceContext = {} } = {}) {
   const config = briefConfig();
   const prefs = timePreferences();
   const dateKey = localDateKey(new Date(generatedAt), prefs.timezone);
   const commitments = dailyCommitments(dateKey);
-  const tasks = timeTasks();
+  const localTasks = timeTasks();
+  const linearTasks = Array.isArray(linearContext.issueTasks) ? linearContext.issueTasks : [];
+  const tasks = [...localTasks, ...linearTasks];
   const feedback = all("SELECT feedback_key AS key, feedback FROM suggestion_feedback");
   const calendarClassifications = classifyCalendarEvents(calendarAgenda, { primaryCalendarIds: defaultPrimaryCalendarIds });
   const rankedDayCandidates = rankExecutiveCandidates({ tasks, commitments, calendarClassifications, feedback }).slice(0, 18);
@@ -5880,8 +6076,10 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
       failures: calendarResults.filter((result) => result.ok === false).map((result) => result.error).filter(Boolean).slice(0, 3),
     },
     linear: {
-      status: connectors.linear?.status || "missing",
+      status: linearContext.status || connectors.linear?.status || "missing",
       enabled: connectors.linear?.enabled !== false,
+      issues: Array.isArray(linearContext.issues) ? linearContext.issues.length : 0,
+      error: linearContext.error || "",
     },
     model: {
       status: model.status,
@@ -5899,6 +6097,9 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
   if (calendarClassifications.some((item) => item.isAllDay && !item.blocksTime)) classificationWarnings.push("All-day events were treated as context unless they clearly looked like travel or a hard commitment.");
   if (connectorDiagnostics.calendar.failures?.length) coverageNotes.push(`Calendar fetch degraded: ${connectorDiagnostics.calendar.failures[0]}`);
   if (connectorDiagnostics.linear.status !== "ready") coverageNotes.push("Linear was not ready, so Linear issues were not included in deterministic ranking.");
+  else coverageNotes.push(`Linear refreshed: ${connectorDiagnostics.linear.issues || 0} assigned/open issue${connectorDiagnostics.linear.issues === 1 ? "" : "s"} considered for time allocation.`);
+  if (intelligenceContext.ok === false) coverageNotes.push(`Intelligence refresh degraded: ${intelligenceContext.error}`);
+  else if (Array.isArray(intelligenceContext.selectedIssueClusters)) coverageNotes.push(`Intelligence refreshed: ${intelligenceContext.selectedIssueClusters.length} issue cluster${intelligenceContext.selectedIssueClusters.length === 1 ? "" : "s"} selected in the same run.`);
   if (connectorDiagnostics.model.status !== "ready") coverageNotes.push("Model connector was not ready; deterministic fallback rendered the plan.");
   const risks = buildExecutiveRisks({ commitments, tasks, calendarAgenda, connectorDiagnostics, prefs });
   const watchouts = [
@@ -5906,7 +6107,10 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
     ...risks.slice(0, 5),
   ];
   const oneQuestionYouAreAvoiding = "What are you calling strategy that is actually avoidance of a concrete next step?";
-  const selectedIssues = (todaysThree.length ? todaysThree : rankedDayCandidates.slice(0, 3)).map(executiveIssueFromCandidate);
+  const executiveSelectedIssues = (todaysThree.length ? todaysThree : rankedDayCandidates.slice(0, 3)).map(executiveIssueFromCandidate);
+  const selectedIssues = Array.isArray(intelligenceContext.selectedIssues) && intelligenceContext.selectedIssues.length
+    ? intelligenceContext.selectedIssues
+    : executiveSelectedIssues;
   const artifact = {
     runType: "executive_day",
     title: `Executive day plan: ${dateKey}`,
@@ -5922,9 +6126,17 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
     },
     classificationWarnings,
     calendarFetches: calendarResults,
-    linearContext: { status: connectorDiagnostics.linear.status },
+    linearContext: {
+      status: connectorDiagnostics.linear.status,
+      fetchedAt: linearContext.fetchedAt || "",
+      viewer: linearContext.viewer || null,
+      issues: (linearContext.issues || []).slice(0, 50),
+      groups: linearContext.groups || [],
+      error: linearContext.error || "",
+    },
     commitments,
-    tasks: tasks.slice(0, 20),
+    tasks: localTasks.slice(0, 20),
+    linearTasks: linearTasks.slice(0, 50),
     reminders: reminders().filter((reminder) => reminder.enabled).slice(0, 12),
     reviews: reviewTemplates().filter((review) => review.enabled),
     importantDates: importantDates().filter((item) => item.enabled !== false).slice(0, 12),
@@ -5940,10 +6152,19 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
     connectorDiagnostics,
     coverageNotes,
     selectedIssues,
-    selectedIssueClusters: [],
-    evidencePackets: [],
-    candidateScan: { totalCandidates: rankedDayCandidates.length, scannedAt: generatedAt, mode: "executive_day" },
-    strategicBrief: {
+    executiveSelectedIssues,
+    intelligenceContext: {
+      ok: intelligenceContext.ok !== false,
+      fetchedAt: intelligenceContext.fetchedAt || "",
+      activeSourceCount: intelligenceContext.activeSources?.length || 0,
+      itemCount: intelligenceContext.itemCount || 0,
+      error: intelligenceContext.error || "",
+    },
+    selectedIssueClusters: intelligenceContext.selectedIssueClusters || [],
+    evidencePackets: intelligenceContext.evidencePackets || [],
+    candidateScan: intelligenceContext.candidateScan || { totalCandidates: rankedDayCandidates.length, scannedAt: generatedAt, mode: "executive_day" },
+    coverageDiagnostics: intelligenceContext.coverageDiagnostics || {},
+    strategicBrief: intelligenceContext.strategicBrief || {
       mode: "deterministic-executive-day",
       executiveRead: "Deterministic executive-day plan generated from local context.",
       topIssues: selectedIssues,
@@ -5967,6 +6188,7 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
     connectorDiagnostics,
     coverageNotes,
     oneQuestionYouAreAvoiding,
+    selectedIssues,
   });
   return artifact;
 }
@@ -6014,12 +6236,27 @@ async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
     finishProgress("calendar", `${calendarAgenda.length} calendar event${calendarAgenda.length === 1 ? "" : "s"} loaded`, calendarResults.length ? "Calendar adapter completed." : "No active Calendar source configured.");
 
     writeProgress("normalize");
-    await progressDelay();
-    finishProgress("normalize", "Executive records normalized", "Calendar, commitments, tasks, reminders, reviews, and connector status prepared.");
+    const linearContext = await fetchLinearContextForExecutive({
+      onProgress: ({ output, detail }) => {
+        stepOutputs.normalize = { output, detail };
+        writeProgress("normalize");
+      },
+    });
+    const intelligenceContext = await fetchIntelligenceContextForExecutive({
+      onProgress: ({ output, detail }) => {
+        stepOutputs.normalize = { output, detail };
+        writeProgress("normalize");
+      },
+    });
+    finishProgress(
+      "normalize",
+      `Executive records normalized · Linear ${linearContext.issues?.length || 0} issue${linearContext.issues?.length === 1 ? "" : "s"} · Intelligence ${intelligenceContext.selectedIssueClusters?.length || 0} cluster${intelligenceContext.selectedIssueClusters?.length === 1 ? "" : "s"}`,
+      "Calendar, Linear, commitments, tasks, reminders, reviews, and configured intelligence sources prepared."
+    );
 
     writeProgress("risks");
     await progressDelay();
-    const artifact = buildExecutiveDayArtifact({ generatedAt: now(), calendarAgenda, calendarResults });
+    const artifact = buildExecutiveDayArtifact({ generatedAt: now(), calendarAgenda, calendarResults, linearContext, intelligenceContext });
     artifact.approvalItems = createCalendarApprovalForArtifact(runId, artifact);
     if (artifact.connectorDiagnostics.model.status === "ready") {
       try {

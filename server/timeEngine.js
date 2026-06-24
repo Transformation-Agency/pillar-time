@@ -171,24 +171,26 @@ export function rankExecutiveCandidates({ tasks = [], commitments = [], calendar
     });
   }
   for (const task of tasks || []) {
+    const isLinear = task.source === "linear" || task.sourceSystem === "linear";
     candidates.push({
-      id: `task:${task.id}`,
+      id: `${isLinear ? "linear" : "task"}:${task.id}`,
       taskId: task.id,
       title: task.title,
       notes: task.notes,
       leverageCategory: task.leverageCategory || "admin",
       priority: task.priority || "normal",
-      source: "task",
+      source: isLinear ? "linear" : "task",
+      sourceSystem: task.sourceSystem || task.source || "local",
       dueAt: task.dueAt,
       estimateMinutes: task.estimateMinutes || 30,
       status: task.status,
       waitingOn: task.waitingOn,
       feedbackKey: task.id,
-      authorityBasis: "Local task; user may accept, defer, or archive.",
+      authorityBasis: isLinear ? "Fresh Linear issue assigned to the user; changes still require explicit approval." : "Local task; user may accept, defer, or archive.",
       objectiveServed: task.goal || task.project || reasonForCategory(task.leverageCategory || "admin"),
       constraintRelieved: task.waitingOn ? `Waiting on ${task.waitingOn}; moving this may unblock someone.` : task.dependencies || "Moves captured work toward done.",
       exactNextStep: task.notes || `Spend ${task.estimateMinutes || 30} minutes moving: ${task.title}.`,
-      whyThis: task.waitingOn ? "This may unblock another person or decision." : reasonForCategory(task.leverageCategory || "admin"),
+      whyThis: task.waitingOn ? "This may unblock another person or decision." : isLinear ? "This is live assigned project work that can be protected on the calendar." : reasonForCategory(task.leverageCategory || "admin"),
       tradeoff: "Choosing this means not using the next block for calendar prep or reactive work.",
       confidence: task.priority === "high" ? 0.82 : 0.68,
     });
