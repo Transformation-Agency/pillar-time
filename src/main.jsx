@@ -1567,7 +1567,7 @@ function Sources({ state, mutate }) {
       <div className="source-tip"><Icon name="settings" /><strong>Tip:</strong><span>Sources are checked on your schedule. Adjust cadence and recency in brief settings.</span><Button icon="briefSetup" onClick={() => { location.hash = "briefSetup"; }}>Brief settings</Button></div>
     </div>
     {adding && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) resetSourceForm(); }}>
-      <form className="modal-card source-modal form" onSubmit={submit}>
+      <form className="modal-card source-modal form" role="dialog" aria-modal="true" aria-label={editingSource ? "Edit source" : "Add source"} onSubmit={submit}>
         <div className="modal-head"><div><h2>{editingSource ? "Edit source" : "Add source"}</h2><p>{editingSource ? "Update the source details your brief should monitor." : "Select a source type, then add the locator your brief should monitor."}</p></div><button type="button" aria-label="Close source editor" onClick={resetSourceForm}><Icon name="x" /></button></div>
         <div className="source-type-label">Source type</div>
         <div className="source-type-grid">
@@ -1957,7 +1957,7 @@ function BriefSetup({ state, mutate }) {
       </section>
     </div>
     {previewOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false); }}>
-      <div className="modal-card live-preview-modal">
+      <div className="modal-card live-preview-modal" role="dialog" aria-modal="true" aria-label="Live preview">
         <div className="modal-head"><div><h2>Live preview</h2><p>This is how your brief will flow.</p></div><button type="button" aria-label="Close live preview" onClick={() => setPreviewOpen(false)}><Icon name="x" /></button></div>
         <div className="preview-card">{enabledSections.slice(0, 8).map((section, index) => <div className="preview-section" key={section.key}>
           <b>{index + 1}</b><div><strong>{section.label}</strong><p>{section.instruction || "Section guidance appears here."}</p><small>Standard brief section</small><span /><span /></div>
@@ -4053,7 +4053,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       </section>
     </div>
     {connectorModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setConnectorModal(false); }}>
-      <div className="modal-card connector-modal">
+      <div className="modal-card connector-modal" role="dialog" aria-modal="true" aria-label="Add connector">
         <div className="modal-head"><div><h2>Add connector</h2><p>Choose the connector you want to configure.</p></div><button type="button" aria-label="Close connector picker" onClick={() => setConnectorModal(false)}><Icon name="x" /></button></div>
         <div className="connector-picker-grid">
           <button type="button" onClick={() => openProvider("openai")}><BrandLogo name="openai" /><strong>OpenAI</strong><span>Add or switch to OpenAI models.</span></button>
@@ -4072,7 +4072,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       </div>
     </div>}
     {editingProvider && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingProvider(""); }}>
-      <form className="modal-card connector-modal form" onSubmit={saveModel}>
+      <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Model provider setup" onSubmit={saveModel}>
         <div className="modal-head"><div><h2>{providerRows.find((row) => row.provider === editingProvider)?.name || "Model provider"}</h2><p>Paste a provider key, choose a model, and save it as the active model provider.</p></div><button type="button" aria-label="Close model provider setup" onClick={() => setEditingProvider("")}><Icon name="x" /></button></div>
         <Field label="API key" type="password" value={model.apiKey} onChange={(apiKey) => setModel({ ...model, apiKey })} placeholder={(state.model.providerCredentials?.[editingProvider]?.apiKeySaved || (state.model.provider === editingProvider && state.model.apiKeySaved)) ? "Saved. Paste a new key to replace it." : "Paste provider API key"} />
         {visibleModelOptions.length ? <Select label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} options={visibleModelOptions.includes(model.model) || !model.model ? visibleModelOptions : [model.model, ...visibleModelOptions]} /> : <Field label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} placeholder={detecting ? "Detecting models..." : "Enter a model or paste key for auto-detect"} />}
@@ -4081,7 +4081,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       </form>
     </div>}
     {telegramModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTelegramModal(false); }}>
-      <form className="modal-card connector-modal form" onSubmit={saveTelegram}>
+      <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Telegram delivery setup" onSubmit={saveTelegram}>
         <div className="modal-head"><div><h2>Telegram delivery</h2><p>Configure bot delivery and command access.</p></div><button type="button" aria-label="Close Telegram setup" onClick={() => setTelegramModal(false)}><Icon name="x" /></button></div>
         <Field label="Bot token" type="password" value={telegramForm.botToken} onChange={(botToken) => setTelegramForm({ ...telegramForm, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} />
         <Field label="Chat ID" value={telegramForm.chatId} onChange={(chatId) => setTelegramForm({ ...telegramForm, chatId })} placeholder="-1001234567890 or 123456789" />
@@ -4090,14 +4090,14 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       </form>
     </div>}
     {xModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setXModal(false); }}>
-      <form className="modal-card connector-modal form" onSubmit={saveXConnector}>
+      <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="X search API setup" onSubmit={saveXConnector}>
         <div className="modal-head"><div><h2>X search API</h2><p>Add or replace the official bearer token used for X search.</p></div><button type="button" aria-label="Close X API setup" onClick={() => setXModal(false)}><Icon name="x" /></button></div>
         <Field label="Bearer token" type="password" value={xConnector.apiKey} onChange={(apiKey) => setXConnector({ ...xConnector, apiKey })} placeholder={state.connectors?.x?.apiKeySaved ? "Saved. Paste a new token to replace it." : "Paste X bearer token"} />
         <div className="modal-actions"><Button type="button" onClick={() => setXModal(false)}>Cancel</Button><Button icon="save" kind="primary">Save X API</Button></div>
       </form>
     </div>}
     {redditModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRedditModal(false); }}>
-      <form className="modal-card connector-modal form" onSubmit={saveRedditConnector}>
+      <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Reddit OAuth setup" onSubmit={saveRedditConnector}>
         <div className="modal-head"><div><h2>Reddit OAuth API</h2><p>Use an official Reddit app token for subreddit sources instead of public RSS/JSON endpoints.</p></div><button type="button" aria-label="Close Reddit setup" onClick={() => setRedditModal(false)}><Icon name="x" /></button></div>
         <div className={`notice ${redditConnected ? "" : "notice-warn"}`}>
           <strong>{redditConnected ? "Reddit OAuth ready" : "Reddit OAuth not configured"}</strong>
@@ -4112,7 +4112,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       </form>
     </div>}
     {linearModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLinearModal(false); }}>
-      <div className="modal-card connector-modal form">
+      <div className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Linear setup">
         <div className="modal-head"><div><h2>Linear</h2><p>Paste a personal API key to read and update Linear issues.</p></div><button type="button" aria-label="Close Linear setup" onClick={() => setLinearModal(false)}><Icon name="x" /></button></div>
         <div className={`notice ${linearConnected ? "" : "notice-warn"}`}>
           <strong>{linearConnected ? "Linear ready" : state.connectors?.linear?.credentialStatus === "missing" ? "Linear API key needed" : "Linear disabled"}</strong>
@@ -4132,7 +4132,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       </div>
     </div>}
     {googleCalendarModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeGoogleCalendarModal(); }}>
-      <form className="modal-card connector-modal form" onSubmit={startGoogleCalendarOAuth}>
+      <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Google Calendar setup" onSubmit={startGoogleCalendarOAuth}>
         <div className="modal-head"><div><h2>Google Calendar</h2><p>Connect calendar access so Pillar Time can read today's agenda and create approved schedule blocks.</p></div><button type="button" aria-label="Close Google Calendar setup" onClick={closeGoogleCalendarModal}><Icon name="x" /></button></div>
         <div className="notice">
           <strong>Calendar permissions</strong>
