@@ -36,6 +36,26 @@ test("Today generation defaults to executive day planning instead of intelligenc
   assert.match(mainSource, /runWorkflow\(\{ runType: "intelligence" \}\)/);
 });
 
+test("Executive day runs and Today view stay separated from intelligence artifacts", () => {
+  assert.match(serverSource, /run_type TEXT NOT NULL DEFAULT 'intelligence'/);
+  assert.match(serverSource, /run_type='executive_day'/);
+  assert.match(serverSource, /latestCompletedExecutiveArtifact/);
+  assert.doesNotMatch(serverSource, /WHERE s\.type='Calendar' AND ni\.published_at/);
+  assert.match(mainSource, /latestExecutiveArtifact/);
+  assert.match(mainSource, /runType === "executive_day" \? "today" : "briefs"/);
+});
+
+test("Executive calendar proposals are approval-gated and surfaced in Today", () => {
+  assert.match(serverSource, /calendar\.proposed_schedule/);
+  assert.match(serverSource, /app\.post\("\/api\/approvals\/:id\/execute"/);
+  assert.match(serverSource, /Reconnect Google Calendar to allow approved schedule writes/);
+  assert.match(mainSource, /ProposedCalendarTiles/);
+  assert.match(mainSource, /Approve Calendar/);
+  assert.match(mainSource, /Add Context & Regenerate/);
+  assert.match(mainSource, /identity\.self_statement/);
+  assert.match(mainSource, /profile\.standing_commitment/);
+});
+
 test("Linear connector cannot be falsely enabled without credentials", () => {
   assert.match(serverSource, /res\.status\(400\)\.json\(\{ error: message, state: state\(\) \}\)/);
   assert.match(serverSource, /Paste a Linear personal API key, or configure LINEAR_API_KEY before enabling Linear\./);

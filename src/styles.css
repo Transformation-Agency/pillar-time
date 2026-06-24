@@ -833,6 +833,77 @@ td {
   color: var(--muted);
   margin-top: 4px;
 }
+.suggestion-explain {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: .9rem;
+}
+.suggestion-explain span {
+  display: grid;
+  gap: 2px;
+}
+.suggestion-explain b {
+  color: var(--ink);
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.proposed-calendar-panel {
+  margin-bottom: 18px;
+}
+.proposed-calendar-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.calendar-tile-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+.calendar-tile {
+  min-height: 104px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.66);
+  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+.calendar-tile strong,
+.calendar-tile span,
+.calendar-tile small {
+  overflow-wrap: anywhere;
+}
+.calendar-tile span {
+  font-weight: 750;
+}
+.calendar-tile small,
+.context-warning {
+  color: var(--muted);
+}
+.context-warning {
+  margin-top: 12px;
+  font-size: .9rem;
+}
+.file-context-input {
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  width: fit-content;
+}
+.file-context-input input {
+  display: none;
+}
 .quick-capture {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

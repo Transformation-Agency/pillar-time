@@ -122,7 +122,7 @@ const sourceDefinitions = {
     },
   },
   Calendar: {
-    credential: "Requires Google Calendar OAuth. Pillar Time uses read-only access to include today's agenda in your brief.",
+    credential: "Requires Google Calendar OAuth. Pillar Time reads today's agenda and can create approved schedule blocks after you reconnect with calendar write scope.",
     modes: {
       google: { label: "Selected Google calendars", fields: [] },
     },
@@ -607,7 +607,7 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
         <PillarBriefLockup alt={state?.briefConfig?.productName || "Pillar Time"} />
       </button>
       <nav className="nav">
-        {nav.flatMap(([, items]) => items).map(([id, label]) => <button key={id} className={`nav-item ${route === id ? "active" : ""}`} onClick={() => setRoute(id)}>
+        {nav.flatMap(([, items]) => items).map(([id, label]) => <button key={id} className={`nav-item ${route === id ? "active" : ""}`} title={label} aria-label={label} onClick={() => setRoute(id)}>
             <Icon name={id} /><span>{label}</span>{counts[id] !== undefined && <b>{counts[id]}</b>}
           </button>)}
       </nav>
@@ -799,7 +799,7 @@ function Overview({ state, setRoute, runWorkflow, mutate }) {
     <section className="hero">
       <div className="hero-copy">
         <h1>{ownerGreeting}</h1>
-        <p>Connect sources that matter to you and get a brief everyday to stay up to date.</p>
+        <p>Plan the day from commitments, calendar context, reminders, and optional intelligence sources.</p>
         {latestBrief && <div className="hero-actions">
           <Button icon="briefs" kind="primary" onClick={() => setRoute("briefs")}>{latestBriefIsToday ? "View today's brief" : "View latest brief"}</Button>
         </div>}
@@ -842,7 +842,7 @@ function Overview({ state, setRoute, runWorkflow, mutate }) {
         <ChevronDown className="how-arrow" />
         <div><b>2</b><strong>Digest signals</strong><span>Analyzers distill what matters.</span></div>
         <ChevronDown className="how-arrow" />
-        <div><b>3</b><strong>Receive your brief</strong><span>{state.briefConfig.deliveryFrequency === "Weekly" ? `${state.briefConfig.deliveryDay || "Monday"}s` : "Daily"} at {formatDeliveryTime(state.briefConfig.deliveryTime)} via Telegram.</span></div>
+        <div><b>3</b><strong>Receive your plan</strong><span>{state.briefConfig.deliveryFrequency === "Weekly" ? `${state.briefConfig.deliveryDay || "Monday"}s` : "Daily"} at {formatDeliveryTime(state.briefConfig.deliveryTime)} via Telegram.</span></div>
       </div>
     </section>
   </div>;
@@ -864,9 +864,14 @@ function ListRow({ title, sub, right }) {
   return <div className="list-row"><div><strong>{title}</strong><small>{sub}</small></div>{right}</div>;
 }
 
+function latestExecutiveArtifact(state) {
+  const completed = state.workflowRuns?.find((run) => run.status === "completed" && (run.runType === "executive_day" || run.artifact?.runType === "executive_day") && run.artifact);
+  return completed?.artifact || null;
+}
+
 function latestCalendarAgenda(state) {
-  const completed = state.workflowRuns?.find((run) => run.status === "completed" && run.artifact);
-  return completed?.artifact?.calendarAgenda || completed?.artifact?.calendarFetches?.flatMap((fetch) => fetch.events || []) || [];
+  const completed = latestExecutiveArtifact(state);
+  return completed?.calendarAgenda || completed?.calendarFetches?.flatMap((fetch) => fetch.events || []) || [];
 }
 
 function todayTime(state) {
@@ -889,9 +894,14 @@ function TimeSuggestionCard({ suggestion, mutate }) {
   const feedback = (value) => mutate(`/api/time/suggestions/${encodeURIComponent(suggestion.feedbackKey || suggestion.id || suggestion.title)}/feedback`, { feedback: value });
   return <div className="time-card">
     <div className="time-card-head">
-      <div><strong>{suggestion.title}</strong><small>{suggestion.reason || "High-leverage candidate for today."}</small></div>
+      <div><strong>{suggestion.title}</strong><small>{suggestion.whyThis || suggestion.reason || "High-leverage candidate for today."}</small></div>
       <Badge tone="ok">{Math.round(suggestion.score || 0)}</Badge>
     </div>
+    {(suggestion.constraintRelieved || suggestion.tradeoff || suggestion.exactNextStep) && <div className="suggestion-explain">
+      {suggestion.constraintRelieved && <span><b>Relieves</b>{suggestion.constraintRelieved}</span>}
+      {suggestion.tradeoff && <span><b>Displaces</b>{suggestion.tradeoff}</span>}
+      {suggestion.exactNextStep && <span><b>Next</b>{suggestion.exactNextStep}</span>}
+    </div>}
     <div className="chips"><span>{suggestion.leverageCategory || "admin"}</span><span>{suggestion.source || "manual"}</span>{suggestion.estimateMinutes && <span>{suggestion.estimateMinutes} min</span>}</div>
     <div className="row tight-row">
       <Button icon="check" kind="primary" onClick={accept}>Accept</Button>
@@ -901,9 +911,51 @@ function TimeSuggestionCard({ suggestion, mutate }) {
   </div>;
 }
 
+function ProposedCalendarTiles({ artifact, approvals = [], mutate }) {
+  const blocks = artifact?.proposedCalendarBlocks || [];
+  const pendingApproval = approvals.find((approval) => approval.kind === "calendar.proposed_schedule" && approval.status === "pending" && (!artifact?.generatedAt || approval.payload?.runId === artifact?.runId || approval.runId === artifact?.runId));
+  const fallbackApproval = approvals.find((approval) => approval.kind === "calendar.proposed_schedule" && approval.status === "pending");
+  const approval = pendingApproval || fallbackApproval;
+  const [message, setMessage] = React.useState("");
+  const approve = async () => {
+    if (!approval) {
+      setMessage("No pending calendar approval found.");
+      return;
+    }
+    setMessage("");
+    try {
+      await mutate(`/api/approvals/${approval.id}`, { status: "approved" }, "PATCH");
+      await mutate(`/api/approvals/${approval.id}/execute`, {}, "POST");
+      setMessage("Calendar approved.");
+    } catch (error) {
+      setMessage(error.message || "Calendar approval failed.");
+    }
+  };
+  if (!blocks.length) return null;
+  return <section className="panel proposed-calendar-panel">
+    <div className="proposed-calendar-head">
+      <PanelTitle icon="calendar" title="Proposed Calendar" sub="Approval-gated blocks built around hard calendar commitments." />
+      <Button icon="check" kind="primary" onClick={approve} disabled={!approval}>Approve Calendar</Button>
+    </div>
+    <div className="calendar-tile-row">
+      {blocks.map((block) => <div className="calendar-tile" key={block.id || `${block.start}-${block.title}`}>
+        <strong>{new Date(block.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong>
+        <span>{block.title}</span>
+        <small>{block.category} · {block.minutes} min</small>
+      </div>)}
+    </div>
+    {(artifact?.classificationWarnings || []).length > 0 && <div className="context-warning">{artifact.classificationWarnings.join(" ")}</div>}
+    {message && <p className={message.includes("approved") ? "ok-text" : "warn-text"}>{message}</p>}
+  </section>;
+}
+
 function Today({ state, mutate, runWorkflow, setRoute }) {
   const time = todayTime(state);
   const [capture, setCapture] = React.useState("");
+  const [contextType, setContextType] = React.useState("todo");
+  const [contextText, setContextText] = React.useState("");
+  const [contextMessage, setContextMessage] = React.useState("");
+  const latestArtifact = latestExecutiveArtifact(state);
   const agenda = latestCalendarAgenda(state).slice(0, 8);
   const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
   const suggestions = (time.suggestions || []).slice(0, 6);
@@ -912,7 +964,58 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     if (!capture.trim()) return;
     mutate("/api/time/tasks", { title: capture.trim(), source: "quick-capture" }).then(() => setCapture(""));
   };
+  const importContextFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    setContextText((current) => [current, text].filter(Boolean).join("\n\n").trim());
+    event.target.value = "";
+  };
+  const saveContext = async (event) => {
+    event.preventDefault();
+    const value = contextText.trim();
+    if (!value) return;
+    setContextMessage("");
+    try {
+      if (contextType === "identity") {
+        await mutate("/api/trusted-context/facts", {
+          resourceType: "identity.self_statement",
+          fieldKey: "selfStatement",
+          value,
+          partition: "professional",
+          visibility: "assistant",
+          trustLevel: "verified_canonical_profile",
+          verificationStatus: "verified",
+          sourceLabel: "Today context intake",
+          confidence: 0.95,
+        }, "POST");
+      } else if (contextType === "standing") {
+        await mutate("/api/trusted-context/facts", {
+          resourceType: "profile.standing_commitment",
+          fieldKey: `standingCommitment.${Date.now()}`,
+          value,
+          partition: "professional",
+          visibility: "assistant",
+          trustLevel: "confirmed_historical_decision",
+          verificationStatus: "user_confirmed",
+          sourceLabel: "Today context intake",
+          confidence: 0.9,
+        }, "POST");
+      } else {
+        await mutate("/api/time/tasks", { title: value.split(/\n/)[0].slice(0, 180), notes: value, source: "context-intake", leverageCategory: "deepWork", priority: "normal" }, "POST");
+      }
+      setContextText("");
+      setContextMessage("Saved context.");
+    } catch (error) {
+      setContextMessage(error.message || "Could not save context.");
+    }
+  };
+  const regenerateWithContext = async () => {
+    if (contextText.trim()) await saveContext({ preventDefault() {} });
+    await runWorkflow();
+  };
   return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Plan</Button>}>
+    <ProposedCalendarTiles artifact={latestArtifact} approvals={state.approvals || []} mutate={mutate} />
     <div className="metric-grid">
       <Metric label="Today" value={time.todayKey || "-"} sub={time.preferences?.timezone || "local"} />
       <Metric label="Today’s Three" value={activeCommitments.filter((item) => item.status === "active").length} sub="accepted commitments" />
@@ -922,7 +1025,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     <div className="time-layout">
       <section className="panel">
         <PanelTitle icon="today" title="Highest Leverage Today" sub="These are offerings, not orders. Change them until they fit the day." />
-        <div className="time-card-list">{suggestions.length ? suggestions.map((suggestion) => <TimeSuggestionCard key={suggestion.id || suggestion.feedbackKey || suggestion.title} suggestion={suggestion} mutate={mutate} />) : <Empty icon="planner" title="No ranked suggestions yet" body="Capture a task or connect calendar and intelligence sources." />}</div>
+        <div className="time-card-list">{suggestions.length ? suggestions.map((suggestion) => <TimeSuggestionCard key={suggestion.id || suggestion.feedbackKey || suggestion.title} suggestion={suggestion} mutate={mutate} />) : <Empty icon="planner" title="No ranked suggestions yet" body="Capture a task, add standing commitments, or connect Calendar/Linear." />}</div>
       </section>
       <section className="panel">
         <PanelTitle icon="check" title="Today’s Three" sub="The commitments Pillar Time will protect for this date." />
@@ -933,8 +1036,25 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
         </form>
       </section>
       <section className="panel">
+        <PanelTitle icon="trustedContext" title="Context Intake" sub="Add identity, standing commitments, or running to-do context before regenerating." />
+        <form className="form compact-form" onSubmit={saveContext}>
+          <Select label="Context category" value={contextType} onChange={setContextType} options={[
+            { value: "identity", label: "Identity statement" },
+            { value: "standing", label: "Standing commitment" },
+            { value: "todo", label: "Running to-do" },
+          ]} />
+          <TextArea label="Paste or type context" value={contextText} onChange={setContextText} rows={5} placeholder="Paste a statement, commitment list, or task notes here." />
+          <label className="file-context-input"><Upload className="ico" /><span>Import text file</span><input type="file" accept=".txt,.md,.csv,.json,.text" onChange={importContextFile} /></label>
+          <div className="row tight-row"><Button icon="save" kind="primary">Save Context</Button><Button type="button" icon="run" onClick={regenerateWithContext}>Add Context & Regenerate</Button></div>
+        </form>
+        {contextMessage && <p className={contextMessage.includes("Saved") ? "ok-text" : "warn-text"}>{contextMessage}</p>}
+      </section>
+      <section className="panel">
         <PanelTitle icon="calendar" title="Timeline" sub="Calendar context from the latest successful day plan." />
-        {agenda.length ? agenda.map((event, index) => <ListRow key={`${event.title || event.summary}-${index}`} title={event.title || event.summary || "Calendar event"} sub={[event.start, event.end].filter(Boolean).join(" to ") || event.when || "Today"} right={event.calendarUrl && <Button icon="calendar" onClick={() => openExternalUrl(event.calendarUrl)}>Open</Button>} />) : <Empty icon="calendar" title="No agenda loaded" body="Connect Google Calendar and generate a day plan to bring today’s events into this view." />}
+        {agenda.length ? agenda.map((event, index) => {
+          const classification = (latestArtifact?.calendarClassifications || []).find((item) => item.id === event.id || item.event?.id === event.id);
+          return <ListRow key={`${event.title || event.summary}-${index}`} title={event.title || event.summary || "Calendar event"} sub={[event.time || [event.start, event.end].filter(Boolean).join(" to "), classification?.visibility || "unclassified", classification?.calendarRole].filter(Boolean).join(" · ") || event.when || "Today"} right={<div className="row tight-row">{classification && <Badge tone={classification.visibility === "hardBlock" ? "ok" : classification.visibility === "ignore" ? "muted" : "warn"}>{classification.visibility}</Badge>}{event.calendarUrl && <Button icon="calendar" onClick={() => openExternalUrl(event.calendarUrl)}>Open</Button>}</div>} />;
+        }) : <Empty icon="calendar" title="No agenda loaded" body="Connect Google Calendar and generate a day plan to bring today’s events into this view." />}
       </section>
       <section className="panel">
         <PanelTitle icon="reminders" title="Next Reminders" sub="Regular and sporadic nudges, paused by default until you enable them." />
@@ -1372,7 +1492,9 @@ function Sources({ state, mutate }) {
           <td>{s.type === "Newsletter" ? "Journal / Library" : s.type}</td>
           <td><button type="button" className={`source-toggle ${active ? "active" : "paused"}`} onClick={() => mutate(`/api/sources/${s.id}`, { status: active ? "paused" : "active" }, "PATCH")} aria-pressed={active}><span></span>{active ? "Active" : "Paused"}</button></td>
           <td><Badge tone={["configured", "not required"].includes(credential) ? "ok" : credential === "optional" ? "muted" : "warn"}>{credential}</Badge></td>
-          <td><div className="source-actions"><button type="button" onClick={() => openEditSource(s)}><Icon name="pencil" />Edit</button><button className="danger" type="button" onClick={() => mutate(`/api/sources/${s.id}`, {}, "DELETE")}><Icon name="trash" />Delete</button></div></td>
+          <td><div className="source-actions"><button type="button" onClick={() => openEditSource(s)}><Icon name="pencil" />Edit</button><button className="danger" type="button" onClick={() => {
+            if (window.confirm(`Delete source "${s.name}"? This removes it from future runs.`)) mutate(`/api/sources/${s.id}`, {}, "DELETE");
+          }}><Icon name="trash" />Delete</button></div></td>
         </tr>;
       })}</tbody></table> : <Empty icon="sources" title="No sources yet" body="Add the first real source. The workflow will not invent feed data." />}
         {state.sources.length > 0 && filteredSources.length === 0 && <Empty icon="search" title="No matching sources" body="Clear the search to see all configured sources." />}
@@ -2945,7 +3067,7 @@ function Onboarding({ state, mutate, refresh }) {
     try {
       const result = await api("/api/google-calendar/oauth/start", { method: "POST", body: JSON.stringify({}) });
       await refresh();
-      setCalendarMessage("Google consent opened. When it says connected, return here and refresh status.");
+      setCalendarMessage("Google consent opened in your browser. When it says connected, return here; Pillar Time will update the status automatically.");
       await openExternalUrl(result.authUrl);
     } catch (error) {
       setCalendarMessage(error.message || "Could not start Google Calendar connection.");
@@ -3234,7 +3356,7 @@ function Onboarding({ state, mutate, refresh }) {
         <div className="setup-card">
           <div className="setup-card-head">
             <BrandLogo name="Calendar" />
-            <div><h3>Google Calendar</h3><p>Pillar Time requests read-only access. Calendar events are used as private schedule context, not as public news sources.</p></div>
+            <div><h3>Google Calendar</h3><p>Pillar Time reads calendar context and only writes approved schedule blocks after explicit approval.</p></div>
             <Badge tone={googleCalendarConnected ? "ok" : "muted"}>{googleCalendarConnected ? "Connected" : "Optional"}</Badge>
           </div>
           <div className="notice">
@@ -3491,7 +3613,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     try {
       const result = await api("/api/google-calendar/oauth/start", { method: "POST", body: JSON.stringify({}) });
       await refresh();
-      setGoogleCalendarMessage("Google consent opened. Complete it, then return here and refresh calendars.");
+      setGoogleCalendarMessage("Google consent opened in your browser. Complete it, then return here; Pillar Time will update the status automatically.");
       await openExternalUrl(result.authUrl);
     } catch (error) {
       setGoogleCalendarMessage(error.message);
@@ -3547,6 +3669,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setGoogleCalendarModal(false);
   };
   const disconnectGoogleCalendar = async () => {
+    if (!window.confirm("Disconnect Google Calendar? Pillar Time will stop reading your agenda and cannot create approved schedule blocks until you reconnect.")) return;
     setGoogleCalendarMessage("");
     await mutate("/api/google-calendar/disconnect", {}, "POST");
     setGoogleCalendarSelection(["primary"]);
@@ -3897,7 +4020,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     </div>}
     {googleCalendarModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeGoogleCalendarModal(); }}>
       <form className="modal-card connector-modal form" onSubmit={startGoogleCalendarOAuth}>
-        <div className="modal-head"><div><h2>Google Calendar</h2><p>Connect read-only calendar access so Pillar Time can include today's agenda.</p></div><button type="button" onClick={closeGoogleCalendarModal}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2>Google Calendar</h2><p>Connect calendar access so Pillar Time can read today's agenda and create approved schedule blocks.</p></div><button type="button" onClick={closeGoogleCalendarModal}><Icon name="x" /></button></div>
         <div className="notice">
           <strong>Read-only access</strong>
           <span>Pillar Time requests permission to view calendar events and calendar names so you can choose which calendars appear in your brief.</span>
@@ -3997,7 +4120,7 @@ function App() {
         nextStatus = applyRunState(run);
       }
       await refresh();
-      if (nextStatus === "done") setTimeout(() => requestRoute("briefs"), 850);
+      if (nextStatus === "done") setTimeout(() => requestRoute(runType === "executive_day" ? "today" : "briefs"), 850);
       if (nextStatus === "error") throw new Error(run?.error || "Workflow failed");
       return { run };
     } catch (runError) {

@@ -7,7 +7,16 @@ import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { DatabaseSync } from "node:sqlite";
-import { localDateKey, nextOccurrence, rankActions, sporadicTimes } from "./timeEngine.js";
+import {
+  buildProposedCalendarBlocks,
+  classifyCalendarEvents,
+  defaultPrimaryCalendarIds,
+  localDateKey,
+  nextOccurrence,
+  rankActions,
+  rankExecutiveCandidates,
+  sporadicTimes,
+} from "./timeEngine.js";
 import { groupIssuesByProject, LinearClient } from "./linearClient.js";
 import {
   buildContextEnvelope,
@@ -173,6 +182,7 @@ function migrate() {
       completed_at TEXT,
       steps_json TEXT NOT NULL DEFAULT '[]',
       artifact_json TEXT NOT NULL DEFAULT '{}',
+      run_type TEXT NOT NULL DEFAULT 'intelligence',
       error TEXT
     );
     CREATE TABLE IF NOT EXISTS approval_items (
@@ -342,6 +352,17 @@ function migrate() {
       rank INTEGER NOT NULL DEFAULT 1,
       status TEXT NOT NULL DEFAULT 'active',
       completed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS calendar_planning_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      color TEXT NOT NULL DEFAULT '#0f172a',
+      calendar_title_prefix TEXT NOT NULL DEFAULT '',
+      default_minutes INTEGER NOT NULL DEFAULT 30,
+      enabled INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -526,6 +547,8 @@ function migrate() {
   if (!sourceColumns.includes("config_json")) {
     db.exec("ALTER TABLE sources ADD COLUMN config_json TEXT NOT NULL DEFAULT '{}';");
   }
+  const workflowColumns = db.prepare("PRAGMA table_info(workflow_runs)").all().map((c) => c.name);
+  if (workflowColumns.length && !workflowColumns.includes("run_type")) db.exec("ALTER TABLE workflow_runs ADD COLUMN run_type TEXT NOT NULL DEFAULT 'intelligence';");
   const briefColumns = db.prepare("PRAGMA table_info(brief_config)").all().map((c) => c.name);
   if (!briefColumns.includes("delivery_frequency")) db.exec("ALTER TABLE brief_config ADD COLUMN delivery_frequency TEXT NOT NULL DEFAULT 'Daily';");
   if (!briefColumns.includes("delivery_time")) db.exec("ALTER TABLE brief_config ADD COLUMN delivery_time TEXT NOT NULL DEFAULT '08:00';");
@@ -1512,6 +1535,20 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
   }
 }
 
+async function promiseWithTimeout(promise, timeoutMs, message) {
+  let timeout;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(message || `Operation timed out after ${Math.round(timeoutMs / 1000)} seconds`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function callTextModel({ system, prompt }) {
   const modelRow = get("SELECT * FROM model_settings WHERE id=1");
   const settings = modelSettings();
@@ -2307,14 +2344,22 @@ function calendarAgendaFromEvents(events = [], source = {}, config = {}) {
     id: event.id,
     title: event.summary || "Untitled event",
     calendar: source.name,
-    calendarId: config.calendarId || "primary",
+    calendarId: event.pillarCalendarId || config.calendarId || "primary",
+    sourceCalendarId: event.pillarCalendarId || config.calendarId || "primary",
     start: eventDateTimeValue(event.start),
     end: eventDateTimeValue(event.end),
     time: eventDisplayTime(event),
     location: event.location || "",
     attendees: config.includeAttendees === false ? [] : (event.attendees || []).slice(0, 12).map((attendee) => attendee.displayName || attendee.email).filter(Boolean),
+    attendeeCount: Array.isArray(event.attendees) ? event.attendees.length : 0,
+    selfAttendee: !!(event.attendees || []).find((attendee) => attendee.self),
+    selfResponseStatus: (event.attendees || []).find((attendee) => attendee.self)?.responseStatus || "",
+    organizerEmail: event.organizer?.email || "",
+    creatorEmail: event.creator?.email || "",
+    status: event.status || "",
     description: config.includeDescriptions ? stripHtml(event.description || "").slice(0, 1000) : "",
     htmlLink: event.htmlLink || "",
+    calendarUrl: event.htmlLink || "",
   }));
 }
 
@@ -2333,6 +2378,39 @@ async function fetchGoogleCalendarEventsForCalendar({ source, calendarId, access
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error?.message || `Google Calendar fetch failed: ${response.status} ${response.statusText}`);
   return Array.isArray(payload.items) ? payload.items : [];
+}
+
+async function createGoogleCalendarBlock(block = {}) {
+  const connector = googleCalendarCredential();
+  if (!connector.enabled || !connector.data.refreshToken) throw new Error("Google Calendar is not connected.");
+  if (!googleCalendarCanWrite(connector)) throw new Error("Reconnect Google Calendar to allow approved schedule writes.");
+  const accessToken = await refreshGoogleCalendarAccessToken();
+  const calendarId = connector.data.primaryWriteCalendarId || defaultPrimaryCalendarIds[0] || "primary";
+  const event = {
+    summary: block.title || "Pillar Time block",
+    description: [
+      "Created by Pillar Time after explicit approval.",
+      block.reason ? `Reason: ${block.reason}` : "",
+      block.category ? `Category: ${block.category}` : "",
+      block.sourceCandidateId ? `Source candidate: ${block.sourceCandidateId}` : "",
+    ].filter(Boolean).join("\n"),
+    start: { dateTime: block.start },
+    end: { dateTime: block.end },
+    extendedProperties: {
+      private: {
+        pillarTimeBlockId: block.id || "",
+        pillarTimeCategory: block.category || "",
+      },
+    },
+  };
+  const response = await fetchWithTimeout(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: json(event),
+  }, 20000);
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error?.message || `Google Calendar write failed: ${response.status} ${response.statusText}`);
+  return { calendarId, event: payload };
 }
 
 async function fetchGoogleCalendarSource(source) {
@@ -2580,10 +2658,11 @@ const GOOGLE_CALENDAR_CLIENT_SECRET = process.env.PILLAR_TIME_GOOGLE_CALENDAR_CL
 const GOOGLE_CALENDAR_AUTH_BROKER_URL = String(process.env.PILLAR_TIME_GOOGLE_CALENDAR_AUTH_BROKER_URL || "https://auth.pillar.transformationagency.com").replace(/\/+$/, "");
 const GOOGLE_CALENDAR_REDIRECT_URI = process.env.PILLAR_TIME_GOOGLE_CALENDAR_REDIRECT_URI || "";
 const GOOGLE_CALENDAR_SCOPES = [
-  "https://www.googleapis.com/auth/calendar.events.readonly",
+  "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
 ];
 const GOOGLE_CALENDAR_SCOPE = GOOGLE_CALENDAR_SCOPES.join(" ");
+const GOOGLE_CALENDAR_WRITE_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 
 function googleCalendarCredential() {
   const row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: GOOGLE_CALENDAR_PROVIDER });
@@ -2593,6 +2672,11 @@ function googleCalendarCredential() {
     data: data && typeof data === "object" ? data : {},
     enabled: !!row?.enabled,
   };
+}
+
+function googleCalendarCanWrite(connector = googleCalendarCredential()) {
+  const scope = String(connector?.data?.scope || "");
+  return scope.split(/\s+/).includes(GOOGLE_CALENDAR_WRITE_SCOPE);
 }
 
 function googleCalendarRedirectUri(req) {
@@ -2633,6 +2717,7 @@ function googleCalendarPublicConnector(connector = googleCalendarCredential()) {
   const { row, data, enabled } = connector;
   const hasClient = !!(data.clientId || GOOGLE_CALENDAR_DESKTOP_CLIENT_ID || data.authBrokerUrl || GOOGLE_CALENDAR_AUTH_BROKER_URL);
   const hasRefreshToken = !!data.refreshToken;
+  const canWrite = googleCalendarCanWrite(connector);
   return {
     provider: "googleCalendar",
     enabled,
@@ -2640,6 +2725,8 @@ function googleCalendarPublicConnector(connector = googleCalendarCredential()) {
     clientConfigured: hasClient,
     credentialStatus: hasRefreshToken ? "saved" : hasClient ? "client configured" : "missing",
     status: enabled && hasRefreshToken ? "ready" : hasClient ? "needs consent" : "pending credentials",
+    canWrite,
+    writeStatus: enabled && hasRefreshToken && canWrite ? "ready" : enabled && hasRefreshToken ? "needs reconnect" : "not connected",
     authMode: data.authMode || (data.authBrokerUrl || GOOGLE_CALENDAR_AUTH_BROKER_URL ? "broker" : "direct"),
     calendarId: data.calendarId || "primary",
     selectedCalendarIds: Array.isArray(data.selectedCalendarIds) && data.selectedCalendarIds.length ? data.selectedCalendarIds : ["primary"],
@@ -3513,6 +3600,27 @@ function seedTimeDefaults() {
          VALUES ($id, $title, 'Template reminder. Enable and edit before use.', $type, $scheduleType, $localTime, $start, '[1,2,3,4,5]', 0, $t, $t)
          ON CONFLICT(id) DO NOTHING`, { $id: reminderId, $title: title, $type: type, $scheduleType: scheduleType, $localTime: localTime, $start: localDateKey(new Date(), "America/Denver"), $t: t });
   }
+  const planningCategories = [
+    ["cat-deep-work", "Deep Work", "Protected build, writing, strategy, and creation time.", "#1d4ed8", "Deep Work: ", 90],
+    ["cat-linear-execution", "Linear Execution", "Execution blocks for selected Linear or local work items.", "#047857", "Linear: ", 45],
+    ["cat-meeting-prep", "Meeting Prep", "Short preparation blocks before qualifying meetings.", "#7c3aed", "Prep: ", 15],
+    ["cat-follow-up", "Follow-up", "Decision capture, notes, and promised replies after meetings.", "#b45309", "Follow-up: ", 30],
+    ["cat-admin", "Admin", "Maintenance work that should not consume high-leverage focus time.", "#475569", "Admin: ", 30],
+    ["cat-buffer", "Recovery / Buffer", "Recovery, transition, and margin around hard commitments.", "#0f766e", "Buffer: ", 20],
+  ];
+  for (const [categoryId, name, description, color, prefix, minutes] of planningCategories) {
+    run(`INSERT INTO calendar_planning_categories (id, name, description, color, calendar_title_prefix, default_minutes, enabled, created_at, updated_at)
+         VALUES ($id, $name, $description, $color, $prefix, $minutes, 1, $t, $t)
+         ON CONFLICT(id) DO NOTHING`, {
+      $id: categoryId,
+      $name: name,
+      $description: description,
+      $color: color,
+      $prefix: prefix,
+      $minutes: minutes,
+      $t: t,
+    });
+  }
 }
 
 function audit(action, entityType, entityId, note = "", diff = {}, actor = "operator") {
@@ -3652,7 +3760,7 @@ function seed() {
          VALUES (1, $owner, $product, $audience, $voice, 'Daily', '08:00', 'America/Denver', 'Monday', $sections, $analyzers, $behavior, '[]', 1, $t)`, {
       $owner: "You",
       $product: "Pillar Time",
-      $audience: "A private daily intelligence brief for the brief owner. Explain sources, entities, mechanisms, or technical terms when useful.",
+      $audience: "A private executive operating system for the brief owner, focused on commitments, calendar pressure, preparation, reminders, reviews, and optional source-grounded intelligence.",
       $voice: "Concise, strategic, candid, approval-safe, specific, and plain-English. Avoid generic corporate language.",
       $sections: json([
         { key: "executiveRead", label: "Executive Read", enabled: true, instruction: "2-3 concise paragraphs that explain the situation without unexplained jargon." },
@@ -3757,6 +3865,20 @@ function timeTasks() {
   }));
 }
 
+function calendarPlanningCategories() {
+  return all("SELECT * FROM calendar_planning_categories WHERE enabled=1 ORDER BY name ASC").map((r) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    color: r.color,
+    calendarTitlePrefix: r.calendar_title_prefix,
+    defaultMinutes: r.default_minutes,
+    enabled: !!r.enabled,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
 function dailyCommitments(dateKey = localDateKey(new Date(), timePreferences().timezone)) {
   return all("SELECT * FROM daily_commitments WHERE local_date=$date AND status!='removed' ORDER BY rank ASC, created_at ASC", { $date: dateKey }).map((r) => ({
     id: r.id,
@@ -3854,45 +3976,26 @@ function meetingRecords() {
   }));
 }
 
+function latestCompletedExecutiveArtifact() {
+  const row = get(`SELECT * FROM workflow_runs
+                   WHERE status='completed'
+                     AND (run_type='executive_day' OR json_extract(artifact_json, '$.runType')='executive_day')
+                   ORDER BY completed_at DESC, started_at DESC
+                   LIMIT 1`);
+  return row ? hydrateArtifact(parse(row.artifact_json, {})) : null;
+}
+
 function timeSuggestions() {
-  const prefs = timePreferences();
+  const latestArtifact = latestCompletedExecutiveArtifact();
+  if (latestArtifact?.rankedDayCandidates?.length) {
+    const prefs = timePreferences();
+    const todayKey = localDateKey(new Date(), prefs.timezone);
+    const artifactKey = latestArtifact.generatedAt ? localDateKey(new Date(latestArtifact.generatedAt), prefs.timezone) : todayKey;
+    if (artifactKey === todayKey) return latestArtifact.rankedDayCandidates.slice(0, 8);
+  }
   const tasks = timeTasks();
   const feedback = all("SELECT feedback_key AS key, feedback FROM suggestion_feedback");
-  const candidates = tasks.map((task) => ({
-    id: `task:${task.id}`,
-    taskId: task.id,
-    title: task.title,
-    notes: task.notes,
-    leverageCategory: task.leverageCategory,
-    reason: task.waitingOn ? `Waiting on ${task.waitingOn}; moving this may unblock someone.` : "",
-    source: "task",
-    dueAt: task.dueAt,
-    estimateMinutes: task.estimateMinutes,
-    priority: task.priority,
-    status: task.status,
-    waitingOn: task.waitingOn,
-    feedbackKey: task.id,
-  }));
-  const dateKey = localDateKey(new Date(), prefs.timezone);
-  const calendarItems = all(`SELECT title, body, published_at, canonical_url FROM normalized_items ni
-                             LEFT JOIN sources s ON s.id=ni.source_id
-                             WHERE s.type='Calendar' AND ni.published_at >= $start
-                             ORDER BY ni.published_at ASC LIMIT 12`, { $start: `${dateKey}T00:00:00.000Z` });
-  for (const item of calendarItems) {
-    if (/meet|call|huddle|checkpoint|review|planning/i.test(item.title)) {
-      candidates.push({
-        id: `calendar:${item.canonical_url || item.title}`,
-        title: `Prepare for ${String(item.title).replace(/^Calendar:\s*/i, "")}`,
-        leverageCategory: "leadership",
-        reason: "Calendar item may need preparation, decisions, or follow-up.",
-        source: "calendar",
-        dueAt: item.published_at,
-        estimateMinutes: prefs.meetingBufferMinutes || 10,
-        feedbackKey: `calendar:${item.title}`,
-      });
-    }
-  }
-  const ranked = rankActions(candidates, feedback).slice(0, 8);
+  const ranked = rankExecutiveCandidates({ tasks, commitments: [], calendarClassifications: [], feedback }).slice(0, 8);
   if (!ranked.length) {
     ranked.push({
       id: "starter:plan",
@@ -3905,7 +4008,7 @@ function timeSuggestions() {
       confidence: 0.7,
     });
   }
-  return ranked.slice(0, 3);
+  return ranked.slice(0, 8);
 }
 
 const timeSchedulerState = { running: false, lastTickAt: null, lastError: "", deliveredThisRun: 0 };
@@ -4173,7 +4276,7 @@ function trustedContextState() {
 function workflowRuns() {
   return all("SELECT * FROM workflow_runs ORDER BY started_at DESC").map((r) => ({
     id: r.id, label: r.label, trigger: r.trigger, status: r.status, startedAt: r.started_at,
-    completedAt: r.completed_at, steps: parse(r.steps_json, []), artifact: hydrateArtifact(parse(r.artifact_json, {})), error: r.error,
+    completedAt: r.completed_at, runType: r.run_type || parse(r.artifact_json, {})?.runType || "intelligence", steps: parse(r.steps_json, []), artifact: hydrateArtifact(parse(r.artifact_json, {})), error: r.error,
   }));
 }
 function approvals() {
@@ -4324,7 +4427,7 @@ function executiveWorkflowTemplate() {
     ["rank", "Choose highest-leverage focus", "analyze"],
     ["render", "Render executive day plan", "generate"],
     ["save", "Save day artifact", "deliver"],
-    ["telegram", "Deliver optional Telegram brief", "deliver"],
+    ["telegram", "Deliver optional Telegram plan", "deliver"],
   ];
 }
 
@@ -5584,7 +5687,99 @@ function buildExecutiveRisks({ commitments = [], tasks = [], calendarAgenda = []
   return risks;
 }
 
-function renderExecutiveDayBrief({ dateKey, timezone, calendarAgenda = [], todaysThree = [], rankedDayCandidates = [], risks = [], connectorDiagnostics = {}, coverageNotes = [] } = {}) {
+function createCalendarApprovalForArtifact(runId, artifact = {}) {
+  if (!artifact.proposedCalendarBlocks?.length) return [];
+  const existing = all("SELECT * FROM approval_items WHERE run_id=$runId AND kind='calendar.proposed_schedule' ORDER BY created_at DESC", { $runId: runId });
+  if (existing.length) return approvals().filter((approval) => approval.runId === runId && approval.kind === "calendar.proposed_schedule");
+  const approvalId = id("approval");
+  const t = now();
+  const blockCount = artifact.proposedCalendarBlocks.length;
+  run(`INSERT INTO approval_items (id, title, kind, risk, status, run_id, entity_type, entity_id, payload_json, created_at)
+       VALUES ($id, $title, 'calendar.proposed_schedule', 'medium', 'pending', $runId, 'calendar', $entityId, $payload, $t)`, {
+    $id: approvalId,
+    $title: `Approve proposed calendar (${blockCount} block${blockCount === 1 ? "" : "s"})`,
+    $runId: runId,
+    $entityId: artifact.generatedAt || runId,
+    $payload: json({
+      action: "calendar.create_blocks",
+      blocks: artifact.proposedCalendarBlocks,
+      dateKey: artifact.generatedAt ? localDateKey(new Date(artifact.generatedAt), timePreferences().timezone) : "",
+      runId,
+    }),
+    $t: t,
+  });
+  audit("approval.created", "approval", approvalId, "Created approval-gated calendar proposal", { runId, blockCount }, "system");
+  return approvals().filter((approval) => approval.runId === runId && approval.kind === "calendar.proposed_schedule");
+}
+
+async function runLlmCalendarJudgmentPasses(artifact = {}) {
+  if (modelSettings().status !== "ready") {
+    return {
+      llmCalendarJudgments: artifact.llmCalendarJudgments,
+      scheduleCritique: artifact.scheduleCritique,
+      classificationWarnings: artifact.classificationWarnings || [],
+    };
+  }
+  const system = "You are Pillar Time's calendar judgment critic. Return only valid JSON. You may advise, but you cannot approve or execute calendar or Linear writes.";
+  const base = {
+    calendarClassifications: (artifact.calendarClassifications || []).map((item) => ({
+      id: item.id,
+      title: item.title,
+      start: item.start,
+      end: item.end,
+      calendarId: item.calendarId,
+      calendarRole: item.calendarRole,
+      isAllDay: item.isAllDay,
+      isMine: item.isMine,
+      blocksTime: item.blocksTime,
+      visibility: item.visibility,
+      confidence: item.confidence,
+    })),
+    proposedCalendarBlocks: artifact.proposedCalendarBlocks || [],
+    rankedDayCandidates: (artifact.rankedDayCandidates || []).slice(0, 12),
+  };
+  const ownership = parseModelJson(await callTextModel({
+    system,
+    prompt: JSON.stringify({
+      task: "Ownership pass. For each calendar item, classify whether it is the user's actual commitment, merely observed/shared context, or ambiguous.",
+      requiredJsonShape: { judgments: [{ id: "event id", ownership: "commitment|observed|ambiguous", reason: "short reason", confidence: 0.0 }] },
+      input: base.calendarClassifications,
+    }),
+  }));
+  const prep = parseModelJson(await callTextModel({
+    system,
+    prompt: JSON.stringify({
+      task: "Prep/follow-up pass. Decide which owned or ambiguous events deserve prep, follow-up, decision capture, recovery, or no action.",
+      requiredJsonShape: { judgments: [{ id: "event id", prep: true, followUp: true, decisionCapture: false, recovery: false, reason: "short reason" }] },
+      input: base.calendarClassifications,
+    }),
+  }));
+  const critique = parseModelJson(await callTextModel({
+    system,
+    prompt: JSON.stringify({
+      task: "Schedule critic pass. Challenge the proposed plan for false urgency, overcommitment, shared-calendar noise, all-day event mistakes, missing buffers, and missing high-leverage work.",
+      requiredJsonShape: { summary: "short critique", warnings: ["warning"], recommendedChanges: ["change"] },
+      input: base,
+    }),
+  }));
+  return {
+    llmCalendarJudgments: {
+      status: "ready",
+      ownership: Array.isArray(ownership.judgments) ? ownership.judgments : [],
+      prepFollowUp: Array.isArray(prep.judgments) ? prep.judgments : [],
+      generatedAt: now(),
+    },
+    scheduleCritique: {
+      status: "model",
+      summary: String(critique.summary || ""),
+      warnings: Array.isArray(critique.warnings) ? critique.warnings.map(String).slice(0, 8) : [],
+      recommendedChanges: Array.isArray(critique.recommendedChanges) ? critique.recommendedChanges.map(String).slice(0, 8) : [],
+    },
+    classificationWarnings: [...(artifact.classificationWarnings || []), ...(Array.isArray(critique.warnings) ? critique.warnings.map(String).slice(0, 4) : [])],
+  };
+}
+
+function renderExecutiveDayBrief({ dateKey, timezone, calendarAgenda = [], todaysThree = [], rankedDayCandidates = [], proposedCalendarBlocks = [], risks = [], connectorDiagnostics = {}, coverageNotes = [], oneQuestionYouAreAvoiding = "" } = {}) {
   const agendaLines = calendarAgenda.length
     ? calendarAgenda.slice(0, 12).map((event) => `- ${formatAgendaLine(event)}`)
     : ["- No calendar agenda loaded for today."];
@@ -5597,6 +5792,9 @@ function renderExecutiveDayBrief({ dateKey, timezone, calendarAgenda = [], today
   const riskLines = risks.length
     ? risks.slice(0, 8).map((risk) => `- ${risk.title}: ${risk.detail}`)
     : ["- No deterministic risks detected from the local context available."];
+  const calendarPlanLines = proposedCalendarBlocks.length
+    ? proposedCalendarBlocks.slice(0, 10).map((block) => `- ${new Date(block.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}-${new Date(block.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}: ${block.title} (${block.category})`)
+    : ["- No new calendar blocks proposed. Capture commitments or connect Linear/Calendar to make schedule planning sharper."];
   const diagnosticLines = [
     `- Calendar: ${connectorDiagnostics.calendar?.status || "unknown"}`,
     `- Linear: ${connectorDiagnostics.linear?.status || "unknown"}`,
@@ -5620,8 +5818,14 @@ function renderExecutiveDayBrief({ dateKey, timezone, calendarAgenda = [], today
     "## Highest Leverage Today",
     ...leverageLines,
     "",
+    "## Proposed Calendar",
+    ...calendarPlanLines,
+    "",
     "## Risks & Watchouts",
     ...riskLines,
+    "",
+    "## The Question",
+    oneQuestionYouAreAvoiding || "What hard, undramatic task would make the rest of today easier if you stopped avoiding it?",
     "",
     "## Approval Queue",
     "- No generated external actions were executed. Linear and calendar writes still require explicit approval.",
@@ -5637,8 +5841,9 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
   const dateKey = localDateKey(new Date(generatedAt), prefs.timezone);
   const commitments = dailyCommitments(dateKey);
   const tasks = timeTasks();
-  const suggestions = timeSuggestions();
-  const rankedDayCandidates = suggestions.slice(0, 8);
+  const feedback = all("SELECT feedback_key AS key, feedback FROM suggestion_feedback");
+  const calendarClassifications = classifyCalendarEvents(calendarAgenda, { primaryCalendarIds: defaultPrimaryCalendarIds });
+  const rankedDayCandidates = rankExecutiveCandidates({ tasks, commitments, calendarClassifications, feedback }).slice(0, 18);
   const todaysThree = commitments.length
     ? commitments.slice(0, 3).map((commitment) => ({
       id: commitment.id,
@@ -5649,8 +5854,23 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
       score: 92 - commitment.rank,
       estimateMinutes: 30,
       leverageCategory: "leadership",
+      whyThis: commitment.notes || "Already selected as a protected commitment.",
+      tradeoff: "Protecting this displaces lower-leverage reactive work.",
+      objectiveServed: "Keep an explicit commitment from slipping.",
+      constraintRelieved: "Reduces open-loop pressure.",
+      authorityBasis: "User-accepted daily commitment.",
+      exactNextStep: `Protect time for ${commitment.title}.`,
+      confidence: 0.88,
     }))
     : rankedDayCandidates.slice(0, 3);
+  const proposedCalendarBlocks = buildProposedCalendarBlocks({
+    dateKey,
+    timezone: prefs.timezone,
+    preferences: prefs,
+    rankedCandidates: rankedDayCandidates,
+    calendarClassifications,
+    categories: calendarPlanningCategories(),
+  });
   const connectors = connectorSettings();
   const model = modelSettings();
   const connectorDiagnostics = {
@@ -5671,10 +5891,21 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
   };
   const coverageNotes = [];
   if (!calendarAgenda.length) coverageNotes.push("No timed calendar events were available to the executive-day planner.");
+  const softOrBackground = calendarClassifications.filter((item) => item.visibility !== "hardBlock" && item.visibility !== "ignore");
+  const ignored = calendarClassifications.filter((item) => item.visibility === "ignore");
+  const classificationWarnings = [];
+  if (softOrBackground.length) classificationWarnings.push(`${softOrBackground.length} calendar event${softOrBackground.length === 1 ? "" : "s"} treated as context, not hard blocks.`);
+  if (ignored.length) classificationWarnings.push(`${ignored.length} declined/cancelled calendar event${ignored.length === 1 ? "" : "s"} ignored.`);
+  if (calendarClassifications.some((item) => item.isAllDay && !item.blocksTime)) classificationWarnings.push("All-day events were treated as context unless they clearly looked like travel or a hard commitment.");
   if (connectorDiagnostics.calendar.failures?.length) coverageNotes.push(`Calendar fetch degraded: ${connectorDiagnostics.calendar.failures[0]}`);
   if (connectorDiagnostics.linear.status !== "ready") coverageNotes.push("Linear was not ready, so Linear issues were not included in deterministic ranking.");
   if (connectorDiagnostics.model.status !== "ready") coverageNotes.push("Model connector was not ready; deterministic fallback rendered the plan.");
   const risks = buildExecutiveRisks({ commitments, tasks, calendarAgenda, connectorDiagnostics, prefs });
+  const watchouts = [
+    ...classificationWarnings.map((warning) => ({ severity: "calendar", title: "Calendar classification", detail: warning })),
+    ...risks.slice(0, 5),
+  ];
+  const oneQuestionYouAreAvoiding = "What are you calling strategy that is actually avoidance of a concrete next step?";
   const selectedIssues = (todaysThree.length ? todaysThree : rankedDayCandidates.slice(0, 3)).map(executiveIssueFromCandidate);
   const artifact = {
     runType: "executive_day",
@@ -5682,6 +5913,14 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
     generatedAt,
     briefConfig: config,
     calendarAgenda,
+    calendarClassifications,
+    llmCalendarJudgments: { status: "not-run", reason: "Deterministic calendar classification completed; model-assisted passes are advisory and require a ready model connector." },
+    scheduleCritique: {
+      status: "deterministic",
+      warnings: classificationWarnings,
+      summary: proposedCalendarBlocks.length ? "Calendar proposal preserves hard blocks and ignores non-blocking all-day/shared context." : "No calendar blocks were proposed from the available context.",
+    },
+    classificationWarnings,
     calendarFetches: calendarResults,
     linearContext: { status: connectorDiagnostics.linear.status },
     commitments,
@@ -5692,7 +5931,10 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
     meetings: meetingRecords().slice(0, 12),
     rankedDayCandidates,
     todaysThree,
+    proposedCalendarBlocks,
     risks,
+    watchouts,
+    oneQuestionYouAreAvoiding,
     proposedActions: [],
     approvalItems: [],
     connectorDiagnostics,
@@ -5720,9 +5962,11 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
     calendarAgenda,
     todaysThree,
     rankedDayCandidates,
+    proposedCalendarBlocks,
     risks,
     connectorDiagnostics,
     coverageNotes,
+    oneQuestionYouAreAvoiding,
   });
   return artifact;
 }
@@ -5744,8 +5988,8 @@ async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
     completedKeys.add(key);
     stepOutputs[key] = { output, detail };
   };
-  run(`INSERT INTO workflow_runs (id, label, trigger, status, started_at, completed_at, steps_json, artifact_json)
-       VALUES ($id, 'Generating executive day plan', $trigger, 'running', $started, NULL, $steps, '{}')`, {
+  run(`INSERT INTO workflow_runs (id, label, trigger, status, started_at, completed_at, steps_json, artifact_json, run_type)
+       VALUES ($id, 'Generating executive day plan', $trigger, 'running', $started, NULL, $steps, '{}', 'executive_day')`, {
     $id: runId,
     $trigger: trigger,
     $started: started,
@@ -5776,6 +6020,19 @@ async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
     writeProgress("risks");
     await progressDelay();
     const artifact = buildExecutiveDayArtifact({ generatedAt: now(), calendarAgenda, calendarResults });
+    artifact.approvalItems = createCalendarApprovalForArtifact(runId, artifact);
+    if (artifact.connectorDiagnostics.model.status === "ready") {
+      try {
+        const judgments = await promiseWithTimeout(runLlmCalendarJudgmentPasses(artifact), 90000, "Calendar judgment model passes timed out after 90 seconds");
+        artifact.llmCalendarJudgments = judgments.llmCalendarJudgments;
+        artifact.scheduleCritique = judgments.scheduleCritique;
+        artifact.classificationWarnings = judgments.classificationWarnings;
+      } catch (error) {
+        artifact.classificationWarnings = [...(artifact.classificationWarnings || []), error.message || "Calendar judgment model passes failed"];
+        artifact.llmCalendarJudgments = { status: "failed", reason: error.message || "Calendar judgment model passes failed" };
+        artifact.scheduleCritique = { ...(artifact.scheduleCritique || {}), status: "deterministic", modelError: error.message || "Calendar judgment model passes failed" };
+      }
+    }
     finishProgress("risks", `${artifact.risks.length} risk/watchout${artifact.risks.length === 1 ? "" : "s"} detected`);
 
     writeProgress("rank");
@@ -5795,7 +6052,7 @@ async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
     await progressDelay();
     let telegramDelivery;
     try {
-      telegramDelivery = await deliverBriefToTelegram({ runId, artifact });
+      telegramDelivery = await promiseWithTimeout(deliverBriefToTelegram({ runId, artifact }), 45000, "Telegram delivery timed out after 45 seconds");
     } catch (error) {
       telegramDelivery = { ok: false, error: error.message || "Telegram delivery failed", failedAt: now() };
       run("UPDATE telegram_settings SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE id=1", { $t: now(), $err: telegramDelivery.error });
@@ -5819,9 +6076,9 @@ async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
       detail: stepOutputs[key]?.detail || "",
     }));
     const completed = now();
-    run(`INSERT INTO workflow_runs (id, label, trigger, status, started_at, completed_at, steps_json, artifact_json)
-         VALUES ($id, $label, $trigger, 'completed', $started, $completed, $steps, $artifact)
-         ON CONFLICT(id) DO UPDATE SET label=excluded.label, status='completed', completed_at=excluded.completed_at, steps_json=excluded.steps_json, artifact_json=excluded.artifact_json`, {
+    run(`INSERT INTO workflow_runs (id, label, trigger, status, started_at, completed_at, steps_json, artifact_json, run_type)
+         VALUES ($id, $label, $trigger, 'completed', $started, $completed, $steps, $artifact, 'executive_day')
+         ON CONFLICT(id) DO UPDATE SET label=excluded.label, status='completed', completed_at=excluded.completed_at, steps_json=excluded.steps_json, artifact_json=excluded.artifact_json, run_type='executive_day'`, {
       $id: runId, $label: artifact.title, $trigger: trigger, $started: started, $completed: completed, $steps: json(steps), $artifact: json(artifact),
     });
     audit("artifact.saved", "workflow_run", runId, "Executive day artifact persisted", { runType: "executive_day" }, "system");
@@ -5973,7 +6230,7 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
   await progressDelay();
   let telegramDelivery;
   try {
-    telegramDelivery = await deliverBriefToTelegram({ runId, artifact });
+    telegramDelivery = await promiseWithTimeout(deliverBriefToTelegram({ runId, artifact }), 45000, "Telegram delivery timed out after 45 seconds");
   } catch (error) {
     telegramDelivery = { ok: false, error: error.message || "Telegram delivery failed", failedAt: now() };
     run("UPDATE telegram_settings SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE id=1", { $t: now(), $err: telegramDelivery.error });
@@ -6922,6 +7179,55 @@ app.patch("/api/approvals/:id", (req, res) => {
   res.json(state());
 });
 
+app.post("/api/approvals/:id/execute", async (req, res) => {
+  const current = get("SELECT * FROM approval_items WHERE id=$id", { $id: req.params.id });
+  if (!current) return res.status(404).json({ error: "Approval not found", state: state() });
+  if (current.status !== "approved") return res.status(400).json({ error: "Approval must be approved before execution.", state: state() });
+  const payload = parse(current.payload_json, {});
+  const action = payload.action || current.kind;
+  try {
+    let result = {};
+    if (action === "calendar.create_blocks" || current.kind === "calendar.proposed_schedule") {
+      const blocks = Array.isArray(payload.blocks) ? payload.blocks : [];
+      if (!blocks.length) throw new Error("Calendar approval has no blocks to create.");
+      const created = [];
+      for (const block of blocks) created.push(await createGoogleCalendarBlock(block));
+      result = { createdCount: created.length, created };
+    } else if (action === "calendar.create_block") {
+      result = await createGoogleCalendarBlock(payload.block || payload);
+    } else if (action === "linear.create_issue") {
+      result = await linearClient().createIssue(payload.input || payload.issue || {});
+    } else if (action === "linear.update_issue") {
+      const issueId = payload.issueId || payload.id || current.entity_id;
+      if (!issueId) throw new Error("Linear update approval is missing issueId.");
+      result = await linearClient().updateIssue(issueId, payload.input || payload.patch || {});
+    } else if (action === "linear.add_comment") {
+      const issueId = payload.issueId || payload.id || current.entity_id;
+      const body = String(payload.body || payload.comment || "").trim();
+      if (!issueId || !body) throw new Error("Linear comment approval is missing issueId or body.");
+      result = await linearClient().addComment(issueId, body);
+    } else {
+      throw new Error(`Unsupported approval action: ${action}`);
+    }
+    run("UPDATE approval_items SET status='executed', resolved_by=$by, resolved_at=$t, resolution_note=$note WHERE id=$id", {
+      $id: req.params.id,
+      $by: req.body?.by || "operator",
+      $t: now(),
+      $note: `Executed ${action}`,
+    });
+    audit("approval.executed", "approval", req.params.id, `Executed ${action}`, { result }, "operator");
+    res.json({ result, state: state() });
+  } catch (error) {
+    run("UPDATE approval_items SET resolution_note=$note, resolved_at=$t WHERE id=$id", {
+      $id: req.params.id,
+      $note: error.message || "Approval execution failed",
+      $t: now(),
+    });
+    audit("approval.execute_failed", "approval", req.params.id, error.message || "Approval execution failed", { action }, "operator");
+    res.status(400).json({ error: error.message || "Approval execution failed", state: state() });
+  }
+});
+
 app.patch("/api/telegram", (req, res) => {
   const b = req.body || {};
   const current = get("SELECT * FROM telegram_settings WHERE id=1");
@@ -7609,7 +7915,27 @@ app.post("/api/telegram/commands", async (req, res) => {
     if (command === "/review") result = `${approvals().filter((a) => a.status === "pending").length} pending approval(s).`;
     if (command.startsWith("/deliberate")) result = "Perspective deliberation has been removed from Pillar Time.";
     if (command.startsWith("/analyze")) result = `Ad-hoc analysis requires configured model credentials. Request recorded: ${command}`;
-    if (command.startsWith("/approve") || command.startsWith("/reject") || command.startsWith("/add_source") || command.startsWith("/add_lens")) result = "State-changing Telegram commands are adapter-backed and require authenticated Telegram user context.";
+    if (command === "/approve calendar") {
+      const pendingCalendar = approvals().filter((approval) => approval.status === "pending" && approval.kind === "calendar.proposed_schedule");
+      if (pendingCalendar.length === 0) {
+        result = "No pending calendar proposal is waiting for approval.";
+      } else if (pendingCalendar.length > 1) {
+        result = `There are ${pendingCalendar.length} pending calendar proposals. Open Pillar Time and choose one to avoid approving the wrong schedule.`;
+      } else {
+        const approval = pendingCalendar[0];
+        run("UPDATE approval_items SET status='approved', resolved_by='telegram', resolved_at=$t, resolution_note='Approved by /approve calendar' WHERE id=$id", { $id: approval.id, $t: now() });
+        const blocks = Array.isArray(approval.payload?.blocks) ? approval.payload.blocks : [];
+        const created = [];
+        for (const block of blocks) created.push(await createGoogleCalendarBlock(block));
+        run("UPDATE approval_items SET status='executed', resolved_by='telegram', resolved_at=$t, resolution_note=$note WHERE id=$id", {
+          $id: approval.id,
+          $t: now(),
+          $note: `Created ${created.length} calendar block${created.length === 1 ? "" : "s"}`,
+        });
+        result = `Approved and created ${created.length} calendar block${created.length === 1 ? "" : "s"}.`;
+      }
+    }
+    if (command !== "/approve calendar" && (command.startsWith("/approve") || command.startsWith("/reject") || command.startsWith("/add_source") || command.startsWith("/add_lens"))) result = "State-changing Telegram commands are adapter-backed and require authenticated Telegram user context.";
     const next = [{ command, result, ts: now() }, ...recent].slice(0, 20);
     run("UPDATE telegram_settings SET recent_commands=$recent, last_checked_at=$t WHERE id=1", { $recent: json(next), $t: now() });
     audit("telegram.command", "telegram_settings", "1", command, { result });

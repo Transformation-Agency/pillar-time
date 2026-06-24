@@ -9,6 +9,7 @@ const leverageWeights = {
 };
 
 export const leverageCategories = Object.keys(leverageWeights);
+export const defaultPrimaryCalendarIds = ["pjacooper@gmail.com", "paul@transformationagency.com"];
 
 export function localDateKey(date = new Date(), timezone = "America/Denver") {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -63,6 +64,255 @@ export function rankActions(candidates = [], feedback = []) {
       reason: item.reason || (item.priority === "high" ? `High priority. ${reasonForCategory(category)}` : reasonForCategory(category)),
     };
   }).sort((a, b) => b.score - a.score || String(a.title || "").localeCompare(String(b.title || "")));
+}
+
+function cleanCalendarId(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function parseEventTime(value = "") {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isDateOnly(value = "") {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+function eventMinutes(event = {}) {
+  if (!event.start || !event.end || isDateOnly(event.start) || isDateOnly(event.end)) return 0;
+  const start = parseEventTime(event.start);
+  const end = parseEventTime(event.end);
+  if (!start || !end) return 0;
+  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+}
+
+export function classifyCalendarEvents(events = [], options = {}) {
+  const primaryIds = new Set((options.primaryCalendarIds || defaultPrimaryCalendarIds).map(cleanCalendarId));
+  return (events || []).map((event, index) => {
+    const calendarId = cleanCalendarId(event.calendarId || event.sourceCalendarId || event.calendarEmail || "");
+    const attendeeStatus = String(event.selfResponseStatus || event.attendeeStatus || "").toLowerCase();
+    const organizerEmail = cleanCalendarId(event.organizerEmail || "");
+    const isAllDay = isDateOnly(event.start) || String(event.time || "").toLowerCase() === "all day";
+    const durationMinutes = eventMinutes(event);
+    const isPrimaryCalendar = primaryIds.has(calendarId) || calendarId === "primary";
+    const isSubscribedCalendar = /holiday|import\.calendar|group\.v\.calendar/i.test(calendarId);
+    const isSharedCalendar = !!calendarId && !isPrimaryCalendar;
+    const isDeclined = attendeeStatus === "declined" || String(event.status || "").toLowerCase() === "cancelled";
+    const isOrganizer = organizerEmail && primaryIds.has(organizerEmail);
+    const isAttendee = Array.isArray(event.attendees) ? event.attendees.length > 0 : !!event.attendeeCount;
+    const isMine = !isDeclined && (isPrimaryCalendar || attendeeStatus === "accepted" || isOrganizer || !!event.selfAttendee);
+    let visibility = "softContext";
+    if (isDeclined) visibility = "ignore";
+    else if (isAllDay) visibility = /travel|flight|retreat|conference|onsite|offsite/i.test(event.title || "") && isMine ? "softContext" : "backgroundContext";
+    else if (isMine && isPrimaryCalendar) visibility = "hardBlock";
+    else if (isMine) visibility = "softContext";
+    else if (isSubscribedCalendar) visibility = "backgroundContext";
+    const blocksTime = visibility === "hardBlock" && !isAllDay;
+    const confidence = isDeclined ? 0.95 : isPrimaryCalendar || attendeeStatus ? 0.86 : isSharedCalendar ? 0.62 : 0.55;
+    return {
+      id: event.id || event.htmlLink || `calendar-${index + 1}`,
+      title: event.title || event.summary || "Calendar event",
+      start: event.start || "",
+      end: event.end || "",
+      time: event.time || "",
+      calendar: event.calendar || "",
+      calendarId,
+      calendarRole: isPrimaryCalendar ? "primary" : isSubscribedCalendar ? "subscribed" : isSharedCalendar ? "shared" : "unknown",
+      isAllDay,
+      isTimed: !isAllDay,
+      durationMinutes,
+      isPrimaryCalendar,
+      isSharedCalendar,
+      isSubscribedCalendar,
+      attendeeStatus: attendeeStatus || "unknown",
+      organizerEmail,
+      isOrganizer: !!isOrganizer,
+      isAttendee: !!isAttendee,
+      isMine: !!isMine,
+      blocksTime,
+      visibility,
+      confidence,
+      event,
+    };
+  });
+}
+
+function feedbackPenaltyFor(feedback = []) {
+  const penalties = new Map();
+  for (const item of feedback || []) {
+    if (!item?.key) continue;
+    const amount = item.feedback === "never" ? 60 : item.feedback === "incorrect" ? 36 : item.feedback === "notToday" ? 18 : 0;
+    penalties.set(item.key, Math.max(penalties.get(item.key) || 0, amount));
+  }
+  return penalties;
+}
+
+export function rankExecutiveCandidates({ tasks = [], commitments = [], calendarClassifications = [], feedback = [], nowDate = new Date() } = {}) {
+  const penalties = feedbackPenaltyFor(feedback);
+  const candidates = [];
+  for (const commitment of commitments || []) {
+    candidates.push({
+      id: `commitment:${commitment.id}`,
+      title: commitment.title,
+      source: "commitment",
+      leverageCategory: "leadership",
+      priority: "high",
+      estimateMinutes: commitment.estimateMinutes || 30,
+      authorityBasis: "Already accepted as a protected commitment.",
+      objectiveServed: commitment.notes || commitment.description || "Keep an explicit commitment from slipping.",
+      constraintRelieved: "Reduces open-loop pressure.",
+      exactNextStep: commitment.nextAction || `Protect time for ${commitment.title}.`,
+      whyThis: "This is already selected as a commitment, so the day should protect it before adding more.",
+      tradeoff: "This may displace lower-leverage admin or shared-calendar noise.",
+      confidence: 0.88,
+      feedbackKey: commitment.id,
+    });
+  }
+  for (const task of tasks || []) {
+    candidates.push({
+      id: `task:${task.id}`,
+      taskId: task.id,
+      title: task.title,
+      notes: task.notes,
+      leverageCategory: task.leverageCategory || "admin",
+      priority: task.priority || "normal",
+      source: "task",
+      dueAt: task.dueAt,
+      estimateMinutes: task.estimateMinutes || 30,
+      status: task.status,
+      waitingOn: task.waitingOn,
+      feedbackKey: task.id,
+      authorityBasis: "Local task; user may accept, defer, or archive.",
+      objectiveServed: task.goal || task.project || reasonForCategory(task.leverageCategory || "admin"),
+      constraintRelieved: task.waitingOn ? `Waiting on ${task.waitingOn}; moving this may unblock someone.` : task.dependencies || "Moves captured work toward done.",
+      exactNextStep: task.notes || `Spend ${task.estimateMinutes || 30} minutes moving: ${task.title}.`,
+      whyThis: task.waitingOn ? "This may unblock another person or decision." : reasonForCategory(task.leverageCategory || "admin"),
+      tradeoff: "Choosing this means not using the next block for calendar prep or reactive work.",
+      confidence: task.priority === "high" ? 0.82 : 0.68,
+    });
+  }
+  for (const item of calendarClassifications || []) {
+    if (item.visibility === "ignore" || item.isAllDay || !item.isMine) continue;
+    const needsPrep = /call|huddle|meeting|checkpoint|review|planning|interview|demo|sales|board|investor/i.test(item.title);
+    if (!needsPrep) continue;
+    candidates.push({
+      id: `calendar:${item.id}`,
+      title: `Prepare for ${item.title}`,
+      leverageCategory: item.visibility === "hardBlock" ? "leadership" : "admin",
+      source: "calendar",
+      dueAt: item.start,
+      estimateMinutes: 10,
+      feedbackKey: `calendar:${item.id}`,
+      authorityBasis: item.visibility === "hardBlock" ? "Accepted or primary-calendar timed event." : "Calendar context only; confirm before treating as commitment.",
+      objectiveServed: "Show up prepared for a real meeting rather than reacting in the room.",
+      constraintRelieved: "Reduces meeting ambiguity and follow-up debt.",
+      exactNextStep: `Before ${item.time || item.start}, write the desired outcome, key question, and follow-up owner for ${item.title}.`,
+      whyThis: item.visibility === "hardBlock" ? "This is a timed event that appears to be yours and may need preparation." : "This may matter, but it is softer context than primary commitments.",
+      tradeoff: "Do this only if it beats protected focus work; do not let calendar noise crowd the day.",
+      confidence: Math.min(0.9, item.confidence || 0.65),
+      calendarClassificationId: item.id,
+    });
+  }
+  return candidates.map((candidate) => {
+    const category = leverageCategories.includes(candidate.leverageCategory) ? candidate.leverageCategory : "admin";
+    const dueMs = candidate.dueAt ? new Date(candidate.dueAt).getTime() - nowDate.getTime() : Infinity;
+    const urgencyBoost = Number.isFinite(dueMs) ? Math.max(0, Math.min(28, 24 - Math.floor(dueMs / 3600000))) : 0;
+    const authorityBoost = /Already accepted|primary-calendar|Accepted/i.test(candidate.authorityBasis || "") ? 10 : 0;
+    const constraintBoost = /unblock|waiting|constraint|bottleneck/i.test(`${candidate.constraintRelieved || ""} ${candidate.waitingOn || ""}`) ? 12 : 0;
+    const flowBoost = candidate.source === "commitment" ? 14 : candidate.status === "in_progress" ? 10 : 0;
+    const priorityBoost = candidate.priority === "high" ? 28 : candidate.priority === "normal" ? 6 : candidate.priority === "low" ? -8 : 0;
+    const penalty = penalties.get(candidate.feedbackKey || candidate.id || candidate.title) || 0;
+    return {
+      ...candidate,
+      leverageCategory: category,
+      score: leverageWeights[category] + urgencyBoost + authorityBoost + constraintBoost + flowBoost + priorityBoost - penalty,
+    };
+  }).sort((a, b) => b.score - a.score || String(a.title || "").localeCompare(String(b.title || "")));
+}
+
+function minutesToHHMM(total = 0) {
+  const minutes = Math.max(0, Math.min(1439, Math.round(total)));
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+}
+
+function dateAtLocalTime(dateKey, hhmm, timezone = "America/Denver") {
+  const [hour, minute] = String(hhmm || "09:00").split(":").map(Number);
+  const utcGuess = new Date(`${dateKey}T${String(hour || 0).padStart(2, "0")}:${String(minute || 0).padStart(2, "0")}:00.000Z`);
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(utcGuess);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const currentMinutes = Number(values.hour) * 60 + Number(values.minute);
+  const targetMinutes = (Number(hour) || 0) * 60 + (Number(minute) || 0);
+  return new Date(utcGuess.getTime() + (targetMinutes - currentMinutes) * 60000);
+}
+
+export function buildProposedCalendarBlocks({ dateKey = localDateKey(new Date()), timezone = "America/Denver", preferences = {}, rankedCandidates = [], calendarClassifications = [], categories = [] } = {}) {
+  const work = preferences.workHours || { start: "09:00", end: "17:00" };
+  const buffer = Math.max(0, Number(preferences.meetingBufferMinutes || 10));
+  const hardBlocks = (calendarClassifications || [])
+    .filter((item) => item.blocksTime && item.start && item.end)
+    .map((item) => ({
+      start: parseEventTime(item.start),
+      end: parseEventTime(item.end),
+      title: item.title,
+    }))
+    .filter((item) => item.start && item.end)
+    .sort((a, b) => a.start - b.start);
+  const windows = [];
+  let cursor = dateAtLocalTime(dateKey, work.start || "09:00", timezone);
+  const dayEnd = dateAtLocalTime(dateKey, work.end || "17:00", timezone);
+  for (const block of hardBlocks) {
+    const paddedStart = new Date(block.start.getTime() - buffer * 60000);
+    if (paddedStart > cursor) windows.push({ start: cursor, end: paddedStart });
+    cursor = new Date(Math.max(cursor.getTime(), block.end.getTime() + buffer * 60000));
+  }
+  if (dayEnd > cursor) windows.push({ start: cursor, end: dayEnd });
+  const categoryByName = new Map((categories || []).map((category) => [String(category.name || "").toLowerCase(), category]));
+  const blocks = [];
+  const candidates = (rankedCandidates || []).filter((candidate) => candidate.source !== "calendar").slice(0, 6);
+  for (const candidate of candidates) {
+    const minutes = Math.max(15, Math.min(120, Number(candidate.estimateMinutes || (candidate.leverageCategory === "deepWork" ? preferences.focusBlockMinutes || 90 : 45))));
+    const window = windows.find((slot) => (slot.end.getTime() - slot.start.getTime()) / 60000 >= minutes);
+    if (!window) continue;
+    const categoryName = candidate.source === "task" ? "Linear Execution" : candidate.leverageCategory === "deepWork" ? "Deep Work" : "Admin";
+    const category = categoryByName.get(categoryName.toLowerCase()) || {};
+    const start = window.start;
+    const end = new Date(start.getTime() + minutes * 60000);
+    blocks.push({
+      id: `proposed:${candidate.id}`,
+      title: `${category.calendarTitlePrefix || ""}${candidate.title}`,
+      category: categoryName,
+      sourceCandidateId: candidate.id,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      minutes,
+      reason: candidate.whyThis || candidate.reason || "Protect time for high-leverage work.",
+      approvalRequired: true,
+    });
+    window.start = new Date(end.getTime() + 5 * 60000);
+  }
+  const prepCandidates = (rankedCandidates || []).filter((candidate) => candidate.source === "calendar").slice(0, 4);
+  for (const candidate of prepCandidates) {
+    const due = parseEventTime(candidate.dueAt);
+    if (!due) continue;
+    const minutes = Math.max(10, Math.min(30, Number(candidate.estimateMinutes || 10)));
+    const end = new Date(due.getTime() - buffer * 60000);
+    const start = new Date(end.getTime() - minutes * 60000);
+    if (start < dateAtLocalTime(dateKey, work.start || "09:00", timezone)) continue;
+    blocks.push({
+      id: `proposed:${candidate.id}`,
+      title: `Prep: ${candidate.title.replace(/^Prepare for\s+/i, "")}`,
+      category: "Meeting Prep",
+      sourceCandidateId: candidate.id,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      minutes,
+      reason: candidate.whyThis || "Prepare before the meeting starts.",
+      approvalRequired: true,
+    });
+  }
+  return blocks.sort((a, b) => String(a.start).localeCompare(String(b.start)));
 }
 
 export function reasonForCategory(category = "admin") {
