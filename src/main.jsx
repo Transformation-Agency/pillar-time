@@ -935,12 +935,29 @@ function displayCadence(value = "") {
 }
 
 function TimeSuggestionCard({ suggestion, mutate }) {
-  const accept = () => mutate("/api/time/commitments", {
-    title: suggestion.title,
-    notes: suggestion.reason || suggestion.notes || "",
-    sourceSuggestionId: suggestion.feedbackKey || suggestion.id,
-  });
-  const feedback = (value) => mutate(`/api/time/suggestions/${encodeURIComponent(suggestion.feedbackKey || suggestion.id || suggestion.title)}/feedback`, { feedback: value });
+  const [message, setMessage] = React.useState("");
+  const accept = async () => {
+    setMessage("");
+    try {
+      await mutate("/api/time/commitments", {
+        title: suggestion.title,
+        notes: suggestion.reason || suggestion.notes || "",
+        sourceSuggestionId: suggestion.feedbackKey || suggestion.id,
+      });
+      setMessage("Accepted into Today’s Three.");
+    } catch (error) {
+      setMessage(error.message || "Could not accept this suggestion.");
+    }
+  };
+  const feedback = async (value) => {
+    setMessage("");
+    try {
+      await mutate(`/api/time/suggestions/${encodeURIComponent(suggestion.feedbackKey || suggestion.id || suggestion.title)}/feedback`, { feedback: value });
+      setMessage(value === "notToday" ? "Moved out of today." : "Feedback saved.");
+    } catch (error) {
+      setMessage(error.message || "Could not save suggestion feedback.");
+    }
+  };
   return <div className="time-card">
     <div className="time-card-head">
       <div><strong>{suggestion.title}</strong><small>{suggestion.whyThis || suggestion.reason || "High-leverage candidate for today."}</small></div>
@@ -957,6 +974,7 @@ function TimeSuggestionCard({ suggestion, mutate }) {
       <Button icon="clock" onClick={() => feedback("notToday")}>Not Today</Button>
       <Button icon="x" onClick={() => feedback("incorrect")}>Incorrect</Button>
     </div>
+    {message && <p className={message.includes("Could not") ? "warn-text" : "ok-text"}>{message}</p>}
   </div>;
 }
 
@@ -1021,6 +1039,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
   const [contextType, setContextType] = React.useState("todo");
   const [contextText, setContextText] = React.useState("");
   const [contextMessage, setContextMessage] = React.useState("");
+  const [captureMessage, setCaptureMessage] = React.useState("");
   const latestArtifact = latestExecutiveArtifact(state);
   const agenda = latestCalendarAgenda(state).slice(0, 8);
   const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
@@ -1033,10 +1052,17 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
   const dayPlanPreflight = missingDayPlanContext.length
     ? `Generate works with available local context. Missing connectors will be reported: ${missingDayPlanContext.join(", ")}.`
     : "Generate will use Calendar, Linear, model synthesis, and local context.";
-  const addTask = (event) => {
+  const addTask = async (event) => {
     event.preventDefault();
     if (!capture.trim()) return;
-    mutate("/api/time/tasks", { title: capture.trim(), source: "quick-capture" }).then(() => setCapture(""));
+    setCaptureMessage("");
+    try {
+      await mutate("/api/time/tasks", { title: capture.trim(), source: "quick-capture" });
+      setCapture("");
+      setCaptureMessage("Captured.");
+    } catch (error) {
+      setCaptureMessage(error.message || "Could not capture this task.");
+    }
   };
   const removeDailyCommitment = (item) => {
     const title = item.title || "this commitment";
@@ -1117,6 +1143,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
           <input aria-label="Quick capture task or obligation" value={capture} onChange={(event) => setCapture(event.target.value)} placeholder="Quick capture a task or obligation" />
           <Button icon="plus" kind="primary">Capture</Button>
         </form>
+        {captureMessage && <p className={captureMessage.includes("Could not") ? "warn-text" : "ok-text"}>{captureMessage}</p>}
       </section>
       <section className="panel">
         <PanelTitle icon="trustedContext" title="Context Intake" sub="Add identity, standing commitments, or running to-do context before regenerating." />
