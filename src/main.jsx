@@ -466,8 +466,10 @@ function useConsoleState() {
           api("/api/runtime/stt"),
         ]);
         setState({ ...nextState, runtime: { ...(nextState.runtime || {}), ffmpeg: ffmpegRuntime.ffmpeg, stt: sttRuntime.stt } });
+        setError("");
       } catch {
         setState(nextState);
+        setError("");
       }
     } catch (e) {
       setError(e.message);
@@ -4266,7 +4268,11 @@ function App() {
       throw runError;
     }
   };
-  if (error) return <div className="boot">API error: {error}</div>;
+  if (error) return <div className="boot boot-error">
+    <strong>Pillar Time could not reach its local backend.</strong>
+    <p>{error}</p>
+    <button type="button" onClick={refresh}>Retry connection</button>
+  </div>;
   if (!state) return <div className="boot">Loading Pillar Time...</div>;
   if (!state.onboarding?.completed) return <Onboarding state={state} mutate={mutate} refresh={refresh} />;
   const screens = {

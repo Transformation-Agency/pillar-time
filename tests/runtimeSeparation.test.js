@@ -160,6 +160,15 @@ test("Help update menu exposes expanded state and keyboard dismissal", () => {
   assert.match(mainSource, /id="help-update-menu" className="help-menu" role="menu" aria-label="Help and update actions"/);
 });
 
+test("Backend connection errors offer retry and clear after recovery", () => {
+  assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
+  assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);
+  assert.match(mainSource, /if \(error\) return <div className="boot boot-error">/);
+  assert.match(mainSource, /Pillar Time could not reach its local backend\./);
+  assert.match(mainSource, /<button type="button" onClick=\{refresh\}>Retry connection<\/button>/);
+  assert.doesNotMatch(mainSource, /API error: \{error\}/);
+});
+
 test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {
   assert.match(serverSource, /function telegramDeliveryStatus/);
   assert.match(serverSource, /async function deliverBriefToTelegramWithSoftTimeout/);
