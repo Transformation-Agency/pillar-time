@@ -221,6 +221,18 @@ test("Google Calendar modal warns before discarding unsaved calendar selections"
   assert.match(mainSource, /<Button type="button" onClick=\{closeGoogleCalendarModal\}>Cancel<\/Button>/);
 });
 
+test("Linear setup warns before discarding unsaved connector edits", () => {
+  assert.match(mainSource, /const closeLinearModal = \(\) => \{/);
+  assert.match(mainSource, /const hasUnsavedLinearChanges = !!linearConnector\.apiKey \|\| linearConnector\.enabled !== savedEnabled;/);
+  assert.match(mainSource, /Discard unsaved Linear connector changes\? Your API key text and enable setting will not be saved\./);
+  assert.match(mainSource, /setLinearConnector\(\{ enabled: savedEnabled, apiKey: "" \}\);\n\s+setLinearModal\(false\);\n\s+return true;/);
+  assert.match(mainSource, /onMouseDown=\{\(event\) => \{ if \(event\.target === event\.currentTarget\) closeLinearModal\(\); \}\}/);
+  assert.match(mainSource, /aria-label="Close Linear setup" onClick=\{closeLinearModal\}/);
+  assert.match(mainSource, /<Button type="button" onClick=\{closeLinearModal\}>Cancel<\/Button>/);
+  assert.match(mainSource, /onClick=\{\(\) => \{ if \(closeLinearModal\(\)\) location\.hash = "linear"; \}\}/);
+  assert.doesNotMatch(mainSource, /aria-label="Close Linear setup" onClick=\{\(\) => setLinearModal\(false\)\}/);
+});
+
 test("Backend connection errors offer retry and clear after recovery", () => {
   assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
   assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);
