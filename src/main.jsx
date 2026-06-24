@@ -674,10 +674,10 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
             <span>{desktopUpdate?.isDesktop ? (desktopUpdate.progress || desktopUpdate.message || updateStatus) : "Updates are available in the desktop app."}</span>
           </div>
           {desktopUpdate?.isDesktop && <div className="help-menu-actions">
-            <Button type="button" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={updateBusy}>{desktopUpdate?.status === "checking" ? "Checking..." : "Check for Updates"}</Button>
-            {desktopUpdate.status === "available" && <Button type="button" icon="download" kind="primary" onClick={desktopUpdate.installUpdate}>Install Update</Button>}
-            {desktopUpdate.status === "installed" && <Button type="button" icon="restart" kind="primary" onClick={desktopUpdate.restartApp}>Restart to Update</Button>}
-            <Button type="button" icon="settings" onClick={() => { setHelpOpen(false); setRoute("settings"); }}>Open Update Settings</Button>
+            <Button type="button" role="menuitem" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={updateBusy}>{desktopUpdate?.status === "checking" ? "Checking..." : "Check for Updates"}</Button>
+            {desktopUpdate.status === "available" && <Button type="button" role="menuitem" icon="download" kind="primary" onClick={desktopUpdate.installUpdate}>Install Update</Button>}
+            {desktopUpdate.status === "installed" && <Button type="button" role="menuitem" icon="restart" kind="primary" onClick={desktopUpdate.restartApp}>Restart to Update</Button>}
+            <Button type="button" role="menuitem" icon="settings" onClick={() => { setHelpOpen(false); setRoute("settings"); }}>Open Update Settings</Button>
           </div>}
         </div>}
       </div>
