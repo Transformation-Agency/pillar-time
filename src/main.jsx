@@ -1101,7 +1101,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
         <PanelTitle icon="check" title="Today’s Three" sub="The commitments Pillar Time will protect for this date." />
         {activeCommitments.length ? activeCommitments.map((item) => <ListRow key={item.id} title={item.title} sub={item.notes || item.status} right={<div className="row tight-row"><Button icon="check" onClick={() => mutate(`/api/time/commitments/${item.id}`, { ...item, status: "done" }, "PATCH")}>Done</Button><Button icon="x" onClick={() => removeDailyCommitment(item)}>Remove</Button></div>} />) : <Empty icon="check" title="No commitments selected" body="Accept up to three high-leverage suggestions or add one from Planner." />}
         <form className="quick-capture" onSubmit={addTask}>
-          <input value={capture} onChange={(event) => setCapture(event.target.value)} placeholder="Quick capture a task or obligation" />
+          <input aria-label="Quick capture task or obligation" value={capture} onChange={(event) => setCapture(event.target.value)} placeholder="Quick capture a task or obligation" />
           <Button icon="plus" kind="primary">Capture</Button>
         </form>
       </section>
@@ -1168,9 +1168,9 @@ function Planner({ state, mutate }) {
     <section className="panel time-section">
       <PanelTitle icon="calendar" title="Important Dates" sub="Birthdays, deadlines, renewals, trips, and rituals that should shape planning." />
       <form className="quick-capture" onSubmit={createDate}>
-        <input value={importantDate.title} onChange={(event) => setImportantDate({ ...importantDate, title: event.target.value })} placeholder="Important date" />
-        <input type="date" value={importantDate.startDate} onChange={(event) => setImportantDate({ ...importantDate, startDate: event.target.value, endDate: importantDate.endDate || event.target.value })} />
-        <input type="date" value={importantDate.endDate} onChange={(event) => setImportantDate({ ...importantDate, endDate: event.target.value })} />
+        <input aria-label="Important date title" value={importantDate.title} onChange={(event) => setImportantDate({ ...importantDate, title: event.target.value })} placeholder="Important date" />
+        <input aria-label="Important date start date" type="date" value={importantDate.startDate} onChange={(event) => setImportantDate({ ...importantDate, startDate: event.target.value, endDate: importantDate.endDate || event.target.value })} />
+        <input aria-label="Important date end date" type="date" value={importantDate.endDate} onChange={(event) => setImportantDate({ ...importantDate, endDate: event.target.value })} />
         <Button icon="plus" kind="primary">Add</Button>
       </form>
       {(time.importantDates || []).map((item) => <ListRow key={item.id} title={item.title} sub={[item.startDate === item.endDate ? item.startDate : `${item.startDate} to ${item.endDate}`, item.category].filter(Boolean).join(" · ")} right={<Badge>{item.enabled ? "active" : "off"}</Badge>} />)}
@@ -1556,7 +1556,7 @@ function Sources({ state, mutate }) {
   >
     <div className="sources-workspace">
       <section className="panel sources-table-card">
-        <div className="table-title-row"><h2>Your sources</h2><label className="table-search"><Icon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sources..." /></label></div>
+        <div className="table-title-row"><h2>Your sources</h2><label className="table-search"><Icon name="search" /><input aria-label="Search sources" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sources..." /></label></div>
         {transcribeMessage && <div className="notice source-transcribe-message"><span>{transcribeMessage}</span></div>}
         {state.sources.length ? <table className="source-table simplified"><thead><tr><th>Source</th><th>Type</th><th>Status</th><th>Credentials</th><th></th></tr></thead><tbody>{filteredSources.map((s) => {
         const credential = sourceCredentialLabel(s);
@@ -1814,10 +1814,10 @@ function Linear({ state, refresh }) {
           <div className="source-config-title"><Icon name="box" />{group.name}<Badge>{group.issues.length}</Badge></div>
           <table className="source-table simplified"><thead><tr><th>Issue</th><th>State</th><th>Priority</th><th>Due</th><th>Comment</th><th></th></tr></thead><tbody>{group.issues.map((issue) => <tr key={issue.id}>
             <td><div className="source-name-cell"><BrandLogo name="Linear" /><div><strong>{issue.identifier} · {issue.title}</strong><small>{issue.assignee?.displayName || issue.assignee?.name || "Unassigned"} · {issue.updatedAt ? relativeTime(issue.updatedAt) : "No update"}</small></div></div></td>
-            <td><select value={issue.state?.id || ""} onChange={(event) => patchIssue(issue, { stateId: event.target.value })}>{stateOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></td>
+            <td><select aria-label={`State for ${issue.identifier || issue.title}`} value={issue.state?.id || ""} onChange={(event) => patchIssue(issue, { stateId: event.target.value })}>{stateOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></td>
             <td><Badge>{issue.priorityLabel || issue.priority || "No priority"}</Badge></td>
             <td>{issue.dueDate || "-"}</td>
-            <td><input value={commentDrafts[issue.id] || ""} onChange={(event) => setCommentDrafts((current) => ({ ...current, [issue.id]: event.target.value }))} placeholder="Add comment..." /></td>
+            <td><input aria-label={`Comment on ${issue.identifier || issue.title}`} value={commentDrafts[issue.id] || ""} onChange={(event) => setCommentDrafts((current) => ({ ...current, [issue.id]: event.target.value }))} placeholder="Add comment..." /></td>
             <td><div className="source-actions"><button type="button" onClick={() => addComment(issue)}><Icon name="send" />Comment</button>{issue.url && <button type="button" onClick={() => openExternalUrl(issue.url)}><Icon name="external" />Open</button>}</div></td>
           </tr>)}</tbody></table>
         </div>) : <Empty icon="linear" title={loading ? "Loading Linear issues" : "No matching issues"} body={loading ? "Fetching current work from Linear." : "Adjust filters or create a new issue below."} />}
@@ -2102,7 +2102,7 @@ function Briefs({ state, runWorkflow, refresh }) {
     {state.workflowRuns.length ? <div className="briefs-layout">
       <aside className="panel recent-briefs">
         <h2>Recent Briefs</h2>
-        <label className="search-box"><Search className="ico" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search briefs" /></label>
+        <label className="search-box"><Search className="ico" /><input aria-label="Search briefs" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search briefs" /></label>
         <div className="brief-list">{filtered.map((run) => {
           const selectedRun = selected?.id === run.id;
           const date = new Date(run.startedAt);
@@ -3236,7 +3236,7 @@ function Onboarding({ state, mutate, refresh }) {
         <h1>Seed Today’s Three.</h1>
         <p>Add one commitment or priority you want Pillar Time to protect today. You can add more from Today or Planner after onboarding.</p>
         <form className="quick-capture" onSubmit={addStarterCommitment}>
-          <input value={starterCommitment} onChange={(event) => setStarterCommitment(event.target.value)} placeholder="Example: Prepare for the Week-1 checkpoint" />
+          <input aria-label="Starter commitment for Today's Three" value={starterCommitment} onChange={(event) => setStarterCommitment(event.target.value)} placeholder="Example: Prepare for the Week-1 checkpoint" />
           <Button icon="plus" kind="primary">Add</Button>
         </form>
         <div className="readiness-list">
