@@ -38,12 +38,43 @@ jobs:
         # platform-specific optional deps (long-standing npm bug).
         run: npm install --no-audit --no-fund
 
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $version = node -p 'require("./package.json").version'
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version $version"
+          }
+          $tauriVersion = node -p 'require("./src-tauri/tauri.conf.json").version'
+          if ($tauriVersion -ne $version) {
+            throw "src-tauri/tauri.conf.json version $tauriVersion does not match package version $version"
+          }
+          $cargoTomlVersion = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "([^"]+)"' | Select-Object -First 1).Matches.Groups[1].Value
+          if ($cargoTomlVersion -ne $version) {
+            throw "src-tauri/Cargo.toml version $cargoTomlVersion does not match package version $version"
+          }
+          $cargoLock = Get-Content src-tauri/Cargo.lock
+          $pillarIndex = [Array]::IndexOf($cargoLock, 'name = "pillar-time"')
+          if ($pillarIndex -lt 0) { throw "Could not find pillar-time in src-tauri/Cargo.lock" }
+          $cargoLockVersion = ($cargoLock[($pillarIndex + 1)..($pillarIndex + 6)] | Select-String -Pattern '^version = "([^"]+)"' | Select-Object -First 1).Matches.Groups[1].Value
+          if ($cargoLockVersion -ne $version) {
+            throw "src-tauri/Cargo.lock pillar-time version $cargoLockVersion does not match package version $version"
+          }
+
       - name: Configure Azure Trusted Signing
         shell: pwsh
         run: |
           cargo install trusted-signing-cli --locked
           $signCommand = "trusted-signing-cli -e $env:AZURE_ENDPOINT -a $env:AZURE_CODE_SIGNING_NAME -c $env:AZURE_CERT_PROFILE_NAME %1"
-          $config = @{ bundle = @{ windows = @{ signCommand = $signCommand } } } | ConvertTo-Json -Depth 5
+          $config = @{
+            bundle = @{
+              targets = @("nsis")
+              externalBin = @("binaries/pillar-time-backend")
+              resources = @("resources/backend")
+              windows = @{ signCommand = $signCommand }
+            }
+          } | ConvertTo-Json -Depth 5
           Set-Content -Path src-tauri/tauri.sign.conf.json -Value $config
 
       - name: Test signing

@@ -25,7 +25,7 @@ npm run check
 npm run dev
 ```
 
-Open `http://127.0.0.1:42817/#/today`.
+Open `http://127.0.0.1:42818/#/today`.
 
 For an isolated local database:
 

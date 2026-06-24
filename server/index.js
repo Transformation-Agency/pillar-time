@@ -5710,6 +5710,30 @@ const app = express();
 app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: false, limit: "256kb" }));
 
+function sameOriginApiGuard(req, res, next) {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  const origin = req.get("origin") || "";
+  const fetchSite = req.get("sec-fetch-site") || "";
+  const googleCalendarBrokerOrigin = new URL(GOOGLE_CALENDAR_AUTH_BROKER_URL).origin;
+  const expectedOrigins = new Set([
+    `http://${host}:${port}`,
+    `http://127.0.0.1:${port}`,
+    `http://localhost:${port}`,
+  ]);
+  if (req.path === "/google-calendar/oauth/complete" && origin === googleCalendarBrokerOrigin) {
+    return next();
+  }
+  if (origin && !expectedOrigins.has(origin)) {
+    return res.status(403).json({ error: "Cross-origin API request blocked." });
+  }
+  if (fetchSite && !["same-origin", "same-site", "none"].includes(fetchSite)) {
+    return res.status(403).json({ error: "Cross-site API request blocked." });
+  }
+  return next();
+}
+
+app.use("/api", sameOriginApiGuard);
+
 app.patch("/api/time/preferences", (req, res) => {
   const b = req.body || {};
   const current = timePreferences();
@@ -7254,7 +7278,7 @@ if (process.env.NODE_ENV === "production") {
   app.use(vite.middlewares);
 }
 
-const port = Number(process.env.PORT || 5173);
+const port = Number(process.env.PORT || 42818);
 const host = process.env.HOST || "127.0.0.1";
 const googleCalendarCallbackPort = GOOGLE_CALENDAR_REDIRECT_URI ? Number(new URL(GOOGLE_CALENDAR_REDIRECT_URI).port || 80) : 0;
 const server = app.listen(port, host);

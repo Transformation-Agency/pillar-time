@@ -1,10 +1,10 @@
-# Pillar Brief Setup Guide
+# Pillar Time Setup Guide
 
-Use this guide when setting up a fresh desktop or self-hosted Pillar Brief install.
+Use this guide when setting up a fresh desktop or self-hosted Pillar Time install.
 
 ## Model Provider
 
-Pillar Brief needs one hosted model provider for brief generation, analyzer synthesis, source suggestions, and perspective lens generation. Model providers charge separately from Pillar Brief, so confirm billing or credits in the provider dashboard before expecting requests to run.
+Pillar Time needs one hosted model provider for brief generation, analyzer synthesis, source suggestions, and perspective lens generation. Model providers charge separately from Pillar Time, so confirm billing or credits in the provider dashboard before expecting requests to run.
 
 Recommended defaults:
 
@@ -30,11 +30,11 @@ Telegram is optional. You can always read briefs in the app without connecting a
 
 1. Open Telegram's BotFather token tutorial: https://core.telegram.org/bots/tutorial#obtain-your-bot-token
 2. Create a bot with BotFather and copy the API token.
-3. Paste the token into Pillar Brief.
+3. Paste the token into Pillar Time.
 4. In Telegram, open a chat with your new bot and tap Start.
-5. When Pillar Brief shows a pairing code, send that code to the bot.
+5. When Pillar Time shows a pairing code, send that code to the bot.
 
-If pairing says another process is polling the bot, close any other Pillar Brief desktop windows or self-hosted servers using the same bot token, then try again.
+If pairing says another process is polling the bot, close any other Pillar Time desktop windows or self-hosted servers using the same bot token, then try again.
 
 ## Source Integrations
 
@@ -45,7 +45,7 @@ Basic web, RSS, Reddit, YouTube, and podcast source setup can work without extra
 - FFmpeg install page: https://formulae.brew.sh/formula/ffmpeg
 - Homebrew install page: https://brew.sh
 
-If a suggested source requires credentials you do not want to add during onboarding, skip that prerequisite and Pillar Brief will remove that source from the first-run setup.
+If a suggested source requires credentials you do not want to add during onboarding, skip that prerequisite and Pillar Time will remove that source from the first-run setup.
 
 ## Optional Audio
 

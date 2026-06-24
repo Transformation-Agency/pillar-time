@@ -336,10 +336,10 @@ fn request_notification_authorization() {
         return;
     }
     let center = UNUserNotificationCenter::currentNotificationCenter();
-    let options =
-        UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound | UNAuthorizationOptions::Badge;
-    let handler =
-        StackBlock::new(|_granted: objc2::runtime::Bool, _error: *mut NSError| {}).copy();
+    let options = UNAuthorizationOptions::Alert
+        | UNAuthorizationOptions::Sound
+        | UNAuthorizationOptions::Badge;
+    let handler = StackBlock::new(|_granted: objc2::runtime::Bool, _error: *mut NSError| {}).copy();
     center.requestAuthorizationWithOptions_completionHandler(options, &handler);
 }
 

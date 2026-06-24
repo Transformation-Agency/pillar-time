@@ -32,6 +32,16 @@ jobs:
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version="$(node -p 'require("./package.json").version')"
+          test "$RELEASE_TAG" = "v${package_version}"
+          test "$(node -p 'require("./src-tauri/tauri.conf.json").version')" = "$package_version"
+          test "$(grep -m1 '^version = ' src-tauri/Cargo.toml | cut -d '"' -f2)" = "$package_version"
+          test "$(awk '/name = "pillar-time"/{found=1} found && /version = /{gsub(/"/, "", $3); print $3; exit}' src-tauri/Cargo.lock)" = "$package_version"
+
       - name: Wait for updater assets
         env:
           GH_TOKEN: ${{ github.token }}

@@ -65,6 +65,16 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          version="$(node -p 'require("./package.json").version')"
+          test "${GITHUB_REF_NAME}" = "v${version}"
+          test "$(node -p 'require("./src-tauri/tauri.conf.json").version')" = "$version"
+          test "$(grep -m1 '^version = ' src-tauri/Cargo.toml | cut -d '"' -f2)" = "$version"
+          test "$(awk '/name = "pillar-time"/{found=1} found && /version = /{gsub(/"/, "", $3); print $3; exit}' src-tauri/Cargo.lock)" = "$version"
+
       - name: Provide x64 Node sidecar
         if: matrix.target == 'x86_64-apple-darwin'
         # The backend sidecar is a copy of a Node binary. The runner's Node is
