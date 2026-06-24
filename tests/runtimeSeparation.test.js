@@ -212,6 +212,15 @@ test("Local dependency installers ask for consent before starting", () => {
   assert.match(mainSource, /const ok = window\.confirm\("Download the local Whisper model now\? This stores the speech-to-text model on this Mac for voice input and transcription\."\);\n\s+if \(!ok\) return;\n\s+setSettingsSttBusy\(true\);/);
 });
 
+test("Google Calendar modal warns before discarding unsaved calendar selections", () => {
+  assert.match(mainSource, /const closeGoogleCalendarModal = \(\) => \{\n\s+if \(googleCalendarSelectionDirty\) \{/);
+  assert.match(mainSource, /Discard unsaved Google Calendar selection changes\? Your daily planning inputs will keep using the previously saved calendars\./);
+  assert.match(mainSource, /if \(!ok\) return;\n\s+\}\n\s+setGoogleCalendarSelection\(state\.connectors\?\.googleCalendar\?\.selectedCalendarIds \|\| \["primary"\]\);/);
+  assert.match(mainSource, /onMouseDown=\{\(event\) => \{ if \(event\.target === event\.currentTarget\) closeGoogleCalendarModal\(\); \}\}/);
+  assert.match(mainSource, /aria-label="Close Google Calendar setup" onClick=\{closeGoogleCalendarModal\}/);
+  assert.match(mainSource, /<Button type="button" onClick=\{closeGoogleCalendarModal\}>Cancel<\/Button>/);
+});
+
 test("Backend connection errors offer retry and clear after recovery", () => {
   assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
   assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);
