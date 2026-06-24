@@ -1151,22 +1151,38 @@ function Planner({ state, mutate }) {
   const time = todayTime(state);
   const [task, setTask] = React.useState({ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" });
   const [importantDate, setImportantDate] = React.useState({ title: "", startDate: "", endDate: "" });
-  const createTask = (event) => {
+  const [plannerMessage, setPlannerMessage] = React.useState("");
+  const createTask = async (event) => {
     event.preventDefault();
     if (!task.title.trim()) return;
-    mutate("/api/time/tasks", task).then(() => setTask({ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" }));
+    setPlannerMessage("");
+    try {
+      await mutate("/api/time/tasks", task);
+      setTask({ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" });
+      setPlannerMessage("Task added.");
+    } catch (error) {
+      setPlannerMessage(error.message || "Could not add task.");
+    }
   };
   const archiveTask = (item) => {
     const title = item.title || "this task";
     if (!window.confirm(`Archive "${title}"? It will leave the active planning backlog and stop showing as a Today candidate.`)) return;
     mutate(`/api/time/tasks/${item.id}`, { status: "archived" }, "PATCH");
   };
-  const createDate = (event) => {
+  const createDate = async (event) => {
     event.preventDefault();
     if (!importantDate.title.trim() || !importantDate.startDate) return;
-    mutate("/api/time/important-dates", importantDate).then(() => setImportantDate({ title: "", startDate: "", endDate: "" }));
+    setPlannerMessage("");
+    try {
+      await mutate("/api/time/important-dates", importantDate);
+      setImportantDate({ title: "", startDate: "", endDate: "" });
+      setPlannerMessage("Important date added.");
+    } catch (error) {
+      setPlannerMessage(error.message || "Could not add important date.");
+    }
   };
   return <Page title="Planner" desc="Capture obligations, map leverage, and keep personal dates beside work context." wide>
+    {plannerMessage && <p className={plannerMessage.includes("added") ? "ok-text" : "warn-text"}>{plannerMessage}</p>}
     <div className="split">
       <section className="panel">
         <PanelTitle icon="planner" title="Add Task" sub="Rankable work that can become a Today suggestion." />

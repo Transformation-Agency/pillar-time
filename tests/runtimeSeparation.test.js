@@ -147,6 +147,19 @@ test("High-use placeholder and table controls expose accessible labels", () => {
   assert.match(mainSource, /aria-label="Starter commitment for Today's Three"/);
 });
 
+test("Planner capture saves expose local success and failure messages", () => {
+  assert.match(mainSource, /const \[plannerMessage, setPlannerMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const createTask = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!task\.title\.trim\(\)\) return;\n\s+setPlannerMessage\(""\);/);
+  assert.match(mainSource, /await mutate\("\/api\/time\/tasks", task\);\n\s+setTask\(\{ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" \}\);\n\s+setPlannerMessage\("Task added\."\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setPlannerMessage\(error\.message \|\| "Could not add task\."\);/);
+  assert.match(mainSource, /const createDate = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!importantDate\.title\.trim\(\) \|\| !importantDate\.startDate\) return;\n\s+setPlannerMessage\(""\);/);
+  assert.match(mainSource, /await mutate\("\/api\/time\/important-dates", importantDate\);\n\s+setImportantDate\(\{ title: "", startDate: "", endDate: "" \}\);\n\s+setPlannerMessage\("Important date added\."\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setPlannerMessage\(error\.message \|\| "Could not add important date\."\);/);
+  assert.match(mainSource, /\{plannerMessage && <p className=\{plannerMessage\.includes\("added"\) \? "ok-text" : "warn-text"\}>\{plannerMessage\}<\/p>\}/);
+  assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/tasks", task\)\.then\(\(\) => setTask/);
+  assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/important-dates", importantDate\)\.then\(\(\) => setImportantDate/);
+});
+
 test("Delivery schedule selects expose accessible labels", () => {
   assert.match(mainSource, /aria-label="Delivery frequency"/);
   assert.match(mainSource, /aria-label="Delivery day"/);
