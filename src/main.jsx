@@ -3728,6 +3728,17 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       await refresh();
     }
   };
+  const closeLinearModal = () => {
+    const savedEnabled = state.connectors?.linear?.enabled !== false;
+    const hasUnsavedLinearChanges = !!linearConnector.apiKey || linearConnector.enabled !== savedEnabled;
+    if (hasUnsavedLinearChanges) {
+      const ok = window.confirm("Discard unsaved Linear connector changes? Your API key text and enable setting will not be saved.");
+      if (!ok) return false;
+    }
+    setLinearConnector({ enabled: savedEnabled, apiKey: "" });
+    setLinearModal(false);
+    return true;
+  };
   const startGoogleCalendarOAuth = async (e) => {
     e.preventDefault();
     setGoogleCalendarMessage("");
@@ -4178,9 +4189,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <div className="modal-actions"><Button type="button" onClick={() => setRedditModal(false)}>Cancel</Button><Button type="button" icon="run" onClick={testRedditConnector}>Test</Button><Button icon="save" kind="primary">Save Reddit OAuth</Button></div>
       </form>
     </div>}
-    {linearModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLinearModal(false); }}>
+    {linearModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeLinearModal(); }}>
       <div className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Linear setup">
-        <div className="modal-head"><div><h2>Linear</h2><p>Paste a personal API key to read and update Linear issues.</p></div><button type="button" aria-label="Close Linear setup" onClick={() => setLinearModal(false)}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2>Linear</h2><p>Paste a personal API key to read and update Linear issues.</p></div><button type="button" aria-label="Close Linear setup" onClick={closeLinearModal}><Icon name="x" /></button></div>
         <div className={`notice ${linearConnected ? "" : "notice-warn"}`}>
           <strong>{linearConnected ? "Linear ready" : state.connectors?.linear?.credentialStatus === "missing" ? "Linear API key needed" : "Linear disabled"}</strong>
           <span>{state.connectors?.linear?.lastError || linearMessage || "Create a Linear personal API key, paste it here, then test and save."}</span>
@@ -4190,11 +4201,11 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <p className="hint">Keys are stored locally in the connector credential table and never returned to the UI. Existing `LINEAR_API_KEY` values still work as a fallback.</p>
         {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("enabled") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
         <div className="modal-actions">
-          <Button type="button" onClick={() => setLinearModal(false)}>Cancel</Button>
+          <Button type="button" onClick={closeLinearModal}>Cancel</Button>
           <Button type="button" icon="run" onClick={testLinearConnector}>Test</Button>
           {state.connectors?.linear?.enabled ? <Button type="button" icon="trash" onClick={disableLinearConnector}>Disable</Button> : null}
           <Button type="button" icon="save" onClick={enableLinearConnector}>Save</Button>
-          <Button type="button" icon="linear" kind="primary" onClick={() => { setLinearModal(false); location.hash = "linear"; }}>Open Linear</Button>
+          <Button type="button" icon="linear" kind="primary" onClick={() => { if (closeLinearModal()) location.hash = "linear"; }}>Open Linear</Button>
         </div>
       </div>
     </div>}
