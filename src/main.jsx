@@ -3785,6 +3785,10 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     });
   };
   const closeGoogleCalendarModal = () => {
+    if (googleCalendarSelectionDirty) {
+      const ok = window.confirm("Discard unsaved Google Calendar selection changes? Your daily planning inputs will keep using the previously saved calendars.");
+      if (!ok) return;
+    }
     setGoogleCalendarSelection(state.connectors?.googleCalendar?.selectedCalendarIds || ["primary"]);
     setGoogleCalendarSelectionDirty(false);
     setGoogleCalendarModal(false);
