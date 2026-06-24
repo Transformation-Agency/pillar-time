@@ -54,6 +54,9 @@ test("Executive calendar proposals are approval-gated and surfaced in Today", ()
   assert.match(mainSource, /Retry Calendar Write/);
   assert.match(mainSource, /Approved, but not written to Google Calendar/);
   assert.match(mainSource, /Open Settings/);
+  assert.match(mainSource, /Read ready · reconnect to write/);
+  assert.match(mainSource, /Reconnect required for approved calendar writes/);
+  assert.match(mainSource, /Reconnect for Calendar Writes/);
   assert.match(mainSource, /Add Context & Regenerate/);
   assert.match(mainSource, /identity\.self_statement/);
   assert.match(mainSource, /profile\.standing_commitment/);
