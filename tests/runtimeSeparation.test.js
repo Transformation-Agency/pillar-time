@@ -233,6 +233,22 @@ test("Linear setup warns before discarding unsaved connector edits", () => {
   assert.doesNotMatch(mainSource, /aria-label="Close Linear setup" onClick=\{\(\) => setLinearModal\(false\)\}/);
 });
 
+test("X and Reddit setup warn before discarding unsaved credentials", () => {
+  assert.match(mainSource, /const closeXModal = \(\) => \{/);
+  assert.match(mainSource, /Discard unsaved X API token\? The pasted bearer token will not be saved\./);
+  assert.match(mainSource, /setXConnector\(\{ enabled: true, apiKey: "" \}\);\n\s+setXModal\(false\);\n\s+return true;/);
+  assert.match(mainSource, /aria-label="Close X API setup" onClick=\{closeXModal\}/);
+  assert.match(mainSource, /<Button type="button" onClick=\{closeXModal\}>Cancel<\/Button>/);
+  assert.match(mainSource, /const closeRedditModal = \(\) => \{/);
+  assert.match(mainSource, /const hasUnsavedRedditChanges = !!redditConnector\.clientId/);
+  assert.match(mainSource, /Discard unsaved Reddit OAuth changes\? Client credentials and grant-type edits will not be saved\./);
+  assert.match(mainSource, /setRedditConnector\(\{ enabled: true, clientId: "", clientSecret: "", grantType: savedGrantType, deviceId: "DO_NOT_TRACK_THIS_DEVICE" \}\);/);
+  assert.match(mainSource, /aria-label="Close Reddit setup" onClick=\{closeRedditModal\}/);
+  assert.match(mainSource, /<Button type="button" onClick=\{closeRedditModal\}>Cancel<\/Button>/);
+  assert.doesNotMatch(mainSource, /aria-label="Close X API setup" onClick=\{\(\) => setXModal\(false\)\}/);
+  assert.doesNotMatch(mainSource, /aria-label="Close Reddit setup" onClick=\{\(\) => setRedditModal\(false\)\}/);
+});
+
 test("Backend connection errors offer retry and clear after recovery", () => {
   assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
   assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);
