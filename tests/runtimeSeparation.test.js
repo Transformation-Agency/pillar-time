@@ -194,6 +194,14 @@ test("Desktop update restart asks before quitting the app", () => {
   assert.doesNotMatch(mainSource, /const restartApp = React\.useCallback\(\(\) => desktopRuntime\.restartApp\(\), \[\]\);/);
 });
 
+test("Connector picker sends ElevenLabs users to audio settings", () => {
+  assert.match(mainSource, /const openAudioBriefSettings = \(\) => \{/);
+  assert.match(mainSource, /document\.getElementById\("audio-briefs-settings"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+  assert.match(mainSource, /<section className="panel connector-card" id="audio-briefs-settings">\s*<div className="connector-head">\s*<div className="connector-title"><span className="connector-icon blue"><Icon name="volume" \/><\/span><div><h2>Audio Briefs<\/h2>/);
+  assert.match(mainSource, /<button type="button" onClick=\{openAudioBriefSettings\}><Icon name="volume" \/><strong>ElevenLabs audio<\/strong><span>Jump to the Audio Briefs settings below\.<\/span><\/button>/);
+  assert.doesNotMatch(mainSource, /<button type="button" onClick=\{\(\) => setConnectorModal\(false\)\}><Icon name="volume" \/><strong>ElevenLabs audio<\/strong><span>Use the Audio Briefs settings below\.<\/span><\/button>/);
+});
+
 test("Backend connection errors offer retry and clear after recovery", () => {
   assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
   assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);
