@@ -3577,7 +3577,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const [connectorModal, setConnectorModal] = React.useState(false);
   const [editingProvider, setEditingProvider] = React.useState("");
   const [telegramModal, setTelegramModal] = React.useState(false);
+  const [telegramSetupMessage, setTelegramSetupMessage] = React.useState("");
   const [xModal, setXModal] = React.useState(false);
+  const [xMessage, setXMessage] = React.useState("");
   const [redditModal, setRedditModal] = React.useState(false);
   const [redditMessage, setRedditMessage] = React.useState("");
   const [linearModal, setLinearModal] = React.useState(false);
@@ -3661,9 +3663,15 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     if (googleCalendarSelectionDirty) return;
     setGoogleCalendarSelection(state.connectors?.googleCalendar?.selectedCalendarIds || ["primary"]);
   }, [state.connectors?.googleCalendar?.selectedCalendarIds, googleCalendarSelectionDirty]);
-  const saveModel = (e) => {
+  const saveModel = async (e) => {
     e.preventDefault();
-    mutate("/api/model", { ...model, enabled: true }, "PATCH").then(() => setEditingProvider(""));
+    setDetectError("");
+    try {
+      await mutate("/api/model", { ...model, enabled: true }, "PATCH");
+      setEditingProvider("");
+    } catch (error) {
+      setDetectError(error.message || "Could not save model provider.");
+    }
   };
   const closeModelProviderSetup = () => {
     const savedProvider = state.model.provider || "openai";
@@ -3681,9 +3689,16 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setEditingProvider("");
     return true;
   };
-  const saveXConnector = (e) => {
+  const saveXConnector = async (e) => {
     e.preventDefault();
-    mutate("/api/connectors/x", { ...xConnector, enabled: true }, "PATCH").then(() => setXModal(false));
+    setXMessage("");
+    try {
+      await mutate("/api/connectors/x", { ...xConnector, enabled: true }, "PATCH");
+      setXConnector({ enabled: true, apiKey: "" });
+      setXModal(false);
+    } catch (error) {
+      setXMessage(error.message || "Could not save X API token.");
+    }
   };
   const closeXModal = () => {
     if (xConnector.apiKey) {
@@ -3691,6 +3706,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       if (!ok) return false;
     }
     setXConnector({ enabled: true, apiKey: "" });
+    setXMessage("");
     setXModal(false);
     return true;
   };
@@ -3851,9 +3867,15 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setGoogleCalendarSelectionDirty(false);
     setGoogleCalendarMessage("Google Calendar disconnected.");
   };
-  const saveTelegram = (e) => {
+  const saveTelegram = async (e) => {
     e.preventDefault();
-    mutate("/api/telegram", { ...telegramForm, enabled: true, allowedUsers: telegramForm.allowedUsers.split(",").map((u) => u.trim()).filter(Boolean) }, "PATCH").then(() => setTelegramModal(false));
+    setTelegramSetupMessage("");
+    try {
+      await mutate("/api/telegram", { ...telegramForm, enabled: true, allowedUsers: telegramForm.allowedUsers.split(",").map((u) => u.trim()).filter(Boolean) }, "PATCH");
+      setTelegramModal(false);
+    } catch (error) {
+      setTelegramSetupMessage(error.message || "Could not save Telegram settings.");
+    }
   };
   const closeTelegramModal = () => {
     const savedTelegramForm = { enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") };
@@ -3865,6 +3887,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       if (!ok) return false;
     }
     setTelegramForm(savedTelegramForm);
+    setTelegramSetupMessage("");
     setTelegramModal(false);
     return true;
   };
@@ -4216,6 +4239,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <Field label="Bot token" type="password" value={telegramForm.botToken} onChange={(botToken) => setTelegramForm({ ...telegramForm, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} />
         <Field label="Chat ID" value={telegramForm.chatId} onChange={(chatId) => setTelegramForm({ ...telegramForm, chatId })} placeholder="-1001234567890 or 123456789" />
         <Field label="Allowed users" value={telegramForm.allowedUsers} onChange={(allowedUsers) => setTelegramForm({ ...telegramForm, allowedUsers })} placeholder="username, teammate, 123456789" />
+        {telegramSetupMessage && <p className="warn-text">{telegramSetupMessage}</p>}
         <div className="modal-actions"><Button type="button" onClick={closeTelegramModal}>Cancel</Button><Button icon="save" kind="primary">Save Telegram</Button></div>
       </form>
     </div>}
@@ -4223,6 +4247,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="X search API setup" onSubmit={saveXConnector}>
         <div className="modal-head"><div><h2>X search API</h2><p>Add or replace the official bearer token used for X search.</p></div><button type="button" aria-label="Close X API setup" onClick={closeXModal}><Icon name="x" /></button></div>
         <Field label="Bearer token" type="password" value={xConnector.apiKey} onChange={(apiKey) => setXConnector({ ...xConnector, apiKey })} placeholder={state.connectors?.x?.apiKeySaved ? "Saved. Paste a new token to replace it." : "Paste X bearer token"} />
+        {xMessage && <p className="warn-text">{xMessage}</p>}
         <div className="modal-actions"><Button type="button" onClick={closeXModal}>Cancel</Button><Button icon="save" kind="primary">Save X API</Button></div>
       </form>
     </div>}

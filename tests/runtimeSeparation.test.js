@@ -240,7 +240,7 @@ test("Linear setup warns before discarding unsaved connector edits", () => {
 test("X and Reddit setup warn before discarding unsaved credentials", () => {
   assert.match(mainSource, /const closeXModal = \(\) => \{/);
   assert.match(mainSource, /Discard unsaved X API token\? The pasted bearer token will not be saved\./);
-  assert.match(mainSource, /setXConnector\(\{ enabled: true, apiKey: "" \}\);\n\s+setXModal\(false\);\n\s+return true;/);
+  assert.match(mainSource, /setXConnector\(\{ enabled: true, apiKey: "" \}\);\n\s+setXMessage\(""\);\n\s+setXModal\(false\);\n\s+return true;/);
   assert.match(mainSource, /aria-label="Close X API setup" onClick=\{closeXModal\}/);
   assert.match(mainSource, /<Button type="button" onClick=\{closeXModal\}>Cancel<\/Button>/);
   assert.match(mainSource, /const closeRedditModal = \(\) => \{/);
@@ -262,11 +262,27 @@ test("Model and Telegram setup warn before discarding unsaved credentials", () =
   assert.match(mainSource, /const closeTelegramModal = \(\) => \{/);
   assert.match(mainSource, /const savedTelegramForm = \{ enabled: state\.telegram\.enabled, botToken: state\.telegram\.botToken, chatId: state\.telegram\.chatId, allowedUsers: state\.telegram\.allowedUsers\.join\(", "\) \};/);
   assert.match(mainSource, /Discard unsaved Telegram setup changes\? Bot token, chat ID, and allowed-user edits will not be saved\./);
-  assert.match(mainSource, /setTelegramForm\(savedTelegramForm\);\n\s+setTelegramModal\(false\);\n\s+return true;/);
+  assert.match(mainSource, /setTelegramForm\(savedTelegramForm\);\n\s+setTelegramSetupMessage\(""\);\n\s+setTelegramModal\(false\);\n\s+return true;/);
   assert.match(mainSource, /aria-label="Close Telegram setup" onClick=\{closeTelegramModal\}/);
   assert.match(mainSource, /<Button type="button" onClick=\{closeTelegramModal\}>Cancel<\/Button>/);
   assert.doesNotMatch(mainSource, /aria-label="Close model provider setup" onClick=\{\(\) => setEditingProvider\(""\)\}/);
   assert.doesNotMatch(mainSource, /aria-label="Close Telegram setup" onClick=\{\(\) => setTelegramModal\(false\)\}/);
+});
+
+test("Settings credential save failures stay visible in the setup modal", () => {
+  assert.match(mainSource, /const \[telegramSetupMessage, setTelegramSetupMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const \[xMessage, setXMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const saveModel = async \(e\) => \{\n\s+e\.preventDefault\(\);\n\s+setDetectError\(""\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setDetectError\(error\.message \|\| "Could not save model provider\."\);/);
+  assert.match(mainSource, /const saveXConnector = async \(e\) => \{\n\s+e\.preventDefault\(\);\n\s+setXMessage\(""\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setXMessage\(error\.message \|\| "Could not save X API token\."\);/);
+  assert.match(mainSource, /\{xMessage && <p className="warn-text">\{xMessage\}<\/p>\}/);
+  assert.match(mainSource, /const saveTelegram = async \(e\) => \{\n\s+e\.preventDefault\(\);\n\s+setTelegramSetupMessage\(""\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setTelegramSetupMessage\(error\.message \|\| "Could not save Telegram settings\."\);/);
+  assert.match(mainSource, /\{telegramSetupMessage && <p className="warn-text">\{telegramSetupMessage\}<\/p>\}/);
+  assert.doesNotMatch(mainSource, /mutate\("\/api\/model", \{ \.\.\.model, enabled: true \}, "PATCH"\)\.then\(\(\) => setEditingProvider\(""\)\)/);
+  assert.doesNotMatch(mainSource, /mutate\("\/api\/connectors\/x", \{ \.\.\.xConnector, enabled: true \}, "PATCH"\)\.then\(\(\) => setXModal\(false\)\)/);
+  assert.doesNotMatch(mainSource, /mutate\("\/api\/telegram", \{ \.\.\.telegramForm, enabled: true, allowedUsers:[\s\S]*?\.then\(\(\) => setTelegramModal\(false\)\)/);
 });
 
 test("Backend connection errors offer retry and clear after recovery", () => {
