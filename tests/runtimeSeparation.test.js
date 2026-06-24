@@ -91,6 +91,11 @@ test("First-run controls avoid misleading defaults and internal labels", () => {
   assert.match(mainSource, /runSettingsHealthCheck/);
   assert.match(mainSource, /No blocking local health warnings detected from current state/);
   assert.doesNotMatch(mainSource, /All systems operational/);
+  assert.match(mainSource, /const reopenOnboarding/);
+  assert.match(mainSource, /Reopen first-run onboarding\?/);
+  assert.match(mainSource, /saved settings, connectors, and local data stay in place/);
+  assert.match(mainSource, /Reopen onboarding/);
+  assert.doesNotMatch(mainSource, /Run onboarding/);
 });
 
 test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {

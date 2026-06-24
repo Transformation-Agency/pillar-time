@@ -3891,6 +3891,11 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       setHealthBusy(false);
     }
   };
+  const reopenOnboarding = async () => {
+    const ok = window.confirm("Reopen first-run onboarding? Pillar Time will return to the welcome flow, but your saved settings, connectors, and local data stay in place.");
+    if (!ok) return;
+    await mutate("/api/onboarding/reset", {});
+  };
   const updateTone = desktopUpdate?.status === "current" || desktopUpdate?.status === "installed" ? "ok" : desktopUpdate?.status === "error" ? "warn" : "muted";
   const updateLabel = desktopUpdate?.status === "available"
     ? "Update available"
@@ -3904,7 +3909,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   return <Page
     title="Settings"
     desc="Configure the models, services, and APIs used to analyze, research, and deliver your brief."
-    action={<div className="page-actions"><Button icon="templates" onClick={() => mutate("/api/onboarding/reset", {})}>Run onboarding</Button><Button icon="plus" kind="primary" onClick={() => setConnectorModal(true)}>Add connector</Button></div>}
+    action={<div className="page-actions"><Button icon="templates" onClick={reopenOnboarding}>Reopen onboarding</Button><Button icon="plus" kind="primary" onClick={() => setConnectorModal(true)}>Add connector</Button></div>}
     wide
   >
     <div className="settings-dashboard">
