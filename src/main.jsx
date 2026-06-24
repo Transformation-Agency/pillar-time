@@ -1025,6 +1025,11 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     if (!capture.trim()) return;
     mutate("/api/time/tasks", { title: capture.trim(), source: "quick-capture" }).then(() => setCapture(""));
   };
+  const removeDailyCommitment = (item) => {
+    const title = item.title || "this commitment";
+    if (!window.confirm(`Remove "${title}" from Today's Three? It will stop being protected for today, but the underlying task or source item will not be deleted.`)) return;
+    mutate(`/api/time/commitments/${item.id}`, { ...item, status: "removed" }, "PATCH");
+  };
   const importContextFile = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1094,7 +1099,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
       </section>
       <section className="panel">
         <PanelTitle icon="check" title="Today’s Three" sub="The commitments Pillar Time will protect for this date." />
-        {activeCommitments.length ? activeCommitments.map((item) => <ListRow key={item.id} title={item.title} sub={item.notes || item.status} right={<div className="row tight-row"><Button icon="check" onClick={() => mutate(`/api/time/commitments/${item.id}`, { ...item, status: "done" }, "PATCH")}>Done</Button><Button icon="x" onClick={() => mutate(`/api/time/commitments/${item.id}`, { ...item, status: "removed" }, "PATCH")}>Remove</Button></div>} />) : <Empty icon="check" title="No commitments selected" body="Accept up to three high-leverage suggestions or add one from Planner." />}
+        {activeCommitments.length ? activeCommitments.map((item) => <ListRow key={item.id} title={item.title} sub={item.notes || item.status} right={<div className="row tight-row"><Button icon="check" onClick={() => mutate(`/api/time/commitments/${item.id}`, { ...item, status: "done" }, "PATCH")}>Done</Button><Button icon="x" onClick={() => removeDailyCommitment(item)}>Remove</Button></div>} />) : <Empty icon="check" title="No commitments selected" body="Accept up to three high-leverage suggestions or add one from Planner." />}
         <form className="quick-capture" onSubmit={addTask}>
           <input value={capture} onChange={(event) => setCapture(event.target.value)} placeholder="Quick capture a task or obligation" />
           <Button icon="plus" kind="primary">Capture</Button>
@@ -1185,6 +1190,11 @@ function Reminders({ state, mutate }) {
     if (!form.title.trim()) return;
     mutate("/api/time/reminders", form).then(() => setForm(emptyReminderForm));
   };
+  const archiveReminder = (reminder) => {
+    const title = reminder.title || "this reminder";
+    if (!window.confirm(`Archive "${title}"? It will disappear from your active reminder list and stop scheduling future nudges.`)) return;
+    mutate(`/api/time/reminders/${reminder.id}`, { archive: true }, "PATCH");
+  };
   return <Page title="Reminders" desc="Local-first reminders with explicit channel switches and no surprise delivery." wide>
     <div className="metric-grid">
       <Metric label="Master" value={prefs.reminderMasterEnabled ? "On" : "Off"} sub="global reminder gate" alert={!prefs.reminderMasterEnabled} />
@@ -1233,7 +1243,7 @@ function Reminders({ state, mutate }) {
       </section>
       <section className="panel">
         <PanelTitle icon="reminders" title="Reminder List" sub="Pause, enable, disable, or archive any reminder." />
-        {(time.reminders || []).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.type === "sporadic" ? "sporadic" : reminder.scheduleType} · next ${reminder.nextOccurrence.dateKey} ${reminder.nextOccurrence.localTime}` : reminder.type === "sporadic" ? "sporadic window" : reminder.scheduleType} right={<div className="row tight-row"><Button icon={reminder.enabled ? "x" : "check"} onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { enabled: !reminder.enabled }, "PATCH")}>{reminder.enabled ? "Disable" : "Enable"}</Button><Button icon="clock" onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { pausedUntil: new Date(Date.now() + 86400000).toISOString() }, "PATCH")}>Pause</Button><Button icon="x" onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { archive: true }, "PATCH")}>Archive</Button></div>} />)}
+        {(time.reminders || []).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.type === "sporadic" ? "sporadic" : reminder.scheduleType} · next ${reminder.nextOccurrence.dateKey} ${reminder.nextOccurrence.localTime}` : reminder.type === "sporadic" ? "sporadic window" : reminder.scheduleType} right={<div className="row tight-row"><Button icon={reminder.enabled ? "x" : "check"} onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { enabled: !reminder.enabled }, "PATCH")}>{reminder.enabled ? "Disable" : "Enable"}</Button><Button icon="clock" onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { pausedUntil: new Date(Date.now() + 86400000).toISOString() }, "PATCH")}>Pause</Button><Button icon="x" onClick={() => archiveReminder(reminder)}>Archive</Button></div>} />)}
       </section>
     </div>
   </Page>;

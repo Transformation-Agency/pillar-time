@@ -122,6 +122,16 @@ test("Modal panels expose dialog semantics", () => {
   assert.match(mainSource, /className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Google Calendar setup"/);
 });
 
+test("Planning removal actions ask for confirmation before hiding active items", () => {
+  assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute \}\)/);
+  assert.match(mainSource, /Remove "\$\{title\}" from Today's Three\? It will stop being protected for today, but the underlying task or source item will not be deleted\./);
+  assert.match(mainSource, /onClick=\{\(\) => removeDailyCommitment\(item\)\}/);
+  assert.match(mainSource, /Archive "\$\{title\}"\? It will disappear from your active reminder list and stop scheduling future nudges\./);
+  assert.match(mainSource, /onClick=\{\(\) => archiveReminder\(reminder\)\}/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/commitments\/\$\{item\.id\}`, \{ \.\.\.item, status: "removed" \}, "PATCH"\)\}/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/reminders\/\$\{reminder\.id\}`, \{ archive: true \}, "PATCH"\)\}/);
+});
+
 test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {
   assert.match(serverSource, /function telegramDeliveryStatus/);
   assert.match(serverSource, /async function deliverBriefToTelegramWithSoftTimeout/);
