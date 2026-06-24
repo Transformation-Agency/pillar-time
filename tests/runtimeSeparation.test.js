@@ -144,6 +144,14 @@ test("High-use placeholder and table controls expose accessible labels", () => {
   assert.match(mainSource, /aria-label="Starter commitment for Today's Three"/);
 });
 
+test("TextArea forwards helper props so onboarding guidance is rendered", () => {
+  assert.match(mainSource, /function TextArea\(\{ label, value, onChange, rows = 4, \.\.\.props \}\)/);
+  assert.match(mainSource, /<textarea rows=\{rows\} value=\{value\} onChange=\{\(e\) => onChange\(e\.target\.value\)\} \{\.\.\.props\} \/>/);
+  assert.match(mainSource, /placeholder="Paste a statement, commitment list, or task notes here\."/);
+  assert.match(mainSource, /placeholder="Preferences, working style, meeting prep rules, protected hours, delegation principles, communication tone, people or projects to remember\."/);
+  assert.match(mainSource, /placeholder="Example: give me a skeptical investor, a product strategist, a policy watcher, and a media narrative lens\."/);
+});
+
 test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {
   assert.match(serverSource, /function telegramDeliveryStatus/);
   assert.match(serverSource, /async function deliverBriefToTelegramWithSoftTimeout/);
