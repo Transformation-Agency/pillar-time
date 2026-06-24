@@ -911,12 +911,25 @@ function TimeSuggestionCard({ suggestion, mutate }) {
   </div>;
 }
 
-function ProposedCalendarTiles({ artifact, approvals = [], mutate }) {
+function ProposedCalendarTiles({ artifact, approvals = [], mutate, setRoute }) {
   const blocks = artifact?.proposedCalendarBlocks || [];
-  const pendingApproval = approvals.find((approval) => approval.kind === "calendar.proposed_schedule" && approval.status === "pending" && (!artifact?.generatedAt || approval.payload?.runId === artifact?.runId || approval.runId === artifact?.runId));
-  const fallbackApproval = approvals.find((approval) => approval.kind === "calendar.proposed_schedule" && approval.status === "pending");
-  const approval = pendingApproval || fallbackApproval;
+  const proposalApprovals = approvals.filter((approval) => approval.kind === "calendar.proposed_schedule");
+  const artifactApproval = proposalApprovals.find((approval) => approval.payload?.runId === artifact?.runId || approval.runId === artifact?.runId);
+  const fallbackApproval = proposalApprovals.find((approval) => approval.status === "pending") || proposalApprovals[0];
+  const approval = artifactApproval || fallbackApproval;
   const [message, setMessage] = React.useState("");
+  const status = approval?.status || "missing";
+  const needsReconnect = /reconnect google calendar/i.test(`${approval?.resolutionNote || ""} ${message || ""}`);
+  const actionLabel = status === "pending"
+    ? "Approve Calendar"
+    : status === "approved"
+      ? "Retry Calendar Write"
+      : status === "executed"
+        ? "Calendar Added"
+        : status === "rejected"
+          ? "Calendar Rejected"
+          : "No Approval Available";
+  const canExecute = status === "pending" || status === "approved";
   const approve = async () => {
     if (!approval) {
       setMessage("No pending calendar approval found.");
@@ -924,9 +937,9 @@ function ProposedCalendarTiles({ artifact, approvals = [], mutate }) {
     }
     setMessage("");
     try {
-      await mutate(`/api/approvals/${approval.id}`, { status: "approved" }, "PATCH");
+      if (approval.status === "pending") await mutate(`/api/approvals/${approval.id}`, { status: "approved" }, "PATCH");
       await mutate(`/api/approvals/${approval.id}/execute`, {}, "POST");
-      setMessage("Calendar approved.");
+      setMessage("Calendar blocks were added.");
     } catch (error) {
       setMessage(error.message || "Calendar approval failed.");
     }
@@ -935,8 +948,12 @@ function ProposedCalendarTiles({ artifact, approvals = [], mutate }) {
   return <section className="panel proposed-calendar-panel">
     <div className="proposed-calendar-head">
       <PanelTitle icon="calendar" title="Proposed Calendar" sub="Approval-gated blocks built around hard calendar commitments." />
-      <Button icon="check" kind="primary" onClick={approve} disabled={!approval}>Approve Calendar</Button>
+      <Button icon={status === "approved" ? "restart" : "check"} kind="primary" onClick={approve} disabled={!canExecute}>{actionLabel}</Button>
     </div>
+    {approval && status !== "pending" && <div className={`approval-state-note ${status === "executed" ? "ok-text" : status === "approved" ? "warn-text" : "muted-text"}`}>
+      {status === "approved" ? `Approved, but not written to Google Calendar${approval.resolutionNote ? `: ${approval.resolutionNote}` : "."}` : `Calendar proposal ${status}.`}
+      {needsReconnect && setRoute && <Button type="button" icon="settings" onClick={() => setRoute("settings")}>Open Settings</Button>}
+    </div>}
     <div className="calendar-tile-row">
       {blocks.map((block) => <div className="calendar-tile" key={block.id || `${block.start}-${block.title}`}>
         <strong>{new Date(block.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong>
@@ -1015,7 +1032,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     await runWorkflow();
   };
   return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<div className="row tight-row"><Button icon="briefs" onClick={() => setRoute("briefs")} disabled={!latestArtifact}>View Brief</Button><Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Plan</Button></div>}>
-    <ProposedCalendarTiles artifact={latestArtifact} approvals={state.approvals || []} mutate={mutate} />
+    <ProposedCalendarTiles artifact={latestArtifact} approvals={state.approvals || []} mutate={mutate} setRoute={setRoute} />
     <div className="metric-grid">
       <Metric label="Today" value={time.todayKey || "-"} sub={time.preferences?.timezone || "local"} />
       <Metric label="Today’s Three" value={activeCommitments.filter((item) => item.status === "active").length} sub="accepted commitments" />
