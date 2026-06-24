@@ -596,7 +596,11 @@ function useDesktopUpdates() {
     }
   }, [updateState.update]);
 
-  const restartApp = React.useCallback(() => desktopRuntime.restartApp(), []);
+  const restartApp = React.useCallback(() => {
+    const ok = window.confirm("Restart Pillar Time now to finish installing the update? Any unsaved text or in-progress setup will be lost.");
+    if (!ok) return;
+    desktopRuntime.restartApp();
+  }, []);
 
   React.useEffect(() => {
     if (!desktopRuntime.isDesktop()) return;

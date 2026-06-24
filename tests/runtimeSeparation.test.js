@@ -187,6 +187,13 @@ test("Help update menu exposes expanded state and keyboard dismissal", () => {
   assert.match(mainSource, /id="help-update-menu" className="help-menu" role="menu" aria-label="Help and update actions"/);
 });
 
+test("Desktop update restart asks before quitting the app", () => {
+  assert.match(mainSource, /const restartApp = React\.useCallback\(\(\) => \{/);
+  assert.match(mainSource, /Restart Pillar Time now to finish installing the update\? Any unsaved text or in-progress setup will be lost\./);
+  assert.match(mainSource, /if \(!ok\) return;\n\s+desktopRuntime\.restartApp\(\);/);
+  assert.doesNotMatch(mainSource, /const restartApp = React\.useCallback\(\(\) => desktopRuntime\.restartApp\(\), \[\]\);/);
+});
+
 test("Backend connection errors offer retry and clear after recovery", () => {
   assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
   assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);
