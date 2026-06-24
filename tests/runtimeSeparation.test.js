@@ -80,3 +80,13 @@ test("First-run controls avoid misleading defaults and internal labels", () => {
   assert.match(mainSource, /Quiet by default/);
   assert.match(mainSource, /is-gated/);
 });
+
+test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {
+  assert.match(serverSource, /function telegramDeliveryStatus/);
+  assert.match(serverSource, /async function deliverBriefToTelegramWithSoftTimeout/);
+  assert.match(serverSource, /pendingAck: true/);
+  assert.match(serverSource, /telegram\.delivery_ack_pending/);
+  assert.match(serverSource, /telegram\.delivery_late_ack/);
+  assert.match(serverSource, /updateWorkflowTelegramDelivery/);
+  assert.doesNotMatch(serverSource, /promiseWithTimeout\(deliverBriefToTelegram\(\{ runId, artifact \}\), 45000, "Telegram delivery timed out after 45 seconds"\)/);
+});

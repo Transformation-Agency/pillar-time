@@ -1549,6 +1549,90 @@ async function promiseWithTimeout(promise, timeoutMs, message) {
   }
 }
 
+function telegramDeliveryStatus(delivery = {}) {
+  if (delivery?.pendingAck) return {
+    output: "Telegram send submitted; acknowledgement still pending",
+    detail: delivery.warning || "The run is complete. Check Telegram for delivery while Pillar Time waits for a late API acknowledgement.",
+  };
+  if (delivery?.ok) return {
+    output: `Delivered to Telegram in ${delivery.chunks || 1} message${delivery.chunks === 1 ? "" : "s"}`,
+    detail: delivery.chatId ? `Chat ${delivery.chatId}` : "",
+  };
+  if (delivery?.skipped) return {
+    output: delivery.reason,
+    detail: "Telegram delivery is optional.",
+  };
+  return {
+    output: delivery?.error || "Telegram delivery failed",
+    detail: "Generate completed, but Telegram delivery did not complete.",
+  };
+}
+
+function updateWorkflowTelegramDelivery(runId, delivery = {}) {
+  const row = get("SELECT artifact_json, steps_json FROM workflow_runs WHERE id=$id", { $id: runId });
+  if (!row) return;
+  const artifact = parse(row.artifact_json, {});
+  artifact.telegramDelivery = delivery;
+  const status = telegramDeliveryStatus(delivery);
+  const currentSteps = parse(row.steps_json, []);
+  const steps = (Array.isArray(currentSteps) ? currentSteps : []).map((step) => step?.key === "telegram"
+    ? { ...step, status: "done", output: status.output, detail: status.detail }
+    : step);
+  run("UPDATE workflow_runs SET artifact_json=$artifact, steps_json=$steps WHERE id=$id", {
+    $id: runId,
+    $artifact: json(artifact),
+    $steps: json(steps),
+  });
+}
+
+async function deliverBriefToTelegramWithSoftTimeout({ runId, artifact, timeoutMs = 45000 }) {
+  const deliveryPromise = deliverBriefToTelegram({ runId, artifact });
+  let settled = false;
+  const trackedDelivery = deliveryPromise.then((delivery) => {
+    settled = true;
+    return delivery;
+  }, (error) => {
+    settled = true;
+    throw error;
+  });
+
+  try {
+    return await promiseWithTimeout(trackedDelivery, timeoutMs, `Telegram delivery acknowledgement timed out after ${Math.round(timeoutMs / 1000)} seconds`);
+  } catch (error) {
+    const message = error.message || "Telegram delivery failed";
+    if (!/timed out/i.test(message)) throw error;
+
+    const pendingDelivery = {
+      ok: true,
+      pendingAck: true,
+      warning: `${message}. The message may already have been delivered.`,
+      timedOutAt: now(),
+    };
+    run("UPDATE telegram_settings SET last_checked_at=$t, last_error='', updated_at=$t WHERE id=1", { $t: now() });
+    audit("telegram.delivery_ack_pending", "workflow_run", runId, pendingDelivery.warning, {}, "system");
+
+    if (!settled) {
+      trackedDelivery.then((lateDelivery) => {
+        const acknowledged = { ...lateDelivery, lateAck: true, acknowledgedAt: now() };
+        updateWorkflowTelegramDelivery(runId, acknowledged);
+        audit("telegram.delivery_late_ack", "workflow_run", runId, "Telegram delivery acknowledged after workflow completion", { chunks: acknowledged.chunks, messageIds: acknowledged.messageIds }, "system");
+      }).catch((lateError) => {
+        const failed = {
+          ok: false,
+          lateAck: true,
+          error: lateError.message || "Telegram delivery failed after timeout",
+          failedAt: now(),
+        };
+        run("UPDATE telegram_settings SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE id=1", { $t: now(), $err: failed.error });
+        updateWorkflowTelegramDelivery(runId, failed);
+        audit("telegram.delivery_late_failed", "workflow_run", runId, failed.error, {}, "system");
+      });
+    }
+
+    return pendingDelivery;
+  }
+}
+
 async function callTextModel({ system, prompt }) {
   const modelRow = get("SELECT * FROM model_settings WHERE id=1");
   const settings = modelSettings();
@@ -6289,18 +6373,15 @@ async function executeExecutiveDayWorkflow(trigger = "Manual", options = {}) {
     await progressDelay();
     let telegramDelivery;
     try {
-      telegramDelivery = await promiseWithTimeout(deliverBriefToTelegram({ runId, artifact }), 45000, "Telegram delivery timed out after 45 seconds");
+      telegramDelivery = await deliverBriefToTelegramWithSoftTimeout({ runId, artifact, timeoutMs: 45000 });
     } catch (error) {
       telegramDelivery = { ok: false, error: error.message || "Telegram delivery failed", failedAt: now() };
       run("UPDATE telegram_settings SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE id=1", { $t: now(), $err: telegramDelivery.error });
       audit("telegram.delivery_failed", "workflow_run", runId, telegramDelivery.error, {}, "system");
     }
     artifact.telegramDelivery = telegramDelivery;
-    finishProgress("telegram", telegramDelivery?.ok
-      ? `Delivered to Telegram in ${telegramDelivery.chunks || 1} message${telegramDelivery.chunks === 1 ? "" : "s"}`
-      : telegramDelivery?.skipped
-        ? telegramDelivery.reason
-        : telegramDelivery?.error || "Telegram delivery failed");
+    const telegramStatus = telegramDeliveryStatus(telegramDelivery);
+    finishProgress("telegram", telegramStatus.output, telegramStatus.detail);
 
     const steps = workflowTemplateForRunType("executive_day").map(([key, name, group], index) => ({
       n: index + 1,
@@ -6467,18 +6548,15 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
   await progressDelay();
   let telegramDelivery;
   try {
-    telegramDelivery = await promiseWithTimeout(deliverBriefToTelegram({ runId, artifact }), 45000, "Telegram delivery timed out after 45 seconds");
+    telegramDelivery = await deliverBriefToTelegramWithSoftTimeout({ runId, artifact, timeoutMs: 45000 });
   } catch (error) {
     telegramDelivery = { ok: false, error: error.message || "Telegram delivery failed", failedAt: now() };
     run("UPDATE telegram_settings SET last_checked_at=$t, last_error=$err, updated_at=$t WHERE id=1", { $t: now(), $err: telegramDelivery.error });
     audit("telegram.delivery_failed", "workflow_run", runId, telegramDelivery.error, {}, "system");
   }
   artifact.telegramDelivery = telegramDelivery;
-  finishProgress("telegram", telegramDelivery?.ok
-    ? `Delivered to Telegram in ${telegramDelivery.chunks || 1} message${telegramDelivery.chunks === 1 ? "" : "s"}`
-    : telegramDelivery?.skipped
-      ? telegramDelivery.reason
-      : telegramDelivery?.error || "Telegram delivery failed");
+  const telegramStatus = telegramDeliveryStatus(telegramDelivery);
+  finishProgress("telegram", telegramStatus.output, telegramStatus.detail);
   const steps = workflowTemplate().map(([key, name, group], index) => {
     let output = "Completed with no external mutation";
     let detail = "Deterministic step completed and persisted.";
@@ -6514,12 +6592,8 @@ async function executeWorkflow(trigger = "Manual", options = {}) {
     if (key === "render") output = "Brief markdown rendered";
     if (key === "save") output = artifact.briefDocumentId ? "Brief artifact and document saved" : "Brief artifact saved";
     if (key === "telegram") {
-      output = telegramDelivery?.ok
-        ? `Delivered to Telegram in ${telegramDelivery.chunks || 1} message${telegramDelivery.chunks === 1 ? "" : "s"}`
-        : telegramDelivery?.skipped
-          ? telegramDelivery.reason
-          : telegramDelivery?.error || "Telegram delivery failed";
-      detail = telegramDelivery?.ok ? `Chat ${telegramDelivery.chatId}` : "Generate completed, but Telegram delivery did not complete.";
+      output = telegramStatus.output;
+      detail = telegramStatus.detail;
     }
     return { n: index + 1, key, name, group, status: "done", ms: 25 + index * 7, output, detail };
   });
