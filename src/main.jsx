@@ -3561,6 +3561,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const [sttStatus, setSettingsSttStatus] = React.useState(state.runtime?.stt || null);
   const [sttBusy, setSettingsSttBusy] = React.useState(false);
   const [sttMessage, setSettingsSttMessage] = React.useState("");
+  const [healthBusy, setHealthBusy] = React.useState(false);
+  const [healthMessage, setHealthMessage] = React.useState("");
   React.useEffect(() => {
     if (editingProvider) return;
     setModel({
@@ -3790,6 +3792,18 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const googleCalendarCanWrite = !!state.connectors?.googleCalendar?.canWrite;
   const googleCalendarNeedsWriteReconnect = googleCalendarConnected && !googleCalendarCanWrite;
   const telegramConnected = state.telegram?.enabled && state.telegram?.chatId && state.telegram?.botToken;
+  const healthWarnings = [
+    state.model?.status === "ready" ? "" : "Model connector is not ready; day plans will use deterministic fallback.",
+    googleCalendarConnected ? "" : "Google Calendar is not connected; calendar context will be missing.",
+    googleCalendarNeedsWriteReconnect ? "Google Calendar can read, but needs reconnect before approved calendar writes." : "",
+    linearConnected ? "" : "Linear is not ready; Linear work will be missing from ranking.",
+    state.telegram?.enabled && state.telegram?.lastError ? `Telegram needs attention: ${state.telegram.lastError}` : "",
+    ffmpegStatus?.available === false ? "FFmpeg is unavailable; podcast transcription is disabled." : "",
+    sttStatus?.available === false ? "Whisper speech-to-text is unavailable; local voice input/transcription is disabled." : "",
+    desktopUpdate?.status === "error" ? `Update check failed: ${desktopUpdate.lastError || desktopUpdate.message || "unknown error"}` : "",
+  ].filter(Boolean);
+  const healthTone = healthWarnings.length ? "warn" : "ok";
+  const healthTitle = healthWarnings.length ? "Review recommended" : "Core systems ready";
   const providerRows = modelProviderRows;
   const researchRows = [
     { service: "X (Twitter)", sub: "Search and monitor posts", type: "Social", logo: "X", status: xConnected ? "Connected" : "Needs token", connected: xConnected, action: "x" },
@@ -3857,6 +3871,24 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       await checkStt();
     } finally {
       setSettingsSttBusy(false);
+    }
+  };
+  const runSettingsHealthCheck = async () => {
+    setHealthBusy(true);
+    setHealthMessage("");
+    try {
+      const [ffmpegRuntime, sttRuntime] = await Promise.all([
+        api("/api/runtime/ffmpeg"),
+        api("/api/runtime/stt"),
+      ]);
+      setFfmpegStatus(ffmpegRuntime.ffmpeg);
+      setSettingsSttStatus(sttRuntime.stt);
+      await refresh();
+      setHealthMessage("Health check refreshed. Review any warnings above before relying on connected workflows.");
+    } catch (error) {
+      setHealthMessage(error.message || "Health check failed.");
+    } finally {
+      setHealthBusy(false);
     }
   };
   const updateTone = desktopUpdate?.status === "current" || desktopUpdate?.status === "installed" ? "ok" : desktopUpdate?.status === "error" ? "warn" : "muted";
@@ -3996,8 +4028,18 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       </section>
 
       <section className="panel connector-health">
-        <div className="connector-title"><span className="connector-icon green"><Icon name="audit" /></span><div><h2>All systems operational</h2><p>SQLite is local. Public posting and document mutation remain approval-gated.</p></div></div>
-        <Button icon="run">Run health check</Button>
+        <div className="connector-head">
+          <div className="connector-title"><span className="connector-icon green"><Icon name="audit" /></span><div><h2>Local health check</h2><p>SQLite is local. External writes remain approval-gated.</p></div></div>
+          <Badge tone={healthTone}>{healthTitle}</Badge>
+        </div>
+        <div className={`notice ${healthWarnings.length ? "notice-warn" : ""}`}>
+          <strong>{healthTitle}</strong>
+          <span>{healthWarnings.length ? `${healthWarnings.length} item${healthWarnings.length === 1 ? "" : "s"} need review before every workflow is fully covered.` : "No blocking local health warnings detected from current state."}</span>
+          {healthWarnings.slice(0, 4).map((warning) => <span key={warning}>- {warning}</span>)}
+          {healthWarnings.length > 4 && <span>- {healthWarnings.length - 4} more warning{healthWarnings.length - 4 === 1 ? "" : "s"} visible in connector sections above.</span>}
+          {healthMessage && <span>{healthMessage}</span>}
+        </div>
+        <Button type="button" icon="run" onClick={runSettingsHealthCheck} disabled={healthBusy}>{healthBusy ? "Checking..." : "Run health check"}</Button>
       </section>
 
       <section className="panel audit-settings">
