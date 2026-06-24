@@ -95,7 +95,10 @@ test("Telegram delivery timeouts are treated as pending acknowledgement, not fai
   assert.match(serverSource, /telegram\.delivery_late_ack/);
   assert.match(serverSource, /updateWorkflowTelegramDelivery/);
   assert.match(mainSource, /function briefDeliveryBadge/);
+  assert.match(mainSource, /function briefCompletionCopy/);
   assert.match(mainSource, /Check Telegram/);
+  assert.match(mainSource, /Brief saved\. Check Telegram\./);
+  assert.match(mainSource, /Check Telegram before sending it again\./);
   assert.match(mainSource, /Telegram delivery acknowledgement timed out/);
   assert.doesNotMatch(serverSource, /promiseWithTimeout\(deliverBriefToTelegram\(\{ runId, artifact \}\), 45000, "Telegram delivery timed out after 45 seconds"\)/);
 });

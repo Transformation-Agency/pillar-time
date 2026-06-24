@@ -89,6 +89,31 @@ function briefDeliveryBadge(run) {
   return { tone: "muted", label: "Saved" };
 }
 
+function briefCompletionCopy(runState) {
+  const isExecutiveDay = runState?.runType === "executive_day";
+  if (isExecutiveDay) return {
+    badge: { tone: "ok", label: "Saved" },
+    title: "Day plan saved.",
+    body: "The executive day plan was saved in Pillar Time.",
+  };
+  const deliveryBadge = briefDeliveryBadge(runState);
+  if (deliveryBadge.label === "Delivered") return {
+    badge: deliveryBadge,
+    title: "Brief delivered.",
+    body: "The new brief was saved and delivered to Telegram.",
+  };
+  if (deliveryBadge.label === "Check Telegram") return {
+    badge: deliveryBadge,
+    title: "Brief saved. Check Telegram.",
+    body: "The brief was saved, but Telegram acknowledgement was ambiguous. Check Telegram before sending it again.",
+  };
+  return {
+    badge: deliveryBadge,
+    title: "Brief saved.",
+    body: "The new brief was saved in Pillar Time.",
+  };
+}
+
 const sourceDefinitions = {
   Web: {
     credential: "No API key. Use for public pages; the fetch adapter should use readability/extraction.",
@@ -2112,6 +2137,7 @@ function GeneratingBrief({ runState }) {
   const currentIndex = Math.max(0, Math.min(steps.length - 1, activeIndex >= 0 ? activeIndex : status === "done" ? steps.length - 1 : runState?.stepIndex ?? doneCount));
   const current = steps[currentIndex];
   const progress = status === "done" ? 100 : Math.round(((currentIndex + 0.35) / steps.length) * 100);
+  const completion = status === "done" ? briefCompletionCopy(runState) : null;
   React.useEffect(() => {
     setSlowStep(false);
     if (status !== "running") return undefined;
@@ -2120,9 +2146,9 @@ function GeneratingBrief({ runState }) {
   }, [currentIndex, status]);
   return <div className="generating-screen">
     <div className="generating-panel">
-      <Badge tone={status === "error" ? "warn" : status === "done" ? "ok" : "muted"}>{status === "error" ? "Needs attention" : status === "done" ? "Delivered" : "Generating"}</Badge>
-      <h1>{status === "error" ? "Generation stopped." : status === "done" ? (isExecutiveDay ? "Day plan saved." : "Brief delivered.") : current.name}</h1>
-      <p>{status === "error" ? runState?.error || "Something went wrong while generating." : status === "done" ? (isExecutiveDay ? "The executive day plan was saved." : "The new brief was saved and sent to Telegram.") : `Step ${currentIndex + 1} of ${steps.length}: ${current.output || (workflowLabels[current.key] || current.name || "working").toLowerCase()}.`}</p>
+      <Badge tone={status === "error" ? "warn" : completion ? completion.badge.tone : "muted"}>{status === "error" ? "Needs attention" : completion ? completion.badge.label : "Generating"}</Badge>
+      <h1>{status === "error" ? "Generation stopped." : completion ? completion.title : current.name}</h1>
+      <p>{status === "error" ? runState?.error || "Something went wrong while generating." : completion ? completion.body : `Step ${currentIndex + 1} of ${steps.length}: ${current.output || (workflowLabels[current.key] || current.name || "working").toLowerCase()}.`}</p>
       {status === "running" && current.detail && <p className="generating-detail">{current.detail}</p>}
       <div className={`main-progress ${slowStep ? "working" : ""}`} aria-label="Brief generation progress"><span style={{ width: `${progress}%` }} /></div>
       <div className="generation-step-list">
