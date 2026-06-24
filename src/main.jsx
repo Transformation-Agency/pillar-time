@@ -3740,11 +3740,13 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const redditConnected = state.connectors?.reddit?.status === "ready";
   const linearConnected = state.connectors?.linear?.status === "ready";
   const googleCalendarConnected = state.connectors?.googleCalendar?.status === "ready";
+  const googleCalendarCanWrite = !!state.connectors?.googleCalendar?.canWrite;
+  const googleCalendarNeedsWriteReconnect = googleCalendarConnected && !googleCalendarCanWrite;
   const telegramConnected = state.telegram?.enabled && state.telegram?.chatId && state.telegram?.botToken;
   const providerRows = modelProviderRows;
   const researchRows = [
     { service: "X (Twitter)", sub: "Search and monitor posts", type: "Social", logo: "X", status: xConnected ? "Connected" : "Needs token", connected: xConnected, action: "x" },
-    { service: "Google Calendar", sub: "Add today's agenda to briefs", type: "Calendar", logo: "Calendar", status: googleCalendarConnected ? "Connected" : state.connectors?.googleCalendar?.status === "needs consent" ? "Needs consent" : "Needs OAuth", connected: googleCalendarConnected, action: "googleCalendar" },
+    { service: "Google Calendar", sub: "Read agenda and create approved blocks", type: "Calendar", logo: "Calendar", status: googleCalendarNeedsWriteReconnect ? "Read ready · reconnect to write" : googleCalendarConnected ? "Read/write ready" : state.connectors?.googleCalendar?.status === "needs consent" ? "Needs consent" : "Needs OAuth", connected: googleCalendarConnected, needsAttention: googleCalendarNeedsWriteReconnect, action: "googleCalendar" },
     { service: "Reddit", sub: "Monitor subreddits and posts", type: "Social", logo: "Reddit", status: redditConnected ? "Connected" : "Needs OAuth", connected: redditConnected, action: "reddit" },
     { service: "Linear", sub: "Read and update TRA issues", type: "Project", logo: "Linear", status: linearConnected ? "Connected" : state.connectors?.linear?.credentialStatus === "missing" ? "Needs key" : "Disabled", connected: linearConnected, action: "linear" },
   ];
@@ -3893,8 +3895,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           {researchRows.map((row) => <div className="connector-row" key={row.service}>
             <div className="connector-name"><BrandLogo name={row.logo} /><div><strong>{row.service}</strong><small>{row.sub}</small></div></div>
             <span>{row.type}</span>
-            <Badge tone={row.connected ? "ok" : "muted"}>{row.status}</Badge>
-            <span>{row.connected ? "Ready" : "-"}</span>
+            <Badge tone={row.needsAttention ? "warn" : row.connected ? "ok" : "muted"}>{row.status}</Badge>
+            <span>{row.needsAttention ? "Needs reconnect for writes" : row.connected ? "Ready" : "-"}</span>
             <Button type="button" icon="pencil" onClick={() => row.action === "x" ? setXModal(true) : row.action === "googleCalendar" ? setGoogleCalendarModal(true) : row.action === "reddit" ? setRedditModal(true) : row.action === "linear" ? setLinearModal(true) : null}>{row.action === "x" || row.action === "googleCalendar" || row.action === "reddit" || row.action === "linear" ? "Edit" : "View"}</Button>
           </div>)}
         </div>
@@ -4039,12 +4041,16 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       <form className="modal-card connector-modal form" onSubmit={startGoogleCalendarOAuth}>
         <div className="modal-head"><div><h2>Google Calendar</h2><p>Connect calendar access so Pillar Time can read today's agenda and create approved schedule blocks.</p></div><button type="button" onClick={closeGoogleCalendarModal}><Icon name="x" /></button></div>
         <div className="notice">
-          <strong>Read-only access</strong>
-          <span>Pillar Time requests permission to view calendar events and calendar names so you can choose which calendars appear in your brief.</span>
+          <strong>Calendar permissions</strong>
+          <span>Pillar Time reads calendar events and calendar names for planning. It only creates calendar blocks after you approve a proposed schedule.</span>
         </div>
         <p className="hint">Uses the configured Google OAuth client. Tokens stay in this app's local data store.</p>
+        {googleCalendarNeedsWriteReconnect && <div className="notice notice-warn">
+          <strong>Reconnect required for approved calendar writes</strong>
+          <span>Your current Google token can read calendar context, but it does not include the write scope needed to create approved schedule blocks. Reconnect Google Calendar, approve the requested permissions, then retry the calendar proposal.</span>
+        </div>}
         <div className={`notice ${googleCalendarConnected ? "" : "notice-warn"}`}>
-          <strong>{googleCalendarConnected ? "Google Calendar ready" : "Google Calendar not connected"}</strong>
+          <strong>{googleCalendarNeedsWriteReconnect ? "Google Calendar read access ready" : googleCalendarConnected ? "Google Calendar read/write ready" : "Google Calendar not connected"}</strong>
           <span>{state.connectors?.googleCalendar?.lastError || googleCalendarMessage || "Connect Google, then choose which calendars should feed your daily brief."}</span>
         </div>
         {googleCalendarConnected && <div className="connector-fields">
@@ -4055,7 +4061,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           </label>) : <p className="hint">Refresh calendars to load your available Google calendars.</p>}
         </div>}
         {googleCalendarMessage && <p className={googleCalendarMessage.includes("ready") || googleCalendarMessage.includes("opened") || googleCalendarMessage.includes("disconnected") ? "ok-text" : "warn-text"}>{googleCalendarMessage}</p>}
-        <div className="modal-actions"><Button type="button" onClick={closeGoogleCalendarModal}>Cancel</Button>{googleCalendarConnected && <Button type="button" icon="run" onClick={refreshGoogleCalendars}>Refresh calendars</Button>}{googleCalendarConnected && <Button type="button" icon="save" onClick={saveGoogleCalendarSelection}>Save calendars</Button>}<Button type="button" icon="run" onClick={testGoogleCalendar}>Test</Button>{googleCalendarConnected && <Button type="button" icon="trash" onClick={disconnectGoogleCalendar}>Disconnect</Button>}<Button icon="save" kind="primary">{googleCalendarConnected ? "Reconnect Google" : "Connect Google"}</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeGoogleCalendarModal}>Cancel</Button>{googleCalendarConnected && <Button type="button" icon="run" onClick={refreshGoogleCalendars}>Refresh calendars</Button>}{googleCalendarConnected && <Button type="button" icon="save" onClick={saveGoogleCalendarSelection}>Save calendars</Button>}<Button type="button" icon="run" onClick={testGoogleCalendar}>Test</Button>{googleCalendarConnected && <Button type="button" icon="trash" onClick={disconnectGoogleCalendar}>Disconnect</Button>}<Button icon="save" kind="primary">{googleCalendarNeedsWriteReconnect ? "Reconnect for Calendar Writes" : googleCalendarConnected ? "Reconnect Google" : "Connect Google"}</Button></div>
       </form>
     </div>}
   </Page>;
