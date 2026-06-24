@@ -1895,6 +1895,15 @@ function BriefSetup({ state, mutate }) {
     [next[index], next[target]] = [next[target], next[index]];
     return { ...current, sections: next };
   });
+  const removeBriefSection = (index) => {
+    const section = form.sections[index] || {};
+    const label = section.label || `section ${index + 1}`;
+    if (!window.confirm(`Remove "${label}" from this brief setup? This section will stop appearing in future generated briefs until you add it again.`)) return;
+    markForm((current) => ({
+      ...current,
+      sections: current.sections.filter((_, i) => i !== index),
+    }));
+  };
   const dropSection = (target) => markForm((current) => {
     if (dragIndex === null || dragIndex === target) return current;
     const next = [...current.sections];
@@ -1973,7 +1982,13 @@ function BriefSetup({ state, mutate }) {
             <label className="switch"><input type="checkbox" checked={section.enabled !== false} onChange={(event) => updateSection(index, { enabled: event.target.checked })} /><span /></label>
             <input className="section-title-input" value={section.label} onChange={(event) => updateSection(index, { label: event.target.value })} />
             <div className="section-target-controls"><span className="section-target-select">Standard prompt</span></div>
-            <div className="section-actions"><Button type="button" icon="copy" /><Button type="button" icon="pencil" /><Button type="button" icon="trash" onClick={() => markForm((current) => ({ ...current, sections: current.sections.filter((_, i) => i !== index) }))} /><Button type="button" onClick={() => moveSection(index, -1)} disabled={index === 0}>↑</Button><Button type="button" onClick={() => moveSection(index, 1)} disabled={index === form.sections.length - 1}>↓</Button></div>
+            <div className="section-actions">
+              <Button type="button" icon="copy" aria-label={`Copy ${section.label || "section"} (not available yet)`} title="Copy section is not available yet" disabled />
+              <Button type="button" icon="pencil" aria-label={`Edit ${section.label || "section"} inline`} title="Edit the title and prompt fields inline" disabled />
+              <Button type="button" icon="trash" aria-label={`Remove ${section.label || "section"}`} title={`Remove ${section.label || "section"}`} onClick={() => removeBriefSection(index)} />
+              <Button type="button" aria-label={`Move ${section.label || "section"} up`} title={`Move ${section.label || "section"} up`} onClick={() => moveSection(index, -1)} disabled={index === 0}>↑</Button>
+              <Button type="button" aria-label={`Move ${section.label || "section"} down`} title={`Move ${section.label || "section"} down`} onClick={() => moveSection(index, 1)} disabled={index === form.sections.length - 1}>↓</Button>
+            </div>
             <textarea value={section.instruction || ""} onChange={(event) => updateSection(index, { instruction: event.target.value })} rows={2} />
           </div>)}
         </div>
