@@ -46,8 +46,8 @@ import "./styles.css";
 
 const nav = [
   ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
-  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"]]],
-  ["Configure", [["briefSetup", "Brief Setup"], ["lenses", "Perspective Lenses"]]],
+  ["Context", [["briefs", "Intelligence"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"]]],
+  ["Configure", [["briefSetup", "Brief Setup"]]],
   ["System", [["settings", "Settings"]]],
 ];
 
@@ -461,6 +461,9 @@ function useDesktopUpdates() {
     update: null,
     message: "",
     progress: "",
+    endpoint: "",
+    lastCheckedAt: "",
+    lastError: "",
   });
 
   const checkForUpdates = React.useCallback(async ({ silent = false } = {}) => {
@@ -471,6 +474,7 @@ function useDesktopUpdates() {
     setUpdateState((current) => ({
       ...current,
       isDesktop: true,
+      endpoint: desktopRuntime.updaterEndpoint(),
       status: silent ? "checking-silent" : "checking",
       message: silent ? current.message : "Checking for updates...",
       progress: "",
@@ -488,6 +492,9 @@ function useDesktopUpdates() {
         update,
         message: update ? `Version ${update.version} is ready to install.` : "Pillar Time is up to date.",
         progress: "",
+        endpoint: desktopRuntime.updaterEndpoint(),
+        lastCheckedAt: new Date().toISOString(),
+        lastError: "",
       }));
       return update;
     } catch (error) {
@@ -497,6 +504,9 @@ function useDesktopUpdates() {
         status: silent ? "idle" : "error",
         message: silent ? current.message : error.message,
         progress: "",
+        endpoint: desktopRuntime.updaterEndpoint(),
+        lastCheckedAt: new Date().toISOString(),
+        lastError: error.message || "Update check failed",
       }));
       return null;
     }
@@ -543,6 +553,7 @@ function useDesktopUpdates() {
         status: "error",
         message: error.message,
         progress: "",
+        lastError: error.message || "Update install failed",
       }));
     }
   }, [updateState.update]);
@@ -553,7 +564,7 @@ function useDesktopUpdates() {
     if (!desktopRuntime.isDesktop()) return;
     let cancelled = false;
     desktopRuntime.appVersion().then((version) => {
-      if (!cancelled) setUpdateState((current) => ({ ...current, isDesktop: true, version }));
+      if (!cancelled) setUpdateState((current) => ({ ...current, isDesktop: true, version, endpoint: desktopRuntime.updaterEndpoint() }));
     }).catch(() => {});
     const timer = setTimeout(() => {
       if (!cancelled) checkForUpdates({ silent: true });
@@ -570,8 +581,7 @@ function useDesktopUpdates() {
 function Shell({ route, setRoute, state, desktopUpdate, children }) {
   const [helpOpen, setHelpOpen] = React.useState(false);
   const helpRef = React.useRef(null);
-  const activeSources = state?.sources?.filter((s) => s.status === "active").length || 0;
-  const counts = { sources: activeSources, lenses: state?.briefConfig?.perspectiveLenses?.filter((l) => l.enabled !== false).length || 0 };
+  const counts = {};
   const updateVisible = desktopUpdate?.isDesktop && ["available", "installed"].includes(desktopUpdate.status);
   const updateBusy = ["checking", "checking-silent", "installing"].includes(desktopUpdate?.status);
   const updateStatus = desktopUpdate?.status === "available"
@@ -780,22 +790,9 @@ function Overview({ state, setRoute, runWorkflow, mutate }) {
   const lastRun = state.workflowRuns[0];
   const owner = state.briefConfig?.ownerName || defaultOwnerName;
   const ownerGreeting = !isDefaultOwnerName(owner) ? `Welcome, ${owner}.` : "Welcome.";
-  const activeSources = state.sources.filter((s) => s.status === "active").length;
   const timezone = state.briefConfig.deliveryTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Denver";
   const timezones = timezoneOptions(timezone);
   const saveDelivery = (patch) => mutate("/api/brief-config", { ...state.briefConfig, deliveryTimezone: timezone, ...patch }, "PATCH");
-  const sourceCards = [
-    ["RSS / News", "RSS"],
-    ["Web search", "Web"],
-    ["Reddit", "Reddit"],
-    ["X trends", "X"],
-    ["YouTube transcripts", "YouTube"],
-    ["Podcast audio", "Podcast"],
-  ];
-  const addSource = (type) => {
-    sessionStorage.setItem("pendingSourceType", type);
-    setRoute("sources");
-  };
   const latestBrief = state.workflowRuns.find((r) => r.status === "completed");
   const latestBriefIsToday = latestBrief && new Date(latestBrief.startedAt).toDateString() === new Date().toDateString();
   return <div className="home-page">
@@ -812,13 +809,13 @@ function Overview({ state, setRoute, runWorkflow, mutate }) {
 
     <section className="home-grid">
       <div className="panel">
-        <PanelTitle icon="sources" title="Choose your sources" sub={`${activeSources} connected already. Add more sources to improve the brief.`} />
-        <div className="choice-grid">{sourceCards.map(([label, icon]) => {
-          const count = state.sources.filter((s) => s.type === icon && s.status === "active").length;
-          return <div className={`choice source-choice ${count ? "selected" : ""}`} key={label}>
-            <BrandLogo name={icon} /><span>{label}<small>{count ? `${count} connected` : "Not connected"}</small></span><Button icon="plus" onClick={() => addSource(icon)}>Add</Button>
-          </div>;
-        })}</div>
+        <PanelTitle icon="settings" title="Connect your workspace" sub="Optional connectors bring calendar, project, delivery, and audio context into Pillar Time." />
+        <div className="choice-grid">
+          <div className={`choice source-choice ${state.connectors?.linear?.status === "ready" ? "selected" : ""}`}><BrandLogo name="Linear" /><span>Linear<small>{state.connectors?.linear?.status === "ready" ? "Connected" : "Optional project connector"}</small></span><Button icon="linear" onClick={() => setRoute("linear")}>Open</Button></div>
+          <div className={`choice source-choice ${state.connectors?.googleCalendar?.status === "ready" ? "selected" : ""}`}><BrandLogo name="Calendar" /><span>Google Calendar<small>{state.connectors?.googleCalendar?.status === "ready" ? "Connected" : "Optional agenda context"}</small></span><Button icon="settings" onClick={() => setRoute("settings")}>Set up</Button></div>
+          <div className={`choice source-choice ${state.tts?.status === "ready" ? "selected" : ""}`}><Icon name="volume" /><span>Audio briefs<small>{state.tts?.status === "ready" ? "Ready" : "Optional ElevenLabs voice"}</small></span><Button icon="settings" onClick={() => setRoute("settings")}>Set up</Button></div>
+          <div className={`choice source-choice ${state.telegram?.enabled ? "selected" : ""}`}><BrandLogo name="Telegram" /><span>Telegram<small>{state.telegram?.enabled ? "Connected" : "Optional delivery"}</small></span><Button icon="telegram" onClick={() => setRoute("telegram")}>Configure</Button></div>
+        </div>
       </div>
       <div className="panel">
         <PanelTitle icon="telegram" title="Delivery" sub="Choose when and how your brief is delivered." />
@@ -841,7 +838,7 @@ function Overview({ state, setRoute, runWorkflow, mutate }) {
     <section className="panel how-panel">
       <PanelTitle icon="briefSetup" title="How it works" sub="" />
       <div className="how-steps">
-        <div><b>1</b><strong>Add sources</strong><span>{activeSources || "No"} active sources configured.</span></div>
+        <div><b>1</b><strong>Plan the day</strong><span>Tasks, reminders, reviews, and important dates stay local.</span></div>
         <ChevronDown className="how-arrow" />
         <div><b>2</b><strong>Digest signals</strong><span>Analyzers distill what matters.</span></div>
         <ChevronDown className="how-arrow" />
@@ -943,7 +940,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
 function Planner({ state, mutate }) {
   const time = todayTime(state);
   const [task, setTask] = React.useState({ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" });
-  const [importantDate, setImportantDate] = React.useState({ title: "", date: "" });
+  const [importantDate, setImportantDate] = React.useState({ title: "", startDate: "", endDate: "" });
   const createTask = (event) => {
     event.preventDefault();
     if (!task.title.trim()) return;
@@ -951,8 +948,8 @@ function Planner({ state, mutate }) {
   };
   const createDate = (event) => {
     event.preventDefault();
-    if (!importantDate.title.trim() || !importantDate.date) return;
-    mutate("/api/time/important-dates", importantDate).then(() => setImportantDate({ title: "", date: "" }));
+    if (!importantDate.title.trim() || !importantDate.startDate) return;
+    mutate("/api/time/important-dates", importantDate).then(() => setImportantDate({ title: "", startDate: "", endDate: "" }));
   };
   return <Page title="Planner" desc="Capture obligations, map leverage, and keep personal dates beside work context." wide>
     <div className="split">
@@ -975,10 +972,11 @@ function Planner({ state, mutate }) {
       <PanelTitle icon="calendar" title="Important Dates" sub="Birthdays, deadlines, renewals, trips, and rituals that should shape planning." />
       <form className="quick-capture" onSubmit={createDate}>
         <input value={importantDate.title} onChange={(event) => setImportantDate({ ...importantDate, title: event.target.value })} placeholder="Important date" />
-        <input type="date" value={importantDate.date} onChange={(event) => setImportantDate({ ...importantDate, date: event.target.value })} />
+        <input type="date" value={importantDate.startDate} onChange={(event) => setImportantDate({ ...importantDate, startDate: event.target.value, endDate: importantDate.endDate || event.target.value })} />
+        <input type="date" value={importantDate.endDate} onChange={(event) => setImportantDate({ ...importantDate, endDate: event.target.value })} />
         <Button icon="plus" kind="primary">Add</Button>
       </form>
-      {(time.importantDates || []).map((item) => <ListRow key={item.id} title={item.title} sub={[item.date, item.category].filter(Boolean).join(" · ")} right={<Badge>{item.enabled ? "active" : "off"}</Badge>} />)}
+      {(time.importantDates || []).map((item) => <ListRow key={item.id} title={item.title} sub={[item.startDate === item.endDate ? item.startDate : `${item.startDate} to ${item.endDate}`, item.category].filter(Boolean).join(" · ")} right={<Badge>{item.enabled ? "active" : "off"}</Badge>} />)}
     </section>
   </Page>;
 }
@@ -986,12 +984,13 @@ function Planner({ state, mutate }) {
 function Reminders({ state, mutate }) {
   const time = todayTime(state);
   const prefs = time.preferences || {};
-  const [form, setForm] = React.useState({ title: "", body: "", type: "regular", scheduleType: "daily", localTime: "09:00", enabled: false, channels: { desktopText: true, telegramText: false } });
+  const emptyReminderForm = { title: "", body: "", type: "regular", scheduleType: "daily", localTime: "09:00", enabled: false, channels: { desktopText: true, telegramText: false }, sporadic: { windowStart: "10:00", windowEnd: "16:00", count: 2, minGapMinutes: 120 } };
+  const [form, setForm] = React.useState(emptyReminderForm);
   const savePrefs = (patch) => mutate("/api/time/preferences", { ...prefs, ...patch }, "PATCH");
   const createReminder = (event) => {
     event.preventDefault();
     if (!form.title.trim()) return;
-    mutate("/api/time/reminders", form).then(() => setForm({ title: "", body: "", type: "regular", scheduleType: "daily", localTime: "09:00", enabled: false, channels: { desktopText: true, telegramText: false } }));
+    mutate("/api/time/reminders", form).then(() => setForm(emptyReminderForm));
   };
   return <Page title="Reminders" desc="Local-first reminders with explicit channel switches and no surprise delivery." wide>
     <div className="metric-grid">
@@ -1017,16 +1016,27 @@ function Reminders({ state, mutate }) {
         <form className="form" onSubmit={createReminder}>
           <Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} />
           <TextArea label="Body" value={form.body} rows={3} onChange={(body) => setForm({ ...form, body })} />
-          <Select label="Type" value={form.type} onChange={(type) => setForm({ ...form, type })} options={["regular", "sporadic", "review"]} />
-          <Select label="Schedule" value={form.scheduleType} onChange={(scheduleType) => setForm({ ...form, scheduleType })} options={["once", "daily", "weekday", "weekly", "selected-days", "monthly", "quarterly"]} />
-          <Field label="Local time" value={form.localTime} onChange={(localTime) => setForm({ ...form, localTime })} />
+          <Select label="Type" value={form.type} onChange={(type) => setForm({ ...form, type, scheduleType: type === "sporadic" ? "sporadic" : form.scheduleType === "sporadic" ? "daily" : form.scheduleType })} options={["regular", "sporadic", "review"]} />
+          {form.type === "sporadic" ? <>
+            <div className="row">
+              <Field label="Window start" value={form.sporadic.windowStart} onChange={(windowStart) => setForm({ ...form, sporadic: { ...form.sporadic, windowStart } })} />
+              <Field label="Window end" value={form.sporadic.windowEnd} onChange={(windowEnd) => setForm({ ...form, sporadic: { ...form.sporadic, windowEnd } })} />
+            </div>
+            <div className="row">
+              <Field label="Nudges per day" value={String(form.sporadic.count)} onChange={(count) => setForm({ ...form, sporadic: { ...form.sporadic, count } })} />
+              <Field label="Minimum gap minutes" value={String(form.sporadic.minGapMinutes)} onChange={(minGapMinutes) => setForm({ ...form, sporadic: { ...form.sporadic, minGapMinutes } })} />
+            </div>
+          </> : <>
+            <Select label="Schedule" value={form.scheduleType} onChange={(scheduleType) => setForm({ ...form, scheduleType })} options={["once", "daily", "weekday", "weekly", "selected-days", "monthly", "quarterly"]} />
+            <Field label="Local time" value={form.localTime} onChange={(localTime) => setForm({ ...form, localTime })} />
+          </>}
           <label className="check"><input type="checkbox" checked={!!form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} /> Enable immediately</label>
           <Button icon="plus" kind="primary">Create Reminder</Button>
         </form>
       </section>
       <section className="panel">
         <PanelTitle icon="reminders" title="Reminder List" sub="Pause, enable, disable, or archive any reminder." />
-        {(time.reminders || []).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.scheduleType} · next ${reminder.nextOccurrence.dateKey} ${reminder.nextOccurrence.localTime}` : reminder.scheduleType} right={<div className="row tight-row"><Button icon={reminder.enabled ? "x" : "check"} onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { enabled: !reminder.enabled }, "PATCH")}>{reminder.enabled ? "Disable" : "Enable"}</Button><Button icon="clock" onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { pausedUntil: new Date(Date.now() + 86400000).toISOString() }, "PATCH")}>Pause</Button><Button icon="x" onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { archive: true }, "PATCH")}>Archive</Button></div>} />)}
+        {(time.reminders || []).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.type === "sporadic" ? "sporadic" : reminder.scheduleType} · next ${reminder.nextOccurrence.dateKey} ${reminder.nextOccurrence.localTime}` : reminder.type === "sporadic" ? "sporadic window" : reminder.scheduleType} right={<div className="row tight-row"><Button icon={reminder.enabled ? "x" : "check"} onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { enabled: !reminder.enabled }, "PATCH")}>{reminder.enabled ? "Disable" : "Enable"}</Button><Button icon="clock" onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { pausedUntil: new Date(Date.now() + 86400000).toISOString() }, "PATCH")}>Pause</Button><Button icon="x" onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { archive: true }, "PATCH")}>Archive</Button></div>} />)}
       </section>
     </div>
   </Page>;
@@ -1561,8 +1571,8 @@ function Linear({ state, refresh }) {
       <section className="panel">
         <PanelTitle icon="linear" title="Linear connector" sub={connector.status || "Not configured"} />
         <div className="notice notice-warn">
-          <strong>{connector.credentialStatus === "missing" ? "LINEAR_API_KEY is missing" : "Linear is disabled"}</strong>
-          <span>{connector.lastError || "Add LINEAR_API_KEY to the app environment, restart Pillar Time, then test the connector in Settings."}</span>
+          <strong>{connector.credentialStatus === "missing" ? "Linear API key is missing" : "Linear is disabled"}</strong>
+          <span>{connector.lastError || "Open Settings, paste a Linear personal API key, then test and save the connector."}</span>
         </div>
       </section>
     </Page>;
@@ -1817,8 +1827,6 @@ function Briefs({ state, runWorkflow, refresh }) {
   const [audioMessage, setAudioMessage] = React.useState("");
   const [audioUrl, setAudioUrl] = React.useState("");
   const [audioPlaying, setAudioPlaying] = React.useState(false);
-  const [deliberationBusy, setDeliberationBusy] = React.useState(false);
-  const [deliberationMessage, setDeliberationMessage] = React.useState("");
   const audioRef = React.useRef(null);
   React.useEffect(() => {
     if (!selectedId && state.workflowRuns[0]) setSelectedId(state.workflowRuns[0].id);
@@ -1831,10 +1839,14 @@ function Briefs({ state, runWorkflow, refresh }) {
     setAudioUrl(selected?.artifact?.audio?.url || "");
     setAudioMessage("");
     setAudioPlaying(false);
-    setDeliberationMessage("");
   }, [selected?.id, selected?.artifact?.audio?.url]);
   React.useEffect(() => () => audioRef.current?.pause(), []);
+  const verifyAudioUrl = async (url) => {
+    const response = await fetch(url, { method: "HEAD", cache: "no-store" });
+    if (!response.ok) throw new Error(`Audio file is not reachable yet (${response.status}).`);
+  };
   const playAudioUrl = async (url) => {
+    await verifyAudioUrl(url);
     if (!audioRef.current || audioRef.current.src !== new URL(url, window.location.href).href) {
       audioRef.current?.pause();
       const audio = new Audio(url);
@@ -1861,10 +1873,10 @@ function Briefs({ state, runWorkflow, refresh }) {
       const result = await api(`/api/workflow-runs/${selected.id}/audio`, { method: "POST", body: JSON.stringify({}) });
       setAudioUrl(result.audio.url);
       await playAudioUrl(result.audio.url);
-      setAudioMessage("Audio brief generated.");
+      setAudioMessage("Audio brief generated and ready to play.");
       await refresh?.();
     } catch (error) {
-      setAudioMessage(error.message);
+      setAudioMessage(error.message || "Audio generated, but playback could not start.");
     } finally {
       setAudioBusy(false);
     }
@@ -1873,20 +1885,6 @@ function Briefs({ state, runWorkflow, refresh }) {
     if (!audioUrl) return;
     if (audioRef.current) audioRef.current.currentTime = 0;
     playAudioUrl(audioUrl).catch((error) => setAudioMessage(error.message || "Could not restart audio."));
-  };
-  const deliberateBrief = async (regenerate = false) => {
-    if (!selected) return;
-    setDeliberationBusy(true);
-    setDeliberationMessage("");
-    try {
-      await api(`/api/workflow-runs/${selected.id}/deliberate`, { method: "POST", body: JSON.stringify({ regenerate }) });
-      await refresh?.();
-      setDeliberationMessage(regenerate ? "Deliberation regenerated." : "Deliberation saved.");
-    } catch (error) {
-      setDeliberationMessage(error.message || "Could not deliberate this brief.");
-    } finally {
-      setDeliberationBusy(false);
-    }
   };
   const avgSignals = state.workflowRuns.length
     ? Math.round(state.workflowRuns.reduce((sum, run) => sum + (run.artifact?.selectedIssues?.length || 0), 0) / state.workflowRuns.length)
@@ -1914,13 +1912,10 @@ function Briefs({ state, runWorkflow, refresh }) {
           <div className="brief-reader-actions">
             <Button icon="volume" onClick={playBriefAudio} disabled={audioBusy || state.tts?.status !== "ready"}>{audioBusy ? "Generating..." : audioPlaying ? "Pause" : audioUrl ? "Play audio" : "Generate audio"}</Button>
             {audioUrl && <Button icon="restart" onClick={restartBriefAudio} disabled={audioBusy || state.tts?.status !== "ready"}>Restart</Button>}
-            <Button icon="lenses" onClick={() => deliberateBrief(false)} disabled={deliberationBusy || !(state.briefConfig?.perspectiveLenses || []).some((lens) => lens.enabled !== false)}>{deliberationBusy ? "Deliberating..." : selected.artifact?.deliberation ? "Show deliberation" : "Deliberate brief"}</Button>
             {state.tts?.status !== "ready" && <span>Set up ElevenLabs in Settings to play briefs aloud.</span>}
           </div>
           {audioMessage && <p className={audioMessage.includes("generated") ? "ok-text" : "warn-text"}>{audioMessage}</p>}
-          {deliberationMessage && <p className={deliberationMessage.includes("saved") || deliberationMessage.includes("regenerated") ? "ok-text" : "warn-text"}>{deliberationMessage}</p>}
           <Markdown text={selected.artifact?.onePageBrief || ""} />
-          {selected.artifact?.deliberation && <DeliberationPanel deliberation={selected.artifact.deliberation} onRegenerate={() => deliberateBrief(true)} busy={deliberationBusy} />}
         </> : <Empty icon="briefs" title="No brief selected" body="Choose a brief from the list." />}
       </section>
       <div className="brief-stat-bar">
@@ -2353,7 +2348,7 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
 }
 
 function Onboarding({ state, mutate, refresh }) {
-  const steps = ["welcome", "profile", "today", "reminders", "reviews", "model", "intent", "sources", "calendar", "telegram", "schedule", "review"];
+  const steps = ["welcome", "profile", "today", "reminders", "reviews", "model", "intent", "setup", "linear", "calendar", "audio", "telegram", "schedule", "review"];
   const readiness = state.onboarding.readiness || {};
   const savedOwnerName = state.briefConfig?.ownerName || "";
   const hasSavedFirstName = !isDefaultOwnerName(savedOwnerName);
@@ -2362,7 +2357,11 @@ function Onboarding({ state, mutate, refresh }) {
     if (!readiness.scheduleSet) return "schedule";
     return "review";
   };
-  const [step, setStep] = React.useState(!hasSavedFirstName ? "welcome" : state.onboarding.currentStep === "complete" ? initialIncomplete() : state.onboarding.currentStep || "welcome");
+  const normalizeOnboardingStep = (value) => {
+    if (value === "sources" || value === "access" || value === "perspectives") return "linear";
+    return steps.includes(value) ? value : "welcome";
+  };
+  const [step, setStep] = React.useState(!hasSavedFirstName ? "welcome" : state.onboarding.currentStep === "complete" ? initialIncomplete() : normalizeOnboardingStep(state.onboarding.currentStep || "welcome"));
   const [model, setModel] = React.useState({ enabled: true, provider: state.model.provider || "openai", model: state.model.model || defaultModelForProvider(state.model.provider || "openai"), apiKey: "", baseUrl: state.model.baseUrl || "" });
   const [modelOptions, setModelOptions] = React.useState(state.model.model ? [state.model.model] : []);
   const [modelOptionsProvider, setModelOptionsProvider] = React.useState(state.model.provider || "openai");
@@ -2405,6 +2404,8 @@ function Onboarding({ state, mutate, refresh }) {
   const [sttBusy, setSttBusy] = React.useState(false);
   const [sttMessage, setSttMessage] = React.useState("");
   const [calendarMessage, setCalendarMessage] = React.useState("");
+  const [linearConnector, setLinearConnector] = React.useState({ enabled: true, apiKey: "" });
+  const [linearMessage, setLinearMessage] = React.useState("");
   const [perspectivePrompt, setPerspectivePrompt] = React.useState("");
   const [perspectiveDrafts, setPerspectiveDrafts] = React.useState(state.briefConfig?.perspectiveLenses || []);
   const [perspectiveMessage, setPerspectiveMessage] = React.useState("");
@@ -2419,9 +2420,11 @@ function Onboarding({ state, mutate, refresh }) {
   const timezone = state.briefConfig.deliveryTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Denver";
   const timezones = timezoneOptions(timezone);
   const googleCalendarConnected = state.connectors?.googleCalendar?.status === "ready";
+  const linearConnected = state.connectors?.linear?.status === "ready";
   const go = async (next) => {
-    setStep(next);
-    await mutate("/api/onboarding", { currentStep: next, briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: briefDraft }, "PATCH");
+    const normalized = normalizeOnboardingStep(next);
+    setStep(normalized);
+    await mutate("/api/onboarding", { currentStep: normalized, briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: briefDraft }, "PATCH");
   };
   React.useEffect(() => {
     setFfmpegStatus(state.runtime?.ffmpeg || null);
@@ -2611,14 +2614,14 @@ function Onboarding({ state, mutate, refresh }) {
       setBriefDraft(draftToApply);
       await refresh();
       setBriefDraftMessage("Brief setup saved.");
-      await go("perspectives");
+      await go("linear");
     } catch (error) {
       if (/not found|cannot\s+(post|get)|404/i.test(error.message || "")) {
         try {
           await mutate("/api/brief-config", draftToApply, "PATCH");
-          await mutate("/api/onboarding", { currentStep: "sources", briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: draftToApply }, "PATCH");
+          await mutate("/api/onboarding", { currentStep: "linear", briefPrompt, sourceSuggestions: [], briefConfigDraft: draftToApply }, "PATCH");
           setBriefDraftMessage("Brief setup saved.");
-          await go("perspectives");
+          await go("linear");
         } catch (fallbackError) {
           setBriefDraftMessage(fallbackError.message);
         }
@@ -2813,6 +2816,28 @@ function Onboarding({ state, mutate, refresh }) {
       setXMessage(error.message || "Could not save X API token.");
     }
   };
+  const testLinearAccess = async () => {
+    setLinearMessage("");
+    try {
+      const result = await api("/api/linear/test", { method: "POST", body: JSON.stringify({ apiKey: linearConnector.apiKey }) });
+      setLinearConnector({ enabled: true, apiKey: "" });
+      setLinearMessage(`Linear is ready${result.viewer?.displayName || result.viewer?.name ? ` for ${result.viewer.displayName || result.viewer.name}` : ""}.`);
+      await refresh();
+    } catch (error) {
+      setLinearMessage(error.message || "Linear test failed.");
+      await refresh();
+    }
+  };
+  const saveLinearAccess = async () => {
+    setLinearMessage("");
+    try {
+      await mutate("/api/connectors/linear", { ...linearConnector, enabled: true }, "PATCH");
+      setLinearConnector({ enabled: true, apiKey: "" });
+      setLinearMessage("Linear connector saved.");
+    } catch (error) {
+      setLinearMessage(error.message || "Could not save Linear connector.");
+    }
+  };
   const checkFfmpeg = async () => {
     setFfmpegBusy(true);
     setFfmpegMessage("");
@@ -2943,8 +2968,10 @@ function Onboarding({ state, mutate, refresh }) {
     reviews: "Reviews",
     model: "AI",
     intent: "Brief",
-    sources: "Sources",
+    setup: "Setup",
+    linear: "Linear",
     calendar: "Calendar",
+    audio: "Audio",
     telegram: "Telegram",
     schedule: "Schedule",
     review: "Review",
@@ -3047,7 +3074,7 @@ function Onboarding({ state, mutate, refresh }) {
         <h1>Optional: describe your intelligence brief.</h1>
         <p>Use normal language. Mention topics, people, companies, source types, tone, and anything you want avoided. Skip this if you only want the local planner for now.</p>
         <TextArea label="Intelligence brief request" value={briefPrompt} onChange={setBriefPrompt} rows={9} />
-        <div className="row"><Button onClick={() => go("model")}>Back</Button><Button onClick={() => go("sources")}>Skip intelligence setup</Button><Button icon="run" kind="primary" onClick={generateBriefSetupDraft} disabled={briefPrompt.trim().length < 20 || draftingBriefSetup}>{draftingBriefSetup ? "Drafting..." : "Generate brief setup"}</Button></div>
+        <div className="row"><Button onClick={() => go("model")}>Back</Button><Button onClick={() => go("linear")}>Skip intelligence setup</Button><Button icon="run" kind="primary" onClick={generateBriefSetupDraft} disabled={briefPrompt.trim().length < 20 || draftingBriefSetup}>{draftingBriefSetup ? "Drafting..." : "Generate brief setup"}</Button></div>
         {briefDraftMessage && <p className={briefDraftMessage.includes("Drafted") || briefDraftMessage.includes("saved") ? "ok-text" : "warn-text"}>{briefDraftMessage}</p>}
       </section>}
       {step === "setup" && <section className="onboarding-panel onboarding-panel-wide">
@@ -3066,8 +3093,19 @@ function Onboarding({ state, mutate, refresh }) {
             </div>)}
           </div>
         </div>}
-        <div className="row"><Button onClick={() => go("intent")}>Back</Button><Button icon="run" onClick={generateBriefSetupDraft} disabled={draftingBriefSetup}>Regenerate</Button><Button icon="save" kind="primary" onClick={applyBriefSetupDraft} disabled={draftingBriefSetup || !(briefDraft?.sections || []).length}>Apply and suggest sources</Button></div>
+        <div className="row"><Button onClick={() => go("intent")}>Back</Button><Button icon="run" onClick={generateBriefSetupDraft} disabled={draftingBriefSetup}>Regenerate</Button><Button icon="save" kind="primary" onClick={applyBriefSetupDraft} disabled={draftingBriefSetup || !(briefDraft?.sections || []).length}>Apply and continue</Button></div>
         {briefDraftMessage && <p className={briefDraftMessage.includes("Drafted") || briefDraftMessage.includes("saved") ? "ok-text" : "warn-text"}>{briefDraftMessage}</p>}
+      </section>}
+      {step === "linear" && <section className="onboarding-panel onboarding-panel-wide">
+        <h1>Connect Linear.</h1>
+        <p>Optional: connect Linear so Pillar Time can show and update project work from inside the app.</p>
+        <div className="setup-card form">
+          <div className="setup-card-head"><BrandLogo name="Linear" /><div><h3>Linear</h3><p>Use a personal API key from Linear Settings &gt; Security &amp; access.</p></div><Badge tone={linearConnected ? "ok" : "muted"}>{linearConnected ? "Connected" : "Optional"}</Badge></div>
+          <Field label="Linear personal API key" type="password" value={linearConnector.apiKey} onChange={(apiKey) => setLinearConnector({ ...linearConnector, apiKey })} placeholder={state.connectors?.linear?.apiKeySaved ? "Saved. Paste a new key to replace it." : state.connectors?.linear?.credentialStatus === "env" ? "Using LINEAR_API_KEY fallback. Paste to save locally." : "lin_api_..."} />
+          {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("saved") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
+          <div className="row"><Button type="button" icon="run" onClick={testLinearAccess} disabled={!linearConnector.apiKey && state.connectors?.linear?.credentialStatus === "missing"}>Test</Button><Button type="button" icon="save" onClick={saveLinearAccess}>Save Linear</Button></div>
+        </div>
+        <div className="row"><Button onClick={() => go("setup")}>Back</Button><Button onClick={() => go("calendar")}>Skip Linear</Button><Button kind="primary" onClick={() => go("calendar")}>Continue</Button></div>
       </section>}
       {step === "perspectives" && <section className="onboarding-panel onboarding-panel-wide">
         <h1>Add perspective lenses.</h1>
@@ -3182,7 +3220,7 @@ function Onboarding({ state, mutate, refresh }) {
           </div>
           {calendarMessage && <p className={calendarMessage.includes("connected") || calendarMessage.includes("opened") ? "ok-text" : "warn-text"}>{calendarMessage}</p>}
         </div>
-        <div className="row"><Button onClick={() => go("sources")}>Back</Button><Button onClick={() => go("audio")}>Skip calendar</Button><Button kind="primary" onClick={() => go("audio")}>Continue</Button></div>
+        <div className="row"><Button onClick={() => go("linear")}>Back</Button><Button onClick={() => go("audio")}>Skip calendar</Button><Button kind="primary" onClick={() => go("audio")}>Continue</Button></div>
       </section>}
       {step === "audio" && <section className="onboarding-panel onboarding-panel-wide">
         <h1>Add audio briefs.</h1>
@@ -3212,7 +3250,7 @@ function Onboarding({ state, mutate, refresh }) {
       {step === "review" && <section className="onboarding-panel">
         <h1>Ready to open the app.</h1>
         <div className="readiness-list">
-          {[["Executive profile", reviewReadiness.ownerNameReady, false], ["Schedule set", reviewReadiness.scheduleSet, false], ["Today seeded", (state.time?.commitments || []).length > 0, true], ["Reminder defaults", !!state.time?.preferences?.reminderMasterEnabled, true], ["Planning reviews", (state.time?.reviews || []).some((review) => review.enabled), true], ["Model connected", reviewReadiness.modelReady, true], ["Brief prompt saved", reviewReadiness.briefPromptSaved, true], ["Sources added", reviewReadiness.sourceReady, true], ["Google Calendar", googleCalendarConnected, true], ["Telegram paired", reviewReadiness.telegramReady, true]].map(([label, ok, optional]) => <div key={label}><Icon name={ok ? "check" : optional ? "volume" : "x"} /><span>{label}</span><Badge tone={ok ? "ok" : optional ? "muted" : "warn"}>{ok ? "Done" : optional ? "Optional" : "Needs setup"}</Badge></div>)}
+          {[["Executive profile", reviewReadiness.ownerNameReady, false], ["Schedule set", reviewReadiness.scheduleSet, false], ["Today seeded", (state.time?.commitments || []).length > 0, true], ["Reminder defaults", !!state.time?.preferences?.reminderMasterEnabled, true], ["Planning reviews", (state.time?.reviews || []).some((review) => review.enabled), true], ["Model connected", reviewReadiness.modelReady, true], ["Brief prompt saved", reviewReadiness.briefPromptSaved, true], ["Linear connected", linearConnected, true], ["Google Calendar", googleCalendarConnected, true], ["Telegram paired", reviewReadiness.telegramReady, true]].map(([label, ok, optional]) => <div key={label}><Icon name={ok ? "check" : optional ? "volume" : "x"} /><span>{label}</span><Badge tone={ok ? "ok" : optional ? "muted" : "warn"}>{ok ? "Done" : optional ? "Optional" : "Needs setup"}</Badge></div>)}
         </div>
         <div className="row"><Button onClick={() => go(firstIncomplete())}>Fix missing step</Button><Button onClick={skipOnboarding}>Finish later</Button><Button icon="check" kind="accent" disabled={!canComplete} onClick={complete}>Finish onboarding</Button></div>
       </section>}
@@ -3272,6 +3310,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const [redditMessage, setRedditMessage] = React.useState("");
   const [linearModal, setLinearModal] = React.useState(false);
   const [linearMessage, setLinearMessage] = React.useState("");
+  const [linearConnector, setLinearConnector] = React.useState({ enabled: true, apiKey: "" });
   const [googleCalendarModal, setGoogleCalendarModal] = React.useState(false);
   const [googleCalendarSelection, setGoogleCalendarSelection] = React.useState(state.connectors?.googleCalendar?.selectedCalendarIds || ["primary"]);
   const [googleCalendarSelectionDirty, setGoogleCalendarSelectionDirty] = React.useState(false);
@@ -3333,6 +3372,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     }));
   }, [state.connectors?.reddit?.grantType]);
   React.useEffect(() => {
+    setLinearConnector({ enabled: state.connectors?.linear?.enabled !== false, apiKey: "" });
+  }, [state.connectors?.linear?.enabled]);
+  React.useEffect(() => {
     setTelegramForm({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
   }, [state.telegram]);
   React.useEffect(() => {
@@ -3380,7 +3422,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const enableLinearConnector = async () => {
     setLinearMessage("");
     try {
-      await mutate("/api/connectors/linear", { enabled: true }, "PATCH");
+      await mutate("/api/connectors/linear", { ...linearConnector, enabled: true }, "PATCH");
+      setLinearConnector({ enabled: true, apiKey: "" });
       setLinearMessage("Linear connector enabled.");
     } catch (error) {
       setLinearMessage(error.message || "Could not enable Linear.");
@@ -3398,7 +3441,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const testLinearConnector = async () => {
     setLinearMessage("");
     try {
-      const result = await api("/api/linear/test", { method: "POST", body: JSON.stringify({}) });
+      const result = await api("/api/linear/test", { method: "POST", body: JSON.stringify({ apiKey: linearConnector.apiKey }) });
+      setLinearConnector({ enabled: true, apiKey: "" });
       setLinearMessage(`Linear is ready${result.viewer?.displayName || result.viewer?.name ? ` for ${result.viewer.displayName || result.viewer.name}` : ""}.`);
       await refresh();
     } catch (error) {
@@ -3527,9 +3571,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     { service: "X (Twitter)", sub: "Search and monitor posts", type: "Social", logo: "X", status: xConnected ? "Connected" : "Needs token", connected: xConnected, action: "x" },
     { service: "Google Calendar", sub: "Add today's agenda to briefs", type: "Calendar", logo: "Calendar", status: googleCalendarConnected ? "Connected" : state.connectors?.googleCalendar?.status === "needs consent" ? "Needs consent" : "Needs OAuth", connected: googleCalendarConnected, action: "googleCalendar" },
     { service: "Reddit", sub: "Monitor subreddits and posts", type: "Social", logo: "Reddit", status: redditConnected ? "Connected" : "Needs OAuth", connected: redditConnected, action: "reddit" },
-    { service: "Linear", sub: "Read and update TRA issues", type: "Project", logo: "Linear", status: linearConnected ? "Connected" : state.connectors?.linear?.credentialStatus === "missing" ? "Needs env key" : "Disabled", connected: linearConnected, action: "linear" },
-    { service: "Web Search", sub: "General web search", type: "Search", logo: "Web", status: "Available", connected: true },
-    { service: "YouTube", sub: "Channels, uploads, and transcripts", type: "Video", logo: "YouTube", status: "Available", connected: true },
+    { service: "Linear", sub: "Read and update TRA issues", type: "Project", logo: "Linear", status: linearConnected ? "Connected" : state.connectors?.linear?.credentialStatus === "missing" ? "Needs key" : "Disabled", connected: linearConnected, action: "linear" },
   ];
   const visibleModelOptions = modelOptionsProvider === (editingProvider || model.provider) ? modelOptions : [];
   const openProvider = (provider) => {
@@ -3629,6 +3671,10 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <div className={`notice ${desktopUpdate.status === "error" ? "notice-warn" : ""}`}>
           <strong>{desktopUpdate.status === "available" ? "A signed update is ready" : desktopUpdate.status === "installed" ? "Restart to finish updating" : "Automatic update checks are enabled"}</strong>
           <span>{desktopUpdate.message || "Pillar Time checks once on startup and lets you install from Settings."}</span>
+          <span>Endpoint: {desktopUpdate.endpoint || "unknown"}</span>
+          <span>Last checked: {desktopUpdate.lastCheckedAt ? new Date(desktopUpdate.lastCheckedAt).toLocaleString() : "not checked yet"}</span>
+          {desktopUpdate.update?.currentVersion && <span>Updater current version: {desktopUpdate.update.currentVersion}</span>}
+          {desktopUpdate.lastError && <span>Raw error: {desktopUpdate.lastError}</span>}
         </div>
       </section>}
       <section className="panel connector-card">
@@ -3751,7 +3797,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <button type="button" onClick={() => { setConnectorModal(false); setRedditModal(true); }}><BrandLogo name="Reddit" /><strong>Reddit OAuth API</strong><span>Official app-only OAuth for subreddit sources.</span></button>
           <button type="button" onClick={() => { setConnectorModal(false); setLinearModal(true); }}><BrandLogo name="Linear" /><strong>Linear</strong><span>Read and update project issues.</span></button>
         </div>
-        <p className="hint">Most research connectors are added as Sources. Provider credentials live on this Settings page.</p>
+        <p className="hint">Provider credentials live on this Settings page. Source management is not exposed in this build.</p>
       </div>
     </div>}
     {editingProvider && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingProvider(""); }}>
@@ -3796,17 +3842,20 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     </div>}
     {linearModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setLinearModal(false); }}>
       <div className="modal-card connector-modal form">
-        <div className="modal-head"><div><h2>Linear</h2><p>Use a local environment key to read and update Linear issues.</p></div><button type="button" onClick={() => setLinearModal(false)}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2>Linear</h2><p>Paste a personal API key to read and update Linear issues.</p></div><button type="button" onClick={() => setLinearModal(false)}><Icon name="x" /></button></div>
         <div className={`notice ${linearConnected ? "" : "notice-warn"}`}>
-          <strong>{linearConnected ? "Linear ready" : state.connectors?.linear?.credentialStatus === "missing" ? "LINEAR_API_KEY missing" : "Linear disabled"}</strong>
-          <span>{state.connectors?.linear?.lastError || linearMessage || "Set LINEAR_API_KEY in the environment that launches Pillar Time, restart the app, then test the connector."}</span>
+          <strong>{linearConnected ? "Linear ready" : state.connectors?.linear?.credentialStatus === "missing" ? "Linear API key needed" : "Linear disabled"}</strong>
+          <span>{state.connectors?.linear?.lastError || linearMessage || "Create a Linear personal API key, paste it here, then test and save."}</span>
         </div>
-        <p className="hint">The Linear personal API key is env-only. Pillar Time does not store it in SQLite or ask you to paste it into this screen.</p>
+        <Field label="Linear personal API key" type="password" value={linearConnector.apiKey} onChange={(apiKey) => setLinearConnector({ ...linearConnector, apiKey })} placeholder={state.connectors?.linear?.apiKeySaved ? "Saved. Paste a new key to replace it." : state.connectors?.linear?.credentialStatus === "env" ? "Using LINEAR_API_KEY fallback. Paste to save locally." : "lin_api_..."} />
+        <label className="check"><input type="checkbox" checked={linearConnector.enabled} onChange={(event) => setLinearConnector({ ...linearConnector, enabled: event.target.checked })} /> Enable Linear connector</label>
+        <p className="hint">Keys are stored locally in the connector credential table and never returned to the UI. Existing `LINEAR_API_KEY` values still work as a fallback.</p>
         {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("enabled") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
         <div className="modal-actions">
           <Button type="button" onClick={() => setLinearModal(false)}>Cancel</Button>
           <Button type="button" icon="run" onClick={testLinearConnector}>Test</Button>
-          {state.connectors?.linear?.enabled ? <Button type="button" icon="trash" onClick={disableLinearConnector}>Disable</Button> : <Button type="button" icon="save" onClick={enableLinearConnector}>Enable</Button>}
+          {state.connectors?.linear?.enabled ? <Button type="button" icon="trash" onClick={disableLinearConnector}>Disable</Button> : null}
+          <Button type="button" icon="save" onClick={enableLinearConnector}>Save</Button>
           <Button type="button" icon="linear" kind="primary" onClick={() => { setLinearModal(false); location.hash = "linear"; }}>Open Linear</Button>
         </div>
       </div>
@@ -3852,7 +3901,10 @@ function Select({ label, value, onChange, options }) {
 }
 
 function routeFromHash() {
-  return location.hash.replace(/^#\/?/, "") || "today";
+  const route = location.hash.replace(/^#\/?/, "") || "today";
+  if (route === "sources") return "briefs";
+  if (route === "lenses") return "briefSetup";
+  return route;
 }
 
 function App() {
@@ -3861,7 +3913,8 @@ function App() {
   const { state, error, mutate, refresh } = useConsoleState();
   const desktopUpdate = useDesktopUpdates();
   const requestRoute = React.useCallback((nextRoute) => {
-    const next = nextRoute || "overview";
+    const requested = nextRoute || "overview";
+    const next = requested === "sources" ? "briefs" : requested === "lenses" ? "briefSetup" : requested;
     if (route === "briefSetup" && next !== "briefSetup" && window.__pillarBriefUnsavedBriefSetup) {
       const leave = window.confirm("You have unsaved brief setup changes. Leave without saving?");
       if (!leave) {
@@ -3928,10 +3981,8 @@ function App() {
     briefs: <Briefs state={state} runWorkflow={runWorkflow} refresh={refresh} />,
     generating: <GeneratingBrief runState={runState} />,
     briefSetup: <BriefSetup state={state} mutate={mutate} />,
-    sources: <Sources state={state} mutate={mutate} />,
     linear: <Linear state={state} refresh={refresh} />,
     trustedContext: <TrustedContext state={state} mutate={mutate} />,
-    lenses: <Lenses state={state} mutate={mutate} />,
     telegram: <Telegram state={state} mutate={mutate} refresh={refresh} />,
     settings: <Settings state={state} mutate={mutate} refresh={refresh} desktopUpdate={desktopUpdate} />,
   };

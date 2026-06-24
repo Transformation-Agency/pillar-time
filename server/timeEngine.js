@@ -52,14 +52,15 @@ export function rankActions(candidates = [], feedback = []) {
     const deadlineBoost = item.dueAt ? Math.max(0, 28 - Math.floor((new Date(item.dueAt).getTime() - Date.now()) / 3600000)) : 0;
     const blockerBoost = item.status === "blocked" || item.waitingOn ? 8 : 0;
     const sourceBoost = item.source === "calendar" ? 4 : item.source === "task" ? 6 : 0;
+    const priorityBoost = item.priority === "high" ? 42 : item.priority === "normal" ? 8 : item.priority === "low" ? -8 : 0;
     const penalty = feedbackPenalty.get(item.feedbackKey || item.id || item.title) || 0;
-    const score = leverageWeights[category] + deadlineBoost + blockerBoost + sourceBoost - penalty;
+    const score = leverageWeights[category] + deadlineBoost + blockerBoost + sourceBoost + priorityBoost - penalty;
     return {
       ...item,
       leverageCategory: category,
       score,
       confidence: item.confidence ?? (item.reason ? 0.78 : 0.58),
-      reason: item.reason || reasonForCategory(category),
+      reason: item.reason || (item.priority === "high" ? `High priority. ${reasonForCategory(category)}` : reasonForCategory(category)),
     };
   }).sort((a, b) => b.score - a.score || String(a.title || "").localeCompare(String(b.title || "")));
 }
@@ -79,6 +80,27 @@ export function reasonForCategory(category = "admin") {
 
 export function nextOccurrence(reminder, from = new Date(), timezone = "America/Denver") {
   if (!reminder || reminder.enabled === false) return null;
+  if (reminder.type === "sporadic") {
+    const sporadic = reminder.sporadic || {};
+    const windowStart = sporadic.windowStart || "10:00";
+    const windowEnd = sporadic.windowEnd || "16:00";
+    const count = Math.max(1, Math.min(8, Number(sporadic.count || 2)));
+    const minGapMinutes = Math.max(15, Math.min(480, Number(sporadic.minGapMinutes || 120)));
+    const cursor = new Date(from);
+    const currentDateKey = localDateKey(from, timezone);
+    const currentTime = from.toLocaleTimeString("en-US", { timeZone: timezone, hour12: false, hour: "2-digit", minute: "2-digit" });
+    for (let day = 0; day < 370; day += 1) {
+      const candidate = new Date(cursor.getTime() + day * 86400000);
+      const dateKey = localDateKey(candidate, timezone);
+      const startDate = reminder.startDate || currentDateKey;
+      if (dateKey < startDate) continue;
+      if (reminder.endDate && dateKey > reminder.endDate) return null;
+      const times = sporadicTimes({ id: reminder.id || "sporadic", dateKey, windowStart, windowEnd, count, minGapMinutes });
+      const localTime = times.find((time) => dateKey !== currentDateKey || time > currentTime);
+      if (localTime) return { dateKey, localTime, dedupeKey: `${reminder.id || "reminder"}:${dateKey}:${localTime}` };
+    }
+    return null;
+  }
   const type = reminder.scheduleType || "once";
   const startDate = reminder.startDate || localDateKey(from, timezone);
   const localTime = reminder.localTime || "09:00";

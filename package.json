@@ -1,6 +1,6 @@
 {
   "name": "pillar-time",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "type": "module",
   "scripts": {
     "dev": "NODE_OPTIONS=--no-warnings node server/index.js",
@@ -12,6 +12,7 @@
     "build": "vite build",
     "check": "npm run build",
     "test": "node --test tests/*.test.js",
+    "updater:validate": "node scripts/validate-updater-manifest.mjs",
     "promo:studio": "npm --prefix promo run studio",
     "promo:render": "npm --prefix promo run render"
   },

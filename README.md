@@ -40,12 +40,11 @@ Pillar Time includes a personal Linear connector for the Transformation Agency w
 Setup:
 
 1. Create a personal API key in Linear under Settings > Security & access > Personal API keys.
-2. Add `LINEAR_API_KEY=...` to your local `.env`, launch environment, or desktop app data env file at `~/Library/Application Support/com.pillartime.desktop/.env`.
-3. Restart Pillar Time so the backend sees the key.
-4. Open Settings > Linear > Test.
-5. Open the Linear page to review grouped issues, create work, move workflow states, and add comments.
+2. Open Settings > Add connector > Linear.
+3. Paste the key, test it, and save it locally.
+4. Open the Linear page to review grouped issues, create work, move workflow states, and add comments.
 
-The personal API key is passed directly in the Linear `Authorization` header, matching Linear's personal API key flow. Pillar Time keeps this secret env-only: it is not stored in SQLite, not shown in Settings, and not committed. Multi-user OAuth can be added later if this moves beyond Personal Desktop Mode.
+The personal API key is passed directly in the Linear `Authorization` header, matching Linear's personal API key flow. Pillar Time stores it in the same local connector credential table as other personal connectors and never returns it to the UI. `LINEAR_API_KEY` still works as a fallback for existing installs and smoke tests. Multi-user OAuth can be added later if this moves beyond Personal Desktop Mode.
 
 For a live smoke test, set both `RUN_LINEAR_SMOKE=1` and `LINEAR_API_KEY`, then run:
 

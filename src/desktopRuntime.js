@@ -1,4 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check } from "@tauri-apps/plugin-updater";
 
@@ -19,7 +20,14 @@ export const desktopRuntime = {
   },
   async appVersion() {
     if (!isTauri()) return "";
-    return invoke("desktop_app_version");
+    try {
+      return await getVersion();
+    } catch {
+      return invoke("desktop_app_version");
+    }
+  },
+  updaterEndpoint() {
+    return "https://github.com/Transformation-Agency/pillar-time/releases/latest/download/latest.json";
   },
   async checkForUpdates(options = {}) {
     if (!isTauri()) return null;

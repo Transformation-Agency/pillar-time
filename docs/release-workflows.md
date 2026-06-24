@@ -1,6 +1,6 @@
 # Release Workflows
 
-Pillar Brief has GitHub Actions workflows for desktop release artifacts:
+Pillar Time has GitHub Actions workflows for desktop release artifacts:
 
 - `.github/workflows/macos-release.yml` builds signed and notarized macOS DMGs for Apple Silicon and Intel.
 - `.github/workflows/windows-build.yml` builds the Windows installer with Azure Trusted Signing.
@@ -42,16 +42,16 @@ git push origin v0.1.3
 
 On a tag, the workflow uploads these release assets:
 
-- `Pillar.Brief_<version>_aarch64.dmg`
-- `Pillar.Brief_<version>_aarch64.dmg.sha256`
-- `Pillar.Brief_<version>_aarch64.app.tar.gz`
-- `Pillar.Brief_<version>_aarch64.app.tar.gz.sig`
-- `Pillar.Brief_<version>_aarch64.app.tar.gz.sha256`
-- `Pillar.Brief_<version>_x64.dmg`
-- `Pillar.Brief_<version>_x64.dmg.sha256`
-- `Pillar.Brief_<version>_x64.app.tar.gz`
-- `Pillar.Brief_<version>_x64.app.tar.gz.sig`
-- `Pillar.Brief_<version>_x64.app.tar.gz.sha256`
+- `Pillar.Time_<version>_aarch64.dmg`
+- `Pillar.Time_<version>_aarch64.dmg.sha256`
+- `Pillar.Time_<version>_aarch64.app.tar.gz`
+- `Pillar.Time_<version>_aarch64.app.tar.gz.sig`
+- `Pillar.Time_<version>_aarch64.app.tar.gz.sha256`
+- `Pillar.Time_<version>_x64.dmg`
+- `Pillar.Time_<version>_x64.dmg.sha256`
+- `Pillar.Time_<version>_x64.app.tar.gz`
+- `Pillar.Time_<version>_x64.app.tar.gz.sig`
+- `Pillar.Time_<version>_x64.app.tar.gz.sha256`
 
 The GitHub release body is read from
 `docs/release-notes/<tag>.md`, for example
@@ -74,9 +74,9 @@ Add these repository secrets before running the Windows workflow:
 
 On a tag, the workflow uploads these release assets:
 
-- `Pillar.Brief_<version>_x64-setup.exe`
-- `Pillar.Brief_<version>_x64-setup.exe.sig`
-- `Pillar.Brief_<version>_x64-setup.exe.sha256`
+- `Pillar.Time_<version>_x64-setup.exe`
+- `Pillar.Time_<version>_x64-setup.exe.sig`
+- `Pillar.Time_<version>_x64-setup.exe.sha256`
 
 ## Updater Manifest
 
@@ -85,7 +85,7 @@ reads the GitHub release notes, generates `latest.json`, and uploads it to the
 same GitHub release. The desktop app checks:
 
 ```text
-https://github.com/Transformation-Agency/pillar-brief/releases/latest/download/latest.json
+https://github.com/Transformation-Agency/pillar-time/releases/latest/download/latest.json
 ```
 
 Only the public updater key is committed in `src-tauri/tauri.conf.json`; the

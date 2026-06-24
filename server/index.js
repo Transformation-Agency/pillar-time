@@ -409,6 +409,8 @@ function migrate() {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       date TEXT NOT NULL,
+      start_date TEXT NOT NULL DEFAULT '',
+      end_date TEXT NOT NULL DEFAULT '',
       category TEXT NOT NULL DEFAULT 'personal',
       notes TEXT NOT NULL DEFAULT '',
       prep_sequence_json TEXT NOT NULL DEFAULT '[]',
@@ -545,6 +547,10 @@ function migrate() {
   if (!normalizedColumns.includes("last_seen_at")) db.exec("ALTER TABLE normalized_items ADD COLUMN last_seen_at TEXT;");
   if (!normalizedColumns.includes("last_used_at")) db.exec("ALTER TABLE normalized_items ADD COLUMN last_used_at TEXT;");
   if (!normalizedColumns.includes("usage_count")) db.exec("ALTER TABLE normalized_items ADD COLUMN usage_count INTEGER NOT NULL DEFAULT 0;");
+  const importantDateColumns = db.prepare("PRAGMA table_info(important_dates)").all().map((c) => c.name);
+  if (importantDateColumns.length && !importantDateColumns.includes("start_date")) db.exec("ALTER TABLE important_dates ADD COLUMN start_date TEXT NOT NULL DEFAULT '';");
+  if (importantDateColumns.length && !importantDateColumns.includes("end_date")) db.exec("ALTER TABLE important_dates ADD COLUMN end_date TEXT NOT NULL DEFAULT '';");
+  if (importantDateColumns.length) db.exec("UPDATE important_dates SET start_date = COALESCE(NULLIF(start_date, ''), date), end_date = COALESCE(NULLIF(end_date, ''), date) WHERE start_date = '' OR end_date = '';");
   db.exec("UPDATE normalized_items SET first_seen_at = COALESCE(first_seen_at, created_at), last_seen_at = COALESCE(last_seen_at, created_at) WHERE first_seen_at IS NULL OR last_seen_at IS NULL;");
   db.exec("UPDATE brief_config SET product_name='Pillar Time' WHERE product_name IN ('Pillar Brief', 'Strategy Console', 'Intelligence Desk');");
   runMigrationMarker("pillar_time_core_schema_v1");
@@ -1294,29 +1300,11 @@ async function pollTelegramUpdates() {
     if (!chatId || String(chatId) !== String(tg.chat_id)) continue;
     if (callbackData.startsWith("deliberate:")) {
       handled += 1;
-      const runId = callbackData.slice("deliberate:".length).trim();
-      try {
-        await answerTelegramCallback(tg.bot_token, callback.id, "Deliberating brief...");
-        const deliberation = await deliberateWorkflowRun(runId);
-        await sendTelegramMarkdown(tg.bot_token, String(chatId), formatDeliberationMarkdownV2(deliberation));
-      } catch (error) {
-        try { await answerTelegramCallback(tg.bot_token, callback.id, error.message || "Deliberation failed."); } catch {}
-        await sendTelegramMessage(tg.bot_token, String(chatId), error.message || "Could not deliberate that brief.");
-      }
+      try { await answerTelegramCallback(tg.bot_token, callback.id, "Perspective deliberation has been removed."); } catch {}
+      await sendTelegramMessage(tg.bot_token, String(chatId), "Perspective deliberation has been removed from Pillar Time.");
     } else if (/^\/deliberate\b/i.test(messageText)) {
       handled += 1;
-      const [, requestedRunId] = messageText.split(/\s+/);
-      const runId = requestedRunId || workflowRuns()[0]?.id;
-      if (!runId) {
-        await sendTelegramMessage(tg.bot_token, String(chatId), "No saved briefs are available to deliberate yet.");
-      } else {
-        try {
-          const deliberation = await deliberateWorkflowRun(runId);
-          await sendTelegramMarkdown(tg.bot_token, String(chatId), formatDeliberationMarkdownV2(deliberation));
-        } catch (error) {
-          await sendTelegramMessage(tg.bot_token, String(chatId), error.message || "Could not deliberate that brief.");
-        }
-      }
+      await sendTelegramMessage(tg.bot_token, String(chatId), "Perspective deliberation has been removed from Pillar Time.");
     }
   }
   run("UPDATE telegram_settings SET update_offset=$offset, last_checked_at=$t, last_error='', updated_at=$t WHERE id=1", { $offset: nextOffset, $t: now() });
@@ -1444,12 +1432,16 @@ async function synthesizeElevenLabsAudio({ text, filenamePrefix = "brief", apiKe
   const fileName = `${filenamePrefix.replace(/[^a-z0-9_-]+/gi, "-").slice(0, 48) || "brief"}-${audioId}.mp3`;
   const filePath = path.join(audioDir, fileName);
   fs.writeFileSync(filePath, bytes);
+  const stat = fs.existsSync(filePath) ? fs.statSync(filePath) : null;
+  if (!stat?.size) throw new Error("ElevenLabs returned audio, but Pillar Time could not save a playable MP3.");
   return {
     id: audioId,
     fileName,
     path: filePath,
     url: `/api/audio/${encodeURIComponent(fileName)}`,
-    bytes: bytes.length,
+    bytes: stat.size,
+    contentType: "audio/mpeg",
+    reachable: true,
     voiceId: selectedVoice,
     modelId: selectedModel,
     generatedAt: now(),
@@ -1484,7 +1476,7 @@ async function deliverBriefToTelegram({ runId, artifact }) {
     const prefix = chunks.length > 1 ? `Part ${i + 1}/${chunks.length}\n\n` : "";
     const payload = await sendTelegramMessage(tg.bot_token, tg.chat_id, `${prefix}${chunks[i]}`, {
       parseMode: "MarkdownV2",
-      replyMarkup: i === chunks.length - 1 ? { inline_keyboard: [[{ text: "Deliberate", callback_data: `deliberate:${runId}` }]] } : null,
+      replyMarkup: null,
     });
     sentMessages.push(payload.result?.message_id);
   }
@@ -2406,21 +2398,40 @@ function linearApiKey() {
   return String(process.env.LINEAR_API_KEY || "").trim();
 }
 
-function linearClient() {
-  return new LinearClient({ apiKey: linearApiKey() });
+function savedLinearApiKey(row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: LINEAR_PROVIDER })) {
+  return String(row?.api_key || "").trim();
+}
+
+function resolvedLinearApiKey({ apiKey = "", requireEnabled = true } = {}) {
+  const inputKey = String(apiKey || "").trim();
+  if (inputKey) return { apiKey: inputKey, source: "input" };
+  const row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: LINEAR_PROVIDER });
+  const savedKey = savedLinearApiKey(row);
+  if (savedKey && (!requireEnabled || row?.enabled)) return { apiKey: savedKey, source: "saved" };
+  const envKey = linearApiKey();
+  if (envKey && (!requireEnabled || row?.enabled)) return { apiKey: envKey, source: "env" };
+  return { apiKey: "", source: "none" };
+}
+
+function linearClient(options = {}) {
+  const resolved = resolvedLinearApiKey(options);
+  return new LinearClient({ apiKey: resolved.apiKey });
 }
 
 function linearPublicConnector(row = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: LINEAR_PROVIDER })) {
+  const hasSavedKey = !!savedLinearApiKey(row);
   const hasEnvKey = !!linearApiKey();
+  const hasAnyKey = hasSavedKey || hasEnvKey;
+  const enabled = !!row?.enabled && hasAnyKey;
   return {
     provider: LINEAR_PROVIDER,
-    enabled: !!row?.enabled && hasEnvKey,
-    apiKeySaved: false,
-    credentialStatus: hasEnvKey ? "env" : "missing",
-    status: hasEnvKey && row?.enabled ? "ready" : hasEnvKey ? "disabled" : "missing env",
+    enabled,
+    apiKeySaved: hasSavedKey,
+    credentialStatus: hasSavedKey ? "saved" : hasEnvKey ? "env" : "missing",
+    status: enabled ? "ready" : hasAnyKey ? "disabled" : "missing credentials",
     teamKey: DEFAULT_LINEAR_TEAM_KEY,
     workspaceHint: "Transformation Agency",
-    writeEnabled: hasEnvKey && !!row?.enabled,
+    writeEnabled: enabled,
     lastCheckedAt: row?.last_checked_at || null,
     lastError: row?.last_error || "",
     updatedAt: row?.updated_at || null,
@@ -3439,6 +3450,37 @@ function seedDefaultYouTubeSources() {
   });
 }
 
+function defaultSourceCatalogKeys() {
+  const records = [
+    ...DEFAULT_RSS_SOURCES.map(([name, locator]) => ({ name, type: "RSS", locator })),
+    { name: "PubMed Custom RSS", type: "Web", locator: "https://pubmed.ncbi.nlm.nih.gov/" },
+    ...DEFAULT_REDDIT_SOURCES.map(([name, subreddit]) => ({ name, type: "Reddit", locator: `r/${subreddit}` })),
+    ...DEFAULT_X_SOURCES.map(([name, query]) => ({ name, type: "X", locator: `search:${query}` })),
+    ...DEFAULT_PODCAST_SOURCES.map(([name, locator]) => ({ name, type: "Podcast", locator })),
+    ...DEFAULT_YOUTUBE_SOURCES.map(([name, handle]) => ({ name, type: "YouTube", locator: handle })),
+  ];
+  return records;
+}
+
+function cleanupDefaultSourceCatalog() {
+  const markerKey = "default_source_catalog_removed_v1";
+  if (get("SELECT value FROM app_state WHERE key=$key", { $key: markerKey })?.value === "1") return;
+  for (const record of defaultSourceCatalogKeys()) {
+    run(`DELETE FROM sources
+         WHERE type=$type
+           AND name=$name
+           AND locator=$locator
+           AND status='paused'
+           AND id NOT IN (SELECT DISTINCT source_id FROM normalized_items WHERE source_id IS NOT NULL)`, {
+      $type: record.type,
+      $name: record.name,
+      $locator: record.locator,
+    });
+  }
+  run(`INSERT INTO app_state (key, value, updated_at) VALUES ($key, '1', $t)
+       ON CONFLICT(key) DO UPDATE SET value='1', updated_at=$t`, { $key: markerKey, $t: now() });
+}
+
 function seedTimeDefaults() {
   const t = now();
   if (!get("SELECT id FROM time_preferences WHERE id=1")) {
@@ -3565,35 +3607,14 @@ function seedTrustedContextDefaults() {
 
 function seed() {
   seedTimeDefaults();
-  seedDefaultRssSources();
-  seedDefaultRedditSources();
-  seedDefaultXSources();
-  seedDefaultPodcastSources();
-  seedDefaultYouTubeSources();
+  cleanupDefaultSourceCatalog();
   const count = get("SELECT COUNT(*) AS n FROM lenses").n;
   const t = now();
-  if (count === 0) {
-    const lenses = [
-      ["lens-signal", "Signal Lens", "Relevance and evidence", "Separates meaningful source-backed movement from noise, repeats, and weak claims.", "Evaluate each item for source quality, freshness, specificity, corroboration, and practical relevance. Name what is known, what is uncertain, and what would change the read.", ["verdict", "evidence", "uncertainty", "next_check"]],
-      ["lens-impact", "Impact Lens", "Decision and consequence", "Turns source items into implications, risks, opportunities, and watch items.", "Evaluate what the development could change for the brief owner. Prioritize concrete consequences, time horizon, affected actors, and practical next moves.", ["verdict", "impact", "time_horizon", "next_move"]],
-      ["lens-sentiment", "Sentiment Lens", "Narrative and reaction", "Reads how communities, markets, or audiences are responding without treating chatter as proof.", "Evaluate narrative momentum, audience reaction, consensus versus disagreement, and where sentiment may be overstated. Keep claims grounded in the configured sources.", ["verdict", "reaction", "counter_signal", "confidence"]],
-    ];
-    const stmt = db.prepare(`INSERT INTO lenses (id, name, role, description, instructions, schema_json, enabled, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`);
-    for (const lens of lenses) stmt.run(...lens.slice(0, 5), json(lens[5]), t, t);
-  }
-  const councilCount = get("SELECT COUNT(*) AS n FROM councils").n;
-  if (councilCount === 0) {
-    run(`INSERT INTO councils (id, name, synthesis_prompt, enabled, created_at, updated_at)
-         VALUES ($id, $name, $prompt, 1, $t, $t)`, {
-      $id: "council-brief",
-      $name: "Brief Council",
-      $prompt: "Synthesize each lens output into the clearest overall read: points of agreement, genuine disagreements, practical implications, open questions, one recommended next move, and calibrated confidence.",
-      $t: t,
-    });
-    ["lens-signal", "lens-impact", "lens-sentiment"].forEach((lensId, i) => {
-      run("INSERT INTO council_members (council_id, lens_id, position) VALUES ('council-brief', $lensId, $position)", { $lensId: lensId, $position: i + 1 });
-    });
+  if (count === 0) run(`INSERT INTO app_state (key, value, updated_at) VALUES ('perspective_lenses_removed_v1', '1', $t)
+       ON CONFLICT(key) DO UPDATE SET value='1', updated_at=$t`, { $t: t });
+  if (get("SELECT COUNT(*) AS n FROM councils").n === 0) {
+    run(`INSERT INTO app_state (key, value, updated_at) VALUES ('brief_council_seed_skipped_v1', '1', $t)
+         ON CONFLICT(key) DO UPDATE SET value='1', updated_at=$t`, { $t: t });
   }
   if (!get("SELECT id FROM telegram_settings WHERE id = 1")) {
     run("INSERT INTO telegram_settings (id, updated_at) VALUES (1, $t)", { $t: t });
@@ -3664,12 +3685,7 @@ function seed() {
     if (Array.isArray(currentPerspectives) && currentPerspectives.length > 0 && !configRow.perspective_lenses_migrated) {
       run("UPDATE brief_config SET perspective_lenses_migrated=1, updated_at=$t WHERE id=1", { $t: t });
     } else if (!configRow.perspective_lenses_migrated) {
-      const legacyPerspectives = legacyLensesAsPerspectiveLenses();
-      if (legacyPerspectives.length) {
-        run("UPDATE brief_config SET perspective_lenses_json=$lenses, perspective_lenses_migrated=1, updated_at=$t WHERE id=1", { $lenses: json(legacyPerspectives), $t: t });
-      } else {
-        run("UPDATE brief_config SET perspective_lenses_migrated=1, updated_at=$t WHERE id=1", { $t: t });
-      }
+      run("UPDATE brief_config SET perspective_lenses_json='[]', perspective_lenses_migrated=1, updated_at=$t WHERE id=1", { $t: t });
     }
   }
   if (!get("SELECT id FROM onboarding_state WHERE id = 1")) {
@@ -3779,12 +3795,14 @@ function reminders() {
     nextOccurrence: nextOccurrence({
       id: r.id,
       enabled: !!r.enabled,
+      type: r.type,
       scheduleType: r.schedule_type,
       localTime: r.local_time,
       startDate: r.start_date,
       endDate: r.end_date,
       weekdays: parse(r.weekdays_json, []),
       weekday: parse(r.weekdays_json, [])[0],
+      sporadic: parse(r.sporadic_json, {}),
     }, new Date(), r.timezone),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -3804,10 +3822,12 @@ function reviewTemplates() {
 }
 
 function importantDates() {
-  return all("SELECT * FROM important_dates ORDER BY date ASC").map((r) => ({
+  return all("SELECT * FROM important_dates ORDER BY COALESCE(NULLIF(start_date, ''), date) ASC").map((r) => ({
     id: r.id,
     title: r.title,
     date: r.date,
+    startDate: r.start_date || r.date,
+    endDate: r.end_date || r.start_date || r.date,
     category: r.category,
     notes: r.notes,
     prepSequence: parse(r.prep_sequence_json, []),
@@ -3848,6 +3868,7 @@ function timeSuggestions() {
     source: "task",
     dueAt: task.dueAt,
     estimateMinutes: task.estimateMinutes,
+    priority: task.priority,
     status: task.status,
     waitingOn: task.waitingOn,
     feedbackKey: task.id,
@@ -4174,7 +4195,7 @@ function telegramSettings() {
     enabled: !!r.enabled, botToken: r.bot_token ? "configured" : "", chatId: r.chat_id,
     allowedUsers: parse(r.allowed_users, []), lastCheckedAt: r.last_checked_at, lastError: r.last_error,
     recentCommands: parse(r.recent_commands, []), updatedAt: r.updated_at,
-    commands: ["/brief", "/sources", "/lenses", "/deliberate", "/review", "/approve", "/reject", "/analyze"],
+    commands: ["/brief", "/review", "/approve", "/reject", "/analyze"],
   };
 }
 function modelSettings() {
@@ -5783,15 +5804,23 @@ app.post("/api/time/reminders", (req, res) => {
   const b = req.body || {};
   const t = now();
   const reminderId = b.id || id("reminder");
+  const type = String(b.type || "regular");
+  const sporadic = b.sporadic && typeof b.sporadic === "object" ? b.sporadic : {};
+  const normalizedSporadic = type === "sporadic" ? {
+    windowStart: String(sporadic.windowStart || "10:00"),
+    windowEnd: String(sporadic.windowEnd || "16:00"),
+    count: Math.max(1, Math.min(8, Number(sporadic.count || 2))),
+    minGapMinutes: Math.max(15, Math.min(480, Number(sporadic.minGapMinutes || 120))),
+  } : {};
   run(`INSERT INTO reminders (id, title, body, type, schedule_type, local_time, timezone, weekdays_json, start_date, end_date, quiet_behavior, catchup_policy, channels_json, sporadic_json, enabled, paused_until, created_at, updated_at)
        VALUES ($id, $title, $body, $type, $scheduleType, $localTime, $timezone, $weekdays, $startDate, $endDate, $quiet, $catchup, $channels, $sporadic, $enabled, $pausedUntil, $t, $t)
        ON CONFLICT(id) DO UPDATE SET title=$title, body=$body, type=$type, schedule_type=$scheduleType, local_time=$localTime, timezone=$timezone, weekdays_json=$weekdays, start_date=$startDate, end_date=$endDate, quiet_behavior=$quiet, catchup_policy=$catchup, channels_json=$channels, sporadic_json=$sporadic, enabled=$enabled, paused_until=$pausedUntil, updated_at=$t`, {
-    $id: reminderId, $title: String(b.title || "Untitled reminder").trim(), $body: String(b.body || ""), $type: String(b.type || "regular"),
-    $scheduleType: String(b.scheduleType || "once"), $localTime: String(b.localTime || "09:00"), $timezone: String(b.timezone || prefs.timezone),
+    $id: reminderId, $title: String(b.title || "Untitled reminder").trim(), $body: String(b.body || ""), $type: type,
+    $scheduleType: type === "sporadic" ? "sporadic" : String(b.scheduleType || "once"), $localTime: type === "sporadic" ? "" : String(b.localTime || "09:00"), $timezone: String(b.timezone || prefs.timezone),
     $weekdays: json(b.weekdays || []), $startDate: String(b.startDate || localDateKey(new Date(), prefs.timezone)), $endDate: b.endDate || null,
     $quiet: String(b.quietBehavior || "skip"), $catchup: String(b.catchupPolicy || "latest-once"),
     $channels: json(b.channels || { desktopText: true, desktopAudio: false, telegramText: false, telegramAudio: false }),
-    $sporadic: json(b.sporadic || {}), $enabled: b.enabled ? 1 : 0, $pausedUntil: b.pausedUntil || null, $t: t,
+    $sporadic: json(normalizedSporadic), $enabled: b.enabled ? 1 : 0, $pausedUntil: b.pausedUntil || null, $t: t,
   });
   res.json(state());
 });
@@ -5817,15 +5846,20 @@ app.patch("/api/time/reviews/:id", (req, res) => {
 
 app.post("/api/time/important-dates", (req, res) => {
   const b = req.body || {};
-  if (!String(b.title || "").trim() || !String(b.date || "").trim()) return res.status(400).json({ error: "Important date title and date are required" });
+  const startDate = String(b.startDate || b.date || "").trim();
+  const endDate = String(b.endDate || startDate).trim();
+  if (!String(b.title || "").trim() || !startDate) return res.status(400).json({ error: "Important date title and start date are required" });
+  if (endDate && endDate < startDate) return res.status(400).json({ error: "End date cannot be before start date" });
   const t = now();
   const dateId = b.id || id("date");
-  run(`INSERT INTO important_dates (id, title, date, category, notes, prep_sequence_json, enabled, created_at, updated_at)
-       VALUES ($id, $title, $date, $category, $notes, $prep, $enabled, $t, $t)
-       ON CONFLICT(id) DO UPDATE SET title=$title, date=$date, category=$category, notes=$notes, prep_sequence_json=$prep, enabled=$enabled, updated_at=$t`, {
+  run(`INSERT INTO important_dates (id, title, date, start_date, end_date, category, notes, prep_sequence_json, enabled, created_at, updated_at)
+       VALUES ($id, $title, $date, $startDate, $endDate, $category, $notes, $prep, $enabled, $t, $t)
+       ON CONFLICT(id) DO UPDATE SET title=$title, date=$date, start_date=$startDate, end_date=$endDate, category=$category, notes=$notes, prep_sequence_json=$prep, enabled=$enabled, updated_at=$t`, {
     $id: dateId,
     $title: String(b.title).trim(),
-    $date: String(b.date).trim(),
+    $date: startDate,
+    $startDate: startDate,
+    $endDate: endDate || startDate,
     $category: String(b.category || b.kind || "personal"),
     $notes: String(b.notes || ""),
     $prep: json(b.prepSequence || []),
@@ -5900,6 +5934,17 @@ app.get("/api/audio/:fileName", (req, res) => {
   res.setHeader("Content-Type", "audio/mpeg");
   res.setHeader("Cache-Control", "private, max-age=86400");
   fs.createReadStream(filePath).pipe(res);
+});
+
+app.head("/api/audio/:fileName", (req, res) => {
+  const fileName = path.basename(String(req.params.fileName || ""));
+  const filePath = path.join(audioDir, fileName);
+  if (!fileName.endsWith(".mp3") || !fs.existsSync(filePath)) return res.status(404).end();
+  const stat = fs.statSync(filePath);
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.setHeader("Content-Length", String(stat.size));
+  res.setHeader("Cache-Control", "private, max-age=86400");
+  res.status(200).end();
 });
 
 app.get("/api/trusted-context", (req, res) => {
@@ -6318,53 +6363,11 @@ function requestedPerspectiveLensLimit(promptText) {
 }
 
 app.post("/api/perspective-lenses/generate", async (req, res) => {
-  const promptText = String(req.body?.prompt || "").trim();
-  if (promptText.length < 8) return res.status(400).json({ error: "Describe the perspectives you want first.", state: state() });
-  if (modelSettings().status !== "ready") return res.status(400).json({ error: "Set up a working model before generating perspective lenses.", state: state() });
-  const lensLimit = requestedPerspectiveLensLimit(promptText);
-  const system = [
-    "You turn natural-language perspective requests into editable perspective lenses for a brief deliberation feature.",
-    "Infer how many lenses the user wants from the request.",
-    "Default to exactly one comprehensive lens when the user asks for one persona, one named thinker, one role, or one viewpoint.",
-    "Generate multiple lenses only when the user clearly asks for multiple, several, a set, a range, or names multiple viewpoints.",
-    "When a user references a real person, create an inspired analytical viewpoint, not a claim to represent that person's actual current opinions.",
-    "Each lens must be practical, source-grounded, and safe for a private intelligence brief.",
-    "Return only valid JSON.",
-  ].join(" ");
-  const modelPrompt = JSON.stringify({
-    task: `Generate exactly ${lensLimit} perspective lens${lensLimit === 1 ? "" : "es"} from the user's request.`,
-    request: promptText,
-    countRules: {
-      singularDefault: "If the request describes one persona or viewpoint, create one comprehensive lens with a rich role, description, and instructions.",
-      multipleOnlyWhenExplicit: "Only create multiple lenses when the user explicitly asks for multiple perspectives or names more than one viewpoint.",
-    },
-    requiredJsonShape: {
-      lenses: [{ name: "short name", role: "perspective role", description: "what it notices", instructions: "how it should evaluate a saved brief", enabled: true }],
-    },
-  });
-  try {
-    const text = await callTextModel({ system, prompt: modelPrompt });
-    const payload = parseModelJson(text);
-    const lenses = sanitizePerspectiveLenses((Array.isArray(payload.lenses) ? payload.lenses : []).map((lens, index) => ({
-      ...lens,
-      id: lens.id || id(`perspective-${index + 1}`),
-    }))).slice(0, lensLimit);
-    if (!lenses.length) throw new Error("The model did not return usable perspective lenses.");
-    audit("perspectives.generated", "brief_config", "1", `Generated ${lenses.length} perspective lenses from onboarding prompt`, {}, "system");
-    res.json({ lenses, state: state() });
-  } catch (error) {
-    audit("perspectives.generate_failed", "brief_config", "1", error.message || "Perspective generation failed", {}, "system");
-    res.status(400).json({ error: error.message || "Perspective generation failed", state: state() });
-  }
+  res.status(410).json({ error: "Perspective lenses have been removed from Pillar Time.", state: state() });
 });
 
 app.post("/api/workflow-runs/:id/deliberate", async (req, res) => {
-  try {
-    const deliberation = await deliberateWorkflowRun(req.params.id, { regenerate: req.body?.regenerate === true });
-    res.json({ deliberation, state: state() });
-  } catch (error) {
-    res.status(400).json({ error: error.message || "Could not deliberate this brief.", state: state() });
-  }
+  res.status(410).json({ error: "Perspective deliberation has been removed from Pillar Time.", state: state() });
 });
 
 app.post("/api/sources", (req, res) => {
@@ -6447,31 +6450,10 @@ app.delete("/api/sources/:id", (req, res) => {
 });
 
 app.post("/api/lenses", (req, res) => {
-  const b = req.body || {};
-  const lensId = b.id || id("lens");
-  const t = now();
-  run(`INSERT INTO lenses (id, name, role, description, instructions, schema_json, enabled, created_at, updated_at)
-       VALUES ($id, $name, $role, $description, $instructions, $schema, $enabled, $t, $t)
-       ON CONFLICT(id) DO UPDATE SET name=$name, role=$role, description=$description, instructions=$instructions,
-       schema_json=$schema, enabled=$enabled, updated_at=$t`, {
-    $id: lensId, $name: b.name || "Untitled Lens", $role: b.role || "", $description: b.description || "",
-    $instructions: b.instructions || "", $schema: json(b.schema || []), $enabled: b.enabled === false ? 0 : 1, $t: t,
-  });
-  audit("lens.saved", "lens", lensId, b.name || "Untitled Lens");
-  res.json(state());
+  res.status(410).json({ error: "Perspective lenses have been removed from Pillar Time.", state: state() });
 });
 app.patch("/api/lenses/:id", (req, res) => {
-  const current = get("SELECT * FROM lenses WHERE id=$id", { $id: req.params.id });
-  if (!current) return res.status(404).json({ error: "Lens not found" });
-  const b = req.body || {};
-  run(`UPDATE lenses SET name=$name, role=$role, description=$description, instructions=$instructions,
-       schema_json=$schema, enabled=$enabled, updated_at=$t WHERE id=$id`, {
-    $id: req.params.id, $name: b.name ?? current.name, $role: b.role ?? current.role,
-    $description: b.description ?? current.description, $instructions: b.instructions ?? current.instructions,
-    $schema: json(b.schema ?? parse(current.schema_json, [])), $enabled: b.enabled === undefined ? current.enabled : (b.enabled ? 1 : 0), $t: now(),
-  });
-  audit("lens.updated", "lens", req.params.id, b.name || current.name);
-  res.json(state());
+  res.status(410).json({ error: "Perspective lenses have been removed from Pillar Time.", state: state() });
 });
 
 app.post("/api/councils", (req, res) => {
@@ -6551,7 +6533,10 @@ app.post("/api/workflow-runs/:id/audio", async (req, res) => {
     const workflowRun = workflowRuns().find((item) => item.id === req.params.id);
     if (!workflowRun) return res.status(404).json({ error: "Workflow run not found", state: state() });
     if (workflowRun.artifact?.audio?.url && workflowRun.artifact?.audio?.fileName) {
-      return res.json({ audio: workflowRun.artifact.audio, state: state() });
+      const existingPath = path.join(audioDir, path.basename(workflowRun.artifact.audio.fileName));
+      if (fs.existsSync(existingPath) && fs.statSync(existingPath).size > 0) {
+        return res.json({ audio: { ...workflowRun.artifact.audio, reachable: true }, state: state() });
+      }
     }
     const audio = await synthesizeElevenLabsAudio({ text: briefAudioText(workflowRun.artifact), filenamePrefix: `brief-${workflowRun.id}` });
     const nextArtifact = { ...(workflowRun.artifact || {}), audio };
@@ -6979,17 +6964,19 @@ app.patch("/api/connectors/:provider", (req, res) => {
   const b = req.body || {};
   const current = get("SELECT * FROM connector_credentials WHERE provider=$provider", { $provider: provider }) || {};
   if (provider === LINEAR_PROVIDER) {
+    const apiKey = Object.prototype.hasOwnProperty.call(b, "apiKey") ? String(b.apiKey || "").trim() : savedLinearApiKey(current);
     const enabled = b.enabled !== false;
-    const missing = enabled && !linearApiKey();
+    const missing = enabled && !apiKey && !linearApiKey();
     run(`INSERT INTO connector_credentials (provider, api_key, enabled, last_error, updated_at)
-         VALUES ($provider, '', $enabled, $err, $t)
-         ON CONFLICT(provider) DO UPDATE SET api_key='', enabled=$enabled, last_error=$err, updated_at=$t`, {
+         VALUES ($provider, $apiKey, $enabled, $err, $t)
+         ON CONFLICT(provider) DO UPDATE SET api_key=$apiKey, enabled=$enabled, last_error=$err, updated_at=$t`, {
       $provider: LINEAR_PROVIDER,
+      $apiKey: apiKey,
       $enabled: enabled ? 1 : 0,
-      $err: missing ? "Set LINEAR_API_KEY in the environment, then restart Pillar Time." : "",
+      $err: missing ? "Paste a Linear personal API key, or keep LINEAR_API_KEY as a fallback." : "",
       $t: now(),
     });
-    audit("connector.settings_updated", "connector", LINEAR_PROVIDER, enabled ? "Linear connector enabled" : "Linear connector disabled", {}, "system");
+    audit("connector.settings_updated", "connector", LINEAR_PROVIDER, enabled ? "Linear connector enabled/updated" : "Linear connector disabled", { keySource: apiKey ? "saved" : linearApiKey() ? "env" : "missing" }, "system");
     return res.json(state());
   }
   if (provider === REDDIT_PROVIDER) {
@@ -7051,9 +7038,20 @@ app.post("/api/reddit/test", async (req, res) => {
 });
 
 app.post("/api/linear/test", async (req, res) => {
+  const inputKey = String(req.body?.apiKey || "").trim();
   try {
-    const viewer = await linearClient().viewer();
-    run("UPDATE connector_credentials SET enabled=1, last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now() });
+    const viewer = await linearClient({ apiKey: inputKey, requireEnabled: false }).viewer();
+    if (inputKey) {
+      run(`INSERT INTO connector_credentials (provider, api_key, enabled, last_checked_at, last_error, updated_at)
+           VALUES ($provider, $apiKey, 1, $t, '', $t)
+           ON CONFLICT(provider) DO UPDATE SET api_key=$apiKey, enabled=1, last_checked_at=$t, last_error='', updated_at=$t`, {
+        $provider: LINEAR_PROVIDER,
+        $apiKey: inputKey,
+        $t: now(),
+      });
+    } else {
+      run("UPDATE connector_credentials SET enabled=1, last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: now() });
+    }
     audit("linear.test_succeeded", "connector", LINEAR_PROVIDER, `Connected Linear as ${viewer?.name || viewer?.email || "viewer"}`, {}, "system");
     res.json({ ok: true, viewer, connector: linearPublicConnector(), state: state() });
   } catch (error) {
@@ -7232,15 +7230,10 @@ app.post("/api/telegram/commands", async (req, res) => {
   let result = "Unsupported command";
   try {
     if (command === "/brief") result = workflowRuns()[0]?.id ? `Latest run: ${workflowRuns()[0].id}` : "No briefs have been generated yet.";
-    if (command === "/sources") result = `${sources().length} configured source(s).`;
-    if (command === "/lenses") result = `${briefConfig().perspectiveLenses.filter((l) => l.enabled !== false).length} perspective lens(es) configured.`;
-    if (command === "/councils") result = "Councils have been replaced by Brief Setup analyzers and optional perspective deliberation.";
+    if (command === "/sources") result = "Source management has been removed from Pillar Time.";
+    if (command === "/lenses" || command === "/councils") result = "Perspective lenses have been removed from Pillar Time.";
     if (command === "/review") result = `${approvals().filter((a) => a.status === "pending").length} pending approval(s).`;
-    if (command.startsWith("/deliberate")) {
-      const [, requestedRunId] = command.split(/\s+/);
-      const runId = requestedRunId || workflowRuns()[0]?.id;
-      result = runId ? formatDeliberation(await deliberateWorkflowRun(runId)) : "No briefs have been generated yet.";
-    }
+    if (command.startsWith("/deliberate")) result = "Perspective deliberation has been removed from Pillar Time.";
     if (command.startsWith("/analyze")) result = `Ad-hoc analysis requires configured model credentials. Request recorded: ${command}`;
     if (command.startsWith("/approve") || command.startsWith("/reject") || command.startsWith("/add_source") || command.startsWith("/add_lens")) result = "State-changing Telegram commands are adapter-backed and require authenticated Telegram user context.";
     const next = [{ command, result, ts: now() }, ...recent].slice(0, 20);
