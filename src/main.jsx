@@ -78,6 +78,17 @@ const workflowLabels = {
   telegram: "deliver Telegram brief",
 };
 
+function briefDeliveryBadge(run) {
+  const delivery = run?.artifact?.telegramDelivery || {};
+  const error = String(delivery.error || delivery.warning || "");
+  const telegramAmbiguous = !!delivery.pendingAck || /Telegram delivery timed out|Telegram delivery acknowledgement timed out/i.test(error);
+  if (run?.status === "running") return { tone: "muted", label: "Generating..." };
+  if (run?.status === "failed") return { tone: "err", label: "Failed" };
+  if (delivery.ok) return { tone: "ok", label: "Delivered" };
+  if (telegramAmbiguous) return { tone: "warn", label: "Check Telegram" };
+  return { tone: "muted", label: "Saved" };
+}
+
 const sourceDefinitions = {
   Web: {
     credential: "No API key. Use for public pages; the fetch adapter should use readability/extraction.",
@@ -2048,13 +2059,11 @@ function Briefs({ state, runWorkflow, refresh }) {
         <div className="brief-list">{filtered.map((run) => {
           const selectedRun = selected?.id === run.id;
           const date = new Date(run.startedAt);
-          const delivered = run.artifact?.telegramDelivery?.ok;
-          const running = run.status === "running";
-          const failed = run.status === "failed";
+          const deliveryBadge = briefDeliveryBadge(run);
           return <button key={run.id} className={`brief-list-item ${selectedRun ? "active" : ""}`} onClick={() => setSelectedId(run.id)}>
             <span className="date-icon"><Calendar className="ico" /></span>
-            <span><small>{date.toLocaleDateString()} · {date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small><strong>{briefDisplayTitle(run)}</strong><em>{(run.artifact?.selectedIssues || []).slice(0, 3).map((issue) => issue.sourceType || "Signal").join(" · ") || (running ? "In progress" : "Brief")}</em></span>
-            <Badge tone={running ? "muted" : failed ? "err" : delivered ? "ok" : "warn"}>{running ? "Generating..." : failed ? "Failed" : delivered ? "Delivered" : "Saved"}</Badge>
+            <span><small>{date.toLocaleDateString()} · {date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small><strong>{briefDisplayTitle(run)}</strong><em>{(run.artifact?.selectedIssues || []).slice(0, 3).map((issue) => issue.sourceType || "Signal").join(" · ") || (run.status === "running" ? "In progress" : "Brief")}</em></span>
+            <Badge tone={deliveryBadge.tone}>{deliveryBadge.label}</Badge>
           </button>;
         })}</div>
       </aside>
