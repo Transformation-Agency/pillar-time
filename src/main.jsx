@@ -634,8 +634,15 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
     const onPointerDown = (event) => {
       if (!helpRef.current?.contains(event.target)) setHelpOpen(false);
     };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setHelpOpen(false);
+    };
     window.addEventListener("pointerdown", onPointerDown);
-    return () => window.removeEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [helpOpen]);
   return <div className="app">
     <header className="app-header">
@@ -648,10 +655,10 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
           </button>)}
       </nav>
       <div className="header-actions" ref={helpRef}>
-        <button type="button" className={`help-menu-button ${helpOpen ? "active" : ""}`} onClick={() => setHelpOpen((current) => !current)}>
+        <button type="button" className={`help-menu-button ${helpOpen ? "active" : ""}`} aria-haspopup="menu" aria-expanded={helpOpen} aria-controls="help-update-menu" onClick={() => setHelpOpen((current) => !current)}>
           <Icon name="help" /><span>Help</span><ChevronDown className="ico tiny" aria-hidden="true" />
         </button>
-        {helpOpen && <div className="help-menu" role="menu">
+        {helpOpen && <div id="help-update-menu" className="help-menu" role="menu" aria-label="Help and update actions">
           <div className="help-menu-head">
             <strong>Pillar Time</strong>
             <span>{desktopUpdate?.version ? `Version ${desktopUpdate.version}` : "Desktop app"}</span>

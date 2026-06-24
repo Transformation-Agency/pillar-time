@@ -152,6 +152,14 @@ test("TextArea forwards helper props so onboarding guidance is rendered", () => 
   assert.match(mainSource, /placeholder="Example: give me a skeptical investor, a product strategist, a policy watcher, and a media narrative lens\."/);
 });
 
+test("Help update menu exposes expanded state and keyboard dismissal", () => {
+  assert.match(mainSource, /if \(event\.key === "Escape"\) setHelpOpen\(false\);/);
+  assert.match(mainSource, /window\.addEventListener\("keydown", onKeyDown\)/);
+  assert.match(mainSource, /window\.removeEventListener\("keydown", onKeyDown\)/);
+  assert.match(mainSource, /aria-haspopup="menu" aria-expanded=\{helpOpen\} aria-controls="help-update-menu"/);
+  assert.match(mainSource, /id="help-update-menu" className="help-menu" role="menu" aria-label="Help and update actions"/);
+});
+
 test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {
   assert.match(serverSource, /function telegramDeliveryStatus/);
   assert.match(serverSource, /async function deliverBriefToTelegramWithSoftTimeout/);
