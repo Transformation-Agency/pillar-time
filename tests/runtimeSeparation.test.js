@@ -147,6 +147,15 @@ test("High-use placeholder and table controls expose accessible labels", () => {
   assert.match(mainSource, /aria-label="Starter commitment for Today's Three"/);
 });
 
+test("Delivery schedule selects expose accessible labels", () => {
+  assert.match(mainSource, /aria-label="Delivery frequency"/);
+  assert.match(mainSource, /aria-label="Delivery day"/);
+  assert.match(mainSource, /aria-label="Delivery timezone"/);
+  assert.match(mainSource, /aria-label="Onboarding delivery frequency"/);
+  assert.match(mainSource, /aria-label="Onboarding delivery day"/);
+  assert.match(mainSource, /aria-label="Onboarding delivery timezone"/);
+});
+
 test("TextArea forwards helper props so onboarding guidance is rendered", () => {
   assert.match(mainSource, /function TextArea\(\{ label, value, onChange, rows = 4, \.\.\.props \}\)/);
   assert.match(mainSource, /<textarea rows=\{rows\} value=\{value\} onChange=\{\(e\) => onChange\(e\.target\.value\)\} \{\.\.\.props\} \/>/);
