@@ -3871,6 +3871,10 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setEditingProvider(provider);
     setConnectorModal(false);
   };
+  const openAudioBriefSettings = () => {
+    setConnectorModal(false);
+    window.setTimeout(() => document.getElementById("audio-briefs-settings")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  };
   const checkFfmpeg = async () => {
     setFfmpegBusy(true);
     setFfmpegMessage("");
@@ -4075,7 +4079,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         </div>
       </section>
 
-      <section className="panel connector-card">
+      <section className="panel connector-card" id="audio-briefs-settings">
         <div className="connector-head">
           <div className="connector-title"><span className="connector-icon blue"><Icon name="volume" /></span><div><h2>Audio Briefs</h2><p>ElevenLabs text-to-speech for playable briefs and optional Telegram MP3 delivery.</p></div></div>
           <Badge tone={state.tts?.status === "ready" ? "ok" : "muted"}>{state.tts?.status === "ready" ? "Ready" : "Optional"}</Badge>
@@ -4115,7 +4119,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <button type="button" onClick={() => { setConnectorModal(false); setTelegramModal(true); }}><BrandLogo name="Telegram" /><strong>Telegram delivery</strong><span>Bot token, chat ID, and command routing.</span></button>
           <button type="button" onClick={() => { setConnectorModal(false); setXModal(true); }}><BrandLogo name="X" /><strong>X search API</strong><span>Official bearer-token recent search.</span></button>
           <button type="button" onClick={() => { setConnectorModal(false); setGoogleCalendarModal(true); }}><BrandLogo name="Calendar" /><strong>Google Calendar</strong><span>Read today's agenda into each brief.</span></button>
-          <button type="button" onClick={() => setConnectorModal(false)}><Icon name="volume" /><strong>ElevenLabs audio</strong><span>Use the Audio Briefs settings below.</span></button>
+          <button type="button" onClick={openAudioBriefSettings}><Icon name="volume" /><strong>ElevenLabs audio</strong><span>Jump to the Audio Briefs settings below.</span></button>
           <button type="button" onClick={() => { setConnectorModal(false); setRedditModal(true); }}><BrandLogo name="Reddit" /><strong>Reddit OAuth API</strong><span>Official app-only OAuth for subreddit sources.</span></button>
           <button type="button" onClick={() => { setConnectorModal(false); setLinearModal(true); }}><BrandLogo name="Linear" /><strong>Linear</strong><span>Read and update project issues.</span></button>
         </div>
