@@ -2601,6 +2601,7 @@ function Onboarding({ state, mutate, refresh }) {
   const [starterCommitment, setStarterCommitment] = React.useState("");
   const [starterMessage, setStarterMessage] = React.useState("");
   const [reviewMessage, setReviewMessage] = React.useState("");
+  const [onboardingActionMessage, setOnboardingActionMessage] = React.useState("");
   const [briefPrompt, setBriefPrompt] = React.useState(state.onboarding.briefPrompt || "");
   const [briefDraft, setBriefDraft] = React.useState({ ...(state.onboarding.briefConfigDraft || state.briefConfig), ownerName: hasSavedFirstName ? savedOwnerName : "" });
   const [draftingBriefSetup, setDraftingBriefSetup] = React.useState(false);
@@ -3176,14 +3177,20 @@ function Onboarding({ state, mutate, refresh }) {
     await mutate("/api/brief-config", { ...state.briefConfig, deliveryTimezone: timezone, ...patch }, "PATCH");
   };
   const complete = async () => {
+    setOnboardingActionMessage("");
     try {
       await mutate("/api/onboarding/complete", {});
     } catch (error) {
-      setSourceMessage(error.message);
+      setOnboardingActionMessage(error.message || "Could not finish onboarding. Try again or finish later.");
     }
   };
   const skipOnboarding = async () => {
-    await mutate("/api/onboarding/skip", {});
+    setOnboardingActionMessage("");
+    try {
+      await mutate("/api/onboarding/skip", {});
+    } catch (error) {
+      setOnboardingActionMessage(error.message || "Could not leave onboarding yet. Check the local backend and try again.");
+    }
   };
   const stepIndex = Math.max(0, steps.indexOf(step));
   const activeModelProvider = modelProviderRows.find((row) => row.provider === model.provider) || modelProviderRows[0];
@@ -3210,6 +3217,7 @@ function Onboarding({ state, mutate, refresh }) {
     </aside>
     <main className="onboarding-main">
       <button className="onboarding-skip" type="button" onClick={skipOnboarding}><Icon name="x" />Skip and set up manually</button>
+      {onboardingActionMessage && <p className="warn-text onboarding-action-message">{onboardingActionMessage}</p>}
       {step === "welcome" && <section className="onboarding-panel">
         <Badge>First run</Badge>
         <h1>Set up your executive operating system.</h1>
