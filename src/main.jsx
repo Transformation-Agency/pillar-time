@@ -1012,6 +1012,14 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
   const agenda = latestCalendarAgenda(state).slice(0, 8);
   const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
   const suggestions = (time.suggestions || []).slice(0, 6);
+  const missingDayPlanContext = [
+    state.connectors?.googleCalendar?.status === "ready" ? "" : "Calendar",
+    state.connectors?.linear?.status === "ready" ? "" : "Linear",
+    state.model?.status === "ready" ? "" : "model",
+  ].filter(Boolean);
+  const dayPlanPreflight = missingDayPlanContext.length
+    ? `Generate works with available local context. Missing connectors will be reported: ${missingDayPlanContext.join(", ")}.`
+    : "Generate will use Calendar, Linear, model synthesis, and local context.";
   const addTask = (event) => {
     event.preventDefault();
     if (!capture.trim()) return;
@@ -1068,6 +1076,10 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     await runWorkflow();
   };
   return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<div className="row tight-row"><Button icon="briefs" onClick={() => setRoute("briefs")} disabled={!latestArtifact}>View Brief</Button><Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Plan</Button></div>}>
+    <div className={`day-plan-preflight ${missingDayPlanContext.length ? "has-gaps" : ""}`}>
+      <Icon name={missingDayPlanContext.length ? "help" : "check"} />
+      <span>{dayPlanPreflight}</span>
+    </div>
     <ProposedCalendarTiles artifact={latestArtifact} approvals={state.approvals || []} mutate={mutate} setRoute={setRoute} />
     <div className="metric-grid">
       <Metric label="Today" value={time.todayKey || "-"} sub={time.preferences?.timezone || "local"} />
