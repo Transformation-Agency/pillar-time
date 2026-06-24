@@ -87,6 +87,10 @@ test("First-run controls avoid misleading defaults and internal labels", () => {
   assert.match(mainSource, /is-gated/);
   assert.match(mainSource, /Generate works with available local context/);
   assert.match(mainSource, /Missing connectors will be reported/);
+  assert.match(mainSource, /Local health check/);
+  assert.match(mainSource, /runSettingsHealthCheck/);
+  assert.match(mainSource, /No blocking local health warnings detected from current state/);
+  assert.doesNotMatch(mainSource, /All systems operational/);
 });
 
 test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {
