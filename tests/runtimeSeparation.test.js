@@ -160,6 +160,21 @@ test("Planner capture saves expose local success and failure messages", () => {
   assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/important-dates", importantDate\)\.then\(\(\) => setImportantDate/);
 });
 
+test("Reminder and meeting captures expose local success and failure messages", () => {
+  assert.match(mainSource, /const \[reminderMessage, setReminderMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const createReminder = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!form\.title\.trim\(\)\) return;\n\s+setReminderMessage\(""\);/);
+  assert.match(mainSource, /await mutate\("\/api\/time\/reminders", form\);\n\s+setForm\(emptyReminderForm\);\n\s+setReminderMessage\("Reminder created\."\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setReminderMessage\(error\.message \|\| "Could not create reminder\."\);/);
+  assert.match(mainSource, /\{reminderMessage && <p className=\{reminderMessage\.includes\("created"\) \? "ok-text" : "warn-text"\}>\{reminderMessage\}<\/p>\}/);
+  assert.match(mainSource, /const \[meetingMessage, setMeetingMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const createMeeting = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!form\.title\.trim\(\)\) return;\n\s+setMeetingMessage\(""\);/);
+  assert.match(mainSource, /await mutate\("\/api\/time\/meetings", form\);\n\s+setForm\(\{ title: "", startsAt: "", notes: "" \}\);\n\s+setMeetingMessage\("Meeting saved\."\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setMeetingMessage\(error\.message \|\| "Could not save meeting\."\);/);
+  assert.match(mainSource, /\{meetingMessage && <p className=\{meetingMessage\.includes\("saved"\) \? "ok-text" : "warn-text"\}>\{meetingMessage\}<\/p>\}/);
+  assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/reminders", form\)\.then\(\(\) => setForm\(emptyReminderForm\)\)/);
+  assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/meetings", form\)\.then\(\(\) => setForm\(\{ title: "", startsAt: "", notes: "" \}\)\)/);
+});
+
 test("Delivery schedule selects expose accessible labels", () => {
   assert.match(mainSource, /aria-label="Delivery frequency"/);
   assert.match(mainSource, /aria-label="Delivery day"/);
