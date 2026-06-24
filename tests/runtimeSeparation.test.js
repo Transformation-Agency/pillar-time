@@ -169,6 +169,15 @@ test("Backend connection errors offer retry and clear after recovery", () => {
   assert.doesNotMatch(mainSource, /API error: \{error\}/);
 });
 
+test("Onboarding exit actions surface failures instead of failing silently", () => {
+  assert.match(mainSource, /const \[onboardingActionMessage, setOnboardingActionMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /setOnboardingActionMessage\(error\.message \|\| "Could not finish onboarding\. Try again or finish later\."\);/);
+  assert.match(mainSource, /setOnboardingActionMessage\(error\.message \|\| "Could not leave onboarding yet\. Check the local backend and try again\."\);/);
+  assert.match(mainSource, /\{onboardingActionMessage && <p className="warn-text onboarding-action-message">\{onboardingActionMessage\}<\/p>\}/);
+  assert.doesNotMatch(mainSource, /const skipOnboarding = async \(\) => \{\n\s+await mutate\("\/api\/onboarding\/skip", \{\}\);\n\s+\};/);
+  assert.doesNotMatch(mainSource, /catch \(error\) \{\n\s+setSourceMessage\(error\.message\);\n\s+\}\n\s+\};\n\s+const skipOnboarding/);
+});
+
 test("Telegram delivery timeouts are treated as pending acknowledgement, not failed runs", () => {
   assert.match(serverSource, /function telegramDeliveryStatus/);
   assert.match(serverSource, /async function deliverBriefToTelegramWithSoftTimeout/);
