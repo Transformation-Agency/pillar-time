@@ -62,6 +62,25 @@ test("Executive calendar proposals are approval-gated and surfaced in Today", ()
   assert.match(mainSource, /profile\.standing_commitment/);
 });
 
+test("Today suggestion and quick-capture actions expose save feedback", () => {
+  assert.match(mainSource, /function TimeSuggestionCard\(\{ suggestion, mutate \}\) \{\n\s+const \[message, setMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const accept = async \(\) => \{\n\s+setMessage\(""\);\n\s+try \{\n\s+await mutate\("\/api\/time\/commitments"/);
+  assert.match(mainSource, /setMessage\("Accepted into Today’s Three\."\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setMessage\(error\.message \|\| "Could not accept this suggestion\."\);/);
+  assert.match(mainSource, /const feedback = async \(value\) => \{\n\s+setMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/suggestions\/\$\{encodeURIComponent/);
+  assert.match(mainSource, /setMessage\(value === "notToday" \? "Moved out of today\." : "Feedback saved\."\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setMessage\(error\.message \|\| "Could not save suggestion feedback\."\);/);
+  assert.match(mainSource, /\{message && <p className=\{message\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{message\}<\/p>\}/);
+  assert.match(mainSource, /const \[captureMessage, setCaptureMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const addTask = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!capture\.trim\(\)\) return;\n\s+setCaptureMessage\(""\);/);
+  assert.match(mainSource, /await mutate\("\/api\/time\/tasks", \{ title: capture\.trim\(\), source: "quick-capture" \}\);\n\s+setCapture\(""\);\n\s+setCaptureMessage\("Captured\."\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setCaptureMessage\(error\.message \|\| "Could not capture this task\."\);/);
+  assert.match(mainSource, /\{captureMessage && <p className=\{captureMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{captureMessage\}<\/p>\}/);
+  assert.doesNotMatch(mainSource, /const accept = \(\) => mutate\("\/api\/time\/commitments"/);
+  assert.doesNotMatch(mainSource, /const feedback = \(value\) => mutate\(`\/api\/time\/suggestions/);
+  assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/tasks", \{ title: capture\.trim\(\), source: "quick-capture" \}\)\.then\(\(\) => setCapture\(""\)\)/);
+});
+
 test("Linear connector cannot be falsely enabled without credentials", () => {
   assert.match(serverSource, /res\.status\(400\)\.json\(\{ error: message, state: state\(\) \}\)/);
   assert.match(serverSource, /Paste a Linear personal API key, or configure LINEAR_API_KEY before enabling Linear\./);
