@@ -867,11 +867,11 @@ function Overview({ state, setRoute, runWorkflow, mutate }) {
         <div className="delivery-block">
           <strong>Schedule</strong>
           <div className="delivery-row">
-            <label className="delivery-field"><Calendar className="ico" /><select value={state.briefConfig.deliveryFrequency || "Daily"} onChange={(event) => saveDelivery({ deliveryFrequency: event.target.value })}><option>Daily</option><option>Weekly</option></select></label>
+            <label className="delivery-field"><Calendar className="ico" /><select aria-label="Delivery frequency" value={state.briefConfig.deliveryFrequency || "Daily"} onChange={(event) => saveDelivery({ deliveryFrequency: event.target.value })}><option>Daily</option><option>Weekly</option></select></label>
             <DeliveryTimeSelect value={state.briefConfig.deliveryTime || "08:00"} onChange={(deliveryTime) => saveDelivery({ deliveryTime })} />
           </div>
-          {state.briefConfig.deliveryFrequency === "Weekly" && <label className="delivery-field timezone-field"><Calendar className="ico" /><select value={state.briefConfig.deliveryDay || "Monday"} onChange={(event) => saveDelivery({ deliveryDay: event.target.value })}>{deliveryDays.map((day) => <option key={day}>{day}</option>)}</select></label>}
-          <label className="delivery-field timezone-field"><Globe2 className="ico" /><select value={timezone} onChange={(event) => saveDelivery({ deliveryTimezone: event.target.value })}>{timezones.map((tz) => <option key={tz} value={tz}>{tz}</option>)}</select></label>
+          {state.briefConfig.deliveryFrequency === "Weekly" && <label className="delivery-field timezone-field"><Calendar className="ico" /><select aria-label="Delivery day" value={state.briefConfig.deliveryDay || "Monday"} onChange={(event) => saveDelivery({ deliveryDay: event.target.value })}>{deliveryDays.map((day) => <option key={day}>{day}</option>)}</select></label>}
+          <label className="delivery-field timezone-field"><Globe2 className="ico" /><select aria-label="Delivery timezone" value={timezone} onChange={(event) => saveDelivery({ deliveryTimezone: event.target.value })}>{timezones.map((tz) => <option key={tz} value={tz}>{tz}</option>)}</select></label>
         </div>
         <div className="delivery-block">
           <strong>Deliver to</strong>
@@ -3488,11 +3488,11 @@ function Onboarding({ state, mutate, refresh }) {
         <p>This can be daily or weekly. You can change it later from Settings.</p>
         <div className="delivery-block">
           <div className="delivery-row">
-            <label className="delivery-field"><Calendar className="ico" /><select value={state.briefConfig.deliveryFrequency || "Daily"} onChange={(event) => saveDelivery({ deliveryFrequency: event.target.value })}><option>Daily</option><option>Weekly</option></select></label>
+            <label className="delivery-field"><Calendar className="ico" /><select aria-label="Onboarding delivery frequency" value={state.briefConfig.deliveryFrequency || "Daily"} onChange={(event) => saveDelivery({ deliveryFrequency: event.target.value })}><option>Daily</option><option>Weekly</option></select></label>
             <DeliveryTimeSelect value={state.briefConfig.deliveryTime || "08:00"} onChange={(deliveryTime) => saveDelivery({ deliveryTime })} />
           </div>
-          {state.briefConfig.deliveryFrequency === "Weekly" && <label className="delivery-field timezone-field"><Calendar className="ico" /><select value={state.briefConfig.deliveryDay || "Monday"} onChange={(event) => saveDelivery({ deliveryDay: event.target.value })}>{deliveryDays.map((day) => <option key={day}>{day}</option>)}</select></label>}
-          <label className="delivery-field timezone-field"><Globe2 className="ico" /><select value={timezone} onChange={(event) => saveDelivery({ deliveryTimezone: event.target.value })}>{timezones.map((tz) => <option key={tz} value={tz}>{tz}</option>)}</select></label>
+          {state.briefConfig.deliveryFrequency === "Weekly" && <label className="delivery-field timezone-field"><Calendar className="ico" /><select aria-label="Onboarding delivery day" value={state.briefConfig.deliveryDay || "Monday"} onChange={(event) => saveDelivery({ deliveryDay: event.target.value })}>{deliveryDays.map((day) => <option key={day}>{day}</option>)}</select></label>}
+          <label className="delivery-field timezone-field"><Globe2 className="ico" /><select aria-label="Onboarding delivery timezone" value={timezone} onChange={(event) => saveDelivery({ deliveryTimezone: event.target.value })}>{timezones.map((tz) => <option key={tz} value={tz}>{tz}</option>)}</select></label>
         </div>
         <div className="row"><Button onClick={() => go("telegram")}>Back</Button><Button icon="check" kind="primary" onClick={() => go("review")}>Review setup</Button></div>
       </section>}
