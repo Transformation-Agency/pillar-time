@@ -4174,8 +4174,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
 function Field({ label, value, onChange, ...props }) {
   return <label className="field"><span>{label}</span><input value={value} onChange={(e) => onChange(e.target.value)} {...props} /></label>;
 }
-function TextArea({ label, value, onChange, rows = 4 }) {
-  return <label className="field"><span>{label}</span><textarea rows={rows} value={value} onChange={(e) => onChange(e.target.value)} /></label>;
+function TextArea({ label, value, onChange, rows = 4, ...props }) {
+  return <label className="field"><span>{label}</span><textarea rows={rows} value={value} onChange={(e) => onChange(e.target.value)} {...props} /></label>;
 }
 function Select({ label, value, onChange, options }) {
   return <label className="field"><span>{label}</span><select value={value} onChange={(e) => onChange(e.target.value)}>{options.map((o) => {
