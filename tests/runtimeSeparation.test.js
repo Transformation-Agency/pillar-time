@@ -81,6 +81,16 @@ test("Today suggestion and quick-capture actions expose save feedback", () => {
   assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/tasks", \{ title: capture\.trim\(\), source: "quick-capture" \}\)\.then\(\(\) => setCapture\(""\)\)/);
 });
 
+test("Today commitment completion exposes local success and failure messages", () => {
+  assert.match(mainSource, /const \[commitmentMessage, setCommitmentMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const completeDailyCommitment = async \(item\) => \{\n\s+setCommitmentMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/commitments\/\$\{item\.id\}`, \{ \.\.\.item, status: "done" \}, "PATCH"\);/);
+  assert.match(mainSource, /setCommitmentMessage\(`\$\{item\.title \|\| "Commitment"\} marked done\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setCommitmentMessage\(error\.message \|\| "Could not mark commitment done\."\);/);
+  assert.match(mainSource, /\{commitmentMessage && <p className=\{commitmentMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{commitmentMessage\}<\/p>\}/);
+  assert.match(mainSource, /onClick=\{\(\) => completeDailyCommitment\(item\)\}/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/commitments\/\$\{item\.id\}`, \{ \.\.\.item, status: "done" \}, "PATCH"\)\}/);
+});
+
 test("Today context regenerate stops when context save fails", () => {
   assert.match(mainSource, /const saveContext = async \(event\) => \{\n\s+event\?\.\preventDefault\?\.\(\);/);
   assert.match(mainSource, /if \(!value\) \{\n\s+setContextMessage\("Add context before saving\."\);\n\s+return false;\n\s+\}/);

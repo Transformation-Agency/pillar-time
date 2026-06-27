@@ -1040,6 +1040,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
   const [contextText, setContextText] = React.useState("");
   const [contextMessage, setContextMessage] = React.useState("");
   const [captureMessage, setCaptureMessage] = React.useState("");
+  const [commitmentMessage, setCommitmentMessage] = React.useState("");
   const latestArtifact = latestExecutiveArtifact(state);
   const agenda = latestCalendarAgenda(state).slice(0, 8);
   const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
@@ -1068,6 +1069,15 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     const title = item.title || "this commitment";
     if (!window.confirm(`Remove "${title}" from Today's Three? It will stop being protected for today, but the underlying task or source item will not be deleted.`)) return;
     mutate(`/api/time/commitments/${item.id}`, { ...item, status: "removed" }, "PATCH");
+  };
+  const completeDailyCommitment = async (item) => {
+    setCommitmentMessage("");
+    try {
+      await mutate(`/api/time/commitments/${item.id}`, { ...item, status: "done" }, "PATCH");
+      setCommitmentMessage(`${item.title || "Commitment"} marked done.`);
+    } catch (error) {
+      setCommitmentMessage(error.message || "Could not mark commitment done.");
+    }
   };
   const importContextFile = async (event) => {
     const file = event.target.files?.[0];
@@ -1146,7 +1156,8 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
       </section>
       <section className="panel">
         <PanelTitle icon="check" title="Today’s Three" sub="The commitments Pillar Time will protect for this date." />
-        {activeCommitments.length ? activeCommitments.map((item) => <ListRow key={item.id} title={item.title} sub={item.notes || item.status} right={<div className="row tight-row"><Button icon="check" onClick={() => mutate(`/api/time/commitments/${item.id}`, { ...item, status: "done" }, "PATCH")}>Done</Button><Button icon="x" onClick={() => removeDailyCommitment(item)}>Remove</Button></div>} />) : <Empty icon="check" title="No commitments selected" body="Accept up to three high-leverage suggestions or add one from Planner." />}
+        {commitmentMessage && <p className={commitmentMessage.includes("Could not") ? "warn-text" : "ok-text"}>{commitmentMessage}</p>}
+        {activeCommitments.length ? activeCommitments.map((item) => <ListRow key={item.id} title={item.title} sub={item.notes || item.status} right={<div className="row tight-row"><Button icon="check" onClick={() => completeDailyCommitment(item)}>Done</Button><Button icon="x" onClick={() => removeDailyCommitment(item)}>Remove</Button></div>} />) : <Empty icon="check" title="No commitments selected" body="Accept up to three high-leverage suggestions or add one from Planner." />}
         <form className="quick-capture" onSubmit={addTask}>
           <input aria-label="Quick capture task or obligation" value={capture} onChange={(event) => setCapture(event.target.value)} placeholder="Quick capture a task or obligation" />
           <Button icon="plus" kind="primary">Capture</Button>
