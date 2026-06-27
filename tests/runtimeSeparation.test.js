@@ -193,9 +193,17 @@ test("Planner capture saves expose local success and failure messages", () => {
   assert.match(mainSource, /const createDate = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!importantDate\.title\.trim\(\) \|\| !importantDate\.startDate\) return;\n\s+setPlannerMessage\(""\);/);
   assert.match(mainSource, /await mutate\("\/api\/time\/important-dates", importantDate\);\n\s+setImportantDate\(\{ title: "", startDate: "", endDate: "" \}\);\n\s+setPlannerMessage\("Important date added\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setPlannerMessage\(error\.message \|\| "Could not add important date\."\);/);
-  assert.match(mainSource, /\{plannerMessage && <p className=\{plannerMessage\.includes\("added"\) \? "ok-text" : "warn-text"\}>\{plannerMessage\}<\/p>\}/);
+  assert.match(mainSource, /\{plannerMessage && <p className=\{plannerMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{plannerMessage\}<\/p>\}/);
   assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/tasks", task\)\.then\(\(\) => setTask/);
   assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/important-dates", importantDate\)\.then\(\(\) => setImportantDate/);
+});
+
+test("Planner task completion exposes local success and failure messages", () => {
+  assert.match(mainSource, /const completeTask = async \(item\) => \{\n\s+setPlannerMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/tasks\/\$\{item\.id\}`, \{ status: "done" \}, "PATCH"\);/);
+  assert.match(mainSource, /setPlannerMessage\(`\$\{item\.title \|\| "Task"\} marked done\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setPlannerMessage\(error\.message \|\| "Could not mark task done\."\);/);
+  assert.match(mainSource, /onClick=\{\(\) => completeTask\(item\)\}/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/tasks\/\$\{item\.id\}`, \{ status: "done" \}, "PATCH"\)\}/);
 });
 
 test("Reminder and meeting captures expose local success and failure messages", () => {

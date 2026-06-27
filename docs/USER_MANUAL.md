@@ -1,201 +1,164 @@
 # Pillar Time User Manual
 
-Pillar Time is a planning app for people who have too much in their head.
+This manual explains Pillar Time in simple English.
 
-It helps you answer three simple questions:
+Pillar Time is a desktop app that helps you plan your day, protect your time, and stop carrying everything in your head.
 
-1. What actually matters today?
-2. What do I need to protect time for?
-3. What can I safely let the app handle only after I approve it?
+It is meant to answer questions like:
 
-Pillar Time is not mainly a news app. It is not just a calendar. It is not just a task list. It is meant to be a calm daily command center that turns your calendar, Linear work, reminders, notes, and personal context into a clear plan.
+- What matters most today?
+- What is already on my calendar?
+- What work needs protected time?
+- What am I forgetting?
+- What should I do next?
+- What should the app do only after I approve it?
 
-The goal is to reduce mental clutter. That means Pillar Time should help you stop carrying everything in your head at once.
+Pillar Time is not just a calendar. It is not just a task list. It is not mainly a news app. It is meant to be a daily command center for your time and commitments.
 
-## The Big Idea
+The big goal is simple:
 
-Most planning tools show you more lists.
+You should be able to open the app, see the real shape of your day, and stop holding the whole plan in your head.
 
-Pillar Time is supposed to do something better:
+## The Main Idea
 
-- collect the important facts;
-- notice what is urgent, blocked, stale, or risky;
-- choose a small number of high-leverage priorities;
-- propose where work should fit on your calendar;
-- ask before making outside changes;
-- keep a record of what happened.
+Most planning apps give you more lists.
 
-Think of it like a very direct executive assistant.
+Pillar Time should help you make better decisions.
 
-It should not flatter you. It should not tell you every possible thing. It should help you see what matters, what is slipping, and what needs a real decision.
+It does this by collecting useful information from places like:
 
-## What Pillar Time Can Use
+- your calendar;
+- your Linear work;
+- your tasks;
+- your reminders;
+- your meetings;
+- your trusted context;
+- your identity statement;
+- your standing commitments;
+- your running to-do list.
 
-Pillar Time works best when it has a few kinds of context.
+Then it should turn that information into a clear daily plan.
 
-### Your Calendar
+It should show:
 
-Google Calendar tells Pillar Time what time is already spoken for.
+- what is fixed on your calendar;
+- what work matters most;
+- where time is available;
+- what needs prep;
+- what needs follow-up;
+- what is blocked;
+- what can wait;
+- what it wants approval to do.
 
-Pillar Time should treat calendar events carefully:
+Pillar Time should not flatter you or just repeat your own thoughts back to you. It should help you be honest about your time.
 
-- timed events on your main calendars can block time;
-- all-day events usually do not block the whole day;
-- shared calendars may be useful context, but they are not always your personal commitments;
-- declined events should not guide the plan;
-- private or busy-only events should stay private.
+## How Pillar Time Reduces Mental Clutter
 
-This matters because a good plan must know the difference between:
+Mental clutter happens when too much is floating around in your head at once.
 
-- a real meeting you must attend;
-- a holiday shown on a shared calendar;
-- someone else's all-day event;
-- a soft reminder;
-- a hard block.
+You may be thinking:
 
-### Linear
+- I need to reply to that person.
+- I have a meeting later.
+- I should finish that Linear issue.
+- I forgot to schedule deep work.
+- I need to follow up after yesterday's call.
+- Something is due soon, but I cannot remember what.
+- I should check my calendar again.
 
-Linear tells Pillar Time about project work.
+That is tiring.
 
-When Linear is connected, Pillar Time can:
+Pillar Time reduces mental clutter by giving every kind of thought a place to go.
 
-- show your assigned issues;
-- group work by project and status;
-- notice blocked or stale work;
-- include Linear tasks in the daily plan;
-- propose calendar blocks to make time for important Linear work;
-- let you create, update, or comment on Linear issues from inside the app.
+Tasks go into Planner.
 
-Generated Linear changes should not happen by surprise. Pillar Time should ask for approval before it performs agent-suggested writes.
+Calendar events stay on Calendar.
 
-### Trusted Context
+Project work comes from Linear.
 
-Trusted Context is stable information about you and your world.
+Important background facts go into Trusted Context.
 
-It can include things like:
+Your personal operating style goes into your Identity Statement.
 
-- how you prefer to work;
-- what matters most right now;
-- standing commitments;
-- communication style;
-- important relationships;
-- personal rules;
-- facts the app should remember when planning.
+Long-term responsibilities go into Standing Commitments.
 
-This is not meant to be a giant diary. It is meant to be the reliable background knowledge the app needs so it can make better suggestions.
+Messy thoughts go into the Running To-Do List or Add Context.
 
-### Identity Statement
+Meeting notes go into Meetings.
 
-Your identity statement tells Pillar Time how to talk to you and what kind of help you want.
+Reminders go into Reminders.
 
-For example, you might tell it:
+Then Pillar Time helps sort the pile.
 
-- what you are trying to protect;
-- where you tend to fool yourself;
-- what kind of feedback helps you;
-- what kind of tone you do or do not want;
-- what your bigger priorities are.
+It should not make you look at everything all at once. It should help you focus on the next few things that matter.
 
-This helps the daily plan feel like coaching, not a dry report.
+## Important Words
 
-### Standing Commitments
+### Commitment
 
-Standing commitments are responsibilities that keep mattering over time.
+A commitment is something that matters and may need action.
 
 Examples:
 
-- protect deep work each morning;
-- stay responsive to a key client;
-- check in with a teammate weekly;
-- make time for health;
-- write every weekday;
-- keep family dinner clear.
+- "Prepare for the board call."
+- "Finish the Linear issue about calendar writes."
+- "Follow up with Sarah."
+- "Protect 90 minutes for writing."
+- "Do the weekly review."
 
-Pillar Time should use these when it ranks your day.
-
-### Running To-Do List
-
-The running to-do list is the raw capture area.
-
-It can hold messy things like:
-
-- "follow up with Jordan";
-- "fix Linear sync";
-- "prepare investor notes";
-- "book dentist";
-- "finish proposal";
-- "ask Max about release build."
-
-The point is to get the thought out of your head. Pillar Time can then help sort what matters now, what can wait, and what needs calendar time.
-
-## Main Screens
-
-## Today
-
-Today is the main screen.
-
-Use it when you want to know what to do next.
-
-Today should show:
-
-- the date and basic day status;
-- Highest Leverage Today;
-- Today's Three;
-- proposed calendar blocks;
-- today's calendar;
-- next reminders;
-- context intake;
-- a button to generate the day plan;
-- a button to view the full brief or plan.
-
-### Generate Day Plan
-
-Press **Generate Day Plan** when you want Pillar Time to build the plan for the day.
-
-The app should:
-
-1. read your available context;
-2. check Calendar;
-3. refresh Linear if connected;
-4. read local tasks, commitments, reminders, meetings, and trusted context;
-5. classify calendar events;
-6. rank what matters;
-7. choose Today's Three;
-8. propose calendar blocks;
-9. create approval items for actions that need permission;
-10. produce a readable daily coaching brief.
-
-If the model connector is missing, Pillar Time should still create a useful basic plan. It should not simply stop.
-
-### Highest Leverage Today
-
-This section shows the work that seems most worth your time.
-
-It should not be a random task list. Each suggestion should explain:
-
-- why it matters;
-- what tension it relieves;
-- what goal it serves;
-- what it displaces;
-- the exact next step.
-
-You can accept, reject, or move suggestions out of today.
+In Pillar Time, commitments are more important than raw tasks. A task is just something to do. A commitment is something you are responsible for.
 
 ### Today's Three
 
-Today's Three is the short list of commitments Pillar Time should protect today.
+Today's Three are the three most important commitments for today.
 
-The idea is simple: if everything matters, nothing matters.
+They are the short list.
 
-Three strong commitments are better than fifteen vague priorities.
+If the day gets messy, these are the things Pillar Time thinks you should protect first.
 
-Use Today's Three for the work that would make the day successful even if other things get messy.
+### Highest Leverage Today
+
+Highest Leverage Today is a ranked list of important actions.
+
+High leverage means the action gives a lot of value for the time and energy it takes.
+
+For example:
+
+- one focused hour may unblock three people;
+- one hard email may prevent a week of confusion;
+- one planning block may stop the day from falling apart.
+
+### Hard Block
+
+A hard block is time that is truly busy.
+
+Examples:
+
+- a meeting you accepted;
+- a doctor appointment;
+- a flight;
+- a planned call.
+
+Pillar Time should not schedule over hard blocks.
+
+### Soft Context
+
+Soft context is useful information, but it may not block your time.
+
+Examples:
+
+- a shared calendar event;
+- a team milestone;
+- an all-day reminder;
+- a calendar you watch but do not personally own.
+
+Pillar Time should notice soft context, but it should not treat it like a real meeting unless there is a good reason.
 
 ### Proposed Calendar
 
-After a day plan is generated, Pillar Time can show proposed calendar blocks across the top.
+A proposed calendar is the schedule Pillar Time suggests for the day.
 
-These are suggested time blocks, such as:
+It can include blocks like:
 
 - Deep Work;
 - Linear Execution;
@@ -204,34 +167,267 @@ These are suggested time blocks, such as:
 - Admin;
 - Recovery / Buffer.
 
-The app should place these around your real calendar events. It should not treat normal all-day events as blocking the whole day.
+The proposed calendar is only a suggestion until you approve it.
+
+### Approval
+
+An approval is your permission for Pillar Time to take an outside action.
+
+For example, the app may ask before it:
+
+- creates calendar blocks;
+- updates calendar blocks;
+- creates a Linear issue;
+- updates a Linear issue;
+- adds a Linear comment.
+
+The rule is:
+
+Pillar Time can suggest. You approve.
+
+## First Setup
+
+When you first open Pillar Time, you should set up only what you need.
+
+You do not need every connector.
+
+A simple setup can still be useful.
+
+### Step 1: Add Your Identity Statement
+
+Your Identity Statement tells Pillar Time how to help you.
+
+It can include:
+
+- your name, if you want;
+- what kind of work matters most to you;
+- how you want the app to talk to you;
+- where you tend to get distracted;
+- what kind of feedback helps;
+- what kind of life or work you are trying to build.
+
+Example:
+
+"I move fast and often carry too much. Help me focus on what actually matters. Be direct. Tell me when I am overcommitting or avoiding the hard thing."
+
+This helps Pillar Time sound more like a coach and less like a generic report.
+
+### Step 2: Add Standing Commitments
+
+Standing Commitments are responsibilities that keep mattering over time.
+
+Examples:
+
+- "Protect deep work most mornings."
+- "Keep Friday afternoon open for review."
+- "Do not miss client follow-ups."
+- "Make time for health."
+- "Keep family dinner clear."
+- "Write every weekday."
+
+These help Pillar Time judge your day against what you said matters.
+
+### Step 3: Add Your Running To-Do List
+
+The Running To-Do List is where you put loose tasks.
+
+It does not need to be perfect.
+
+Examples:
+
+- "Email Max about release build."
+- "Fix calendar reconnect."
+- "Draft proposal."
+- "Book dentist."
+- "Review Linear backlog."
+- "Send follow-up from meeting."
+
+The point is to get the thought out of your head.
+
+### Step 4: Connect Calendar
+
+Google Calendar helps Pillar Time understand your schedule.
+
+Calendar is important because the app needs to know:
+
+- what time is already taken;
+- what events are yours;
+- what events are shared context;
+- which all-day events are real commitments;
+- where there is space for work.
+
+If you want Pillar Time to create approved schedule blocks, Calendar must be connected with write permission.
+
+If it only has read permission, it can still plan, but it cannot add blocks after approval.
+
+### Step 5: Connect Linear
+
+Linear helps Pillar Time understand your project work.
+
+When Linear is connected, Pillar Time can:
+
+- show your assigned issues;
+- group work by project;
+- notice blocked or stale issues;
+- notice due-today work;
+- include Linear work in Today's Three;
+- propose time blocks for Linear execution.
+
+Linear writes should need approval when they are generated by the app.
+
+### Step 6: Connect a Model Provider
+
+A model provider helps Pillar Time write better coaching language and make better judgment calls.
+
+Without a model provider, Pillar Time should still create a basic plan.
+
+With a model provider, it can explain things more clearly.
+
+### Step 7: Optional Connectors
+
+Other connectors are optional.
+
+These may include:
+
+- Telegram;
+- Reddit;
+- X;
+- RSS sources;
+- YouTube;
+- podcasts;
+- ElevenLabs audio;
+- speech-to-text.
+
+Do not connect things just because they exist.
+
+Connect what helps your day.
+
+## The Main Screens
+
+## Today
+
+Today is the main screen.
+
+Use Today when you want to know what to do now.
+
+Today should show:
+
+- today's plan;
+- Today's Three;
+- Highest Leverage Today;
+- proposed calendar blocks;
+- your actual calendar;
+- reminders;
+- approval items;
+- context you can add before regenerating.
+
+### Generate Day Plan
+
+Press Generate Day Plan when you want Pillar Time to build or refresh the plan for the day.
+
+The app should:
+
+1. load your preferences;
+2. read your trusted context;
+3. read your identity statement;
+4. read your standing commitments;
+5. read your running to-do list;
+6. read Calendar;
+7. refresh Linear;
+8. read reminders, meetings, and local tasks;
+9. classify your calendar events;
+10. find risks and conflicts;
+11. rank the most important work;
+12. choose Today's Three;
+13. propose calendar blocks;
+14. create approval items for outside actions;
+15. write a coaching-style day brief.
+
+The day plan should not be a news report.
+
+It should be about your time, work, commitments, and next actions.
+
+### Reading the Day Plan
+
+When you read the plan, look for:
+
+- What is the real shape of the day?
+- What are the three things that matter most?
+- What should be protected on the calendar?
+- What is at risk?
+- What needs prep?
+- What needs follow-up?
+- What needs approval?
+- What is the one thing I may be avoiding?
+
+A good Pillar Time plan should make the day feel clearer.
+
+It may still challenge you.
+
+That is part of the job.
+
+### Proposed Calendar Tiles
+
+After generation, Pillar Time may show proposed calendar blocks across the top.
+
+These are small tiles that show suggested blocks for the day.
+
+Examples:
+
+- 9:00 AM Deep Work;
+- 10:30 AM Follow-up;
+- 1:00 PM Linear Execution;
+- 3:30 PM Meeting Prep;
+- 4:30 PM Admin.
+
+These blocks should fit around your hard calendar events.
+
+They should not be placed over real meetings.
+
+They should not treat normal all-day events as blocking the whole day.
 
 ### Approve Calendar
 
-If you like the proposed schedule, press **Approve Calendar**.
+If the proposed schedule looks right, press Approve Calendar.
 
-Pillar Time should then create the approved blocks on Google Calendar, but only if Calendar is connected with write permission.
+Pillar Time should then create the approved blocks on your Google Calendar.
 
-Important: generation should not write to your calendar. Approval is the line.
+Important:
 
-If Calendar is connected only for reading, the app should tell you to reconnect Calendar for write access.
+Generating a plan should not write to your calendar.
+
+Approving the calendar is what gives permission.
+
+If the approval fails, check Settings. Your Calendar connection may need write permission.
 
 ### Add Context & Regenerate
 
-Sometimes the app misses something.
+Sometimes Pillar Time will miss something.
 
-Use **Add Context & Regenerate** when you need to say, "Wait, include this."
+That is normal.
 
-You can type or paste extra context, such as:
+Use Add Context & Regenerate when you need to correct or add information.
 
-- "Protect a second 30-minute follow-up block after deep work.";
-- "This all-day event is not mine.";
-- "The client call is more important than it looks.";
-- "I am low energy today, so do not overpack the afternoon."
+You can type or paste things like:
 
-Then Pillar Time should save that context and rebuild the day plan.
+- "Protect a second 30-minute follow-up block after deep work."
+- "The all-day school event is not mine."
+- "This client call matters more than it looks."
+- "Do not schedule anything after 5 PM."
+- "I am low energy today. Leave more buffer."
+- "The Linear issue is blocked until Max answers."
 
-This is one of the most important mental-clutter features. You do not need to rebuild the whole plan in your head. You can add the missing fact and ask the app to try again.
+Then regenerate the plan.
+
+This feature is meant to save your brain from rebuilding the plan manually.
+
+You add the missing fact. Pillar Time tries again.
+
+### View Brief
+
+The View Brief button should take you to the fuller brief or intelligence view for the current run.
+
+Use it when you want more detail than the Today screen shows.
 
 ## Planner
 
@@ -240,57 +436,90 @@ Planner is where you capture work before it becomes today's work.
 Use Planner for:
 
 - tasks;
-- important dates;
 - backlog items;
+- important dates;
+- loose ideas;
 - things you do not want to forget.
 
-Tasks added here can later appear in Today suggestions.
+Planner is not supposed to be perfect.
 
-Important dates can include:
+It is a place to unload your mind.
+
+### Adding Tasks
+
+Add a task when something needs to be done.
+
+Good task titles are short and clear.
+
+Examples:
+
+- "Send contract to Alex."
+- "Review launch checklist."
+- "Clean up Linear labels."
+- "Book haircut."
+
+If a task is important today, Pillar Time can bring it into Today.
+
+### Important Dates
+
+Important dates are dates you want Pillar Time to remember.
+
+Examples:
 
 - birthdays;
 - deadlines;
 - renewals;
 - trips;
-- rituals;
-- major project dates.
+- reviews;
+- launch dates;
+- annual events.
 
-When you archive a task, it leaves the active planning backlog and should stop showing up as a Today candidate.
+Important dates help the app notice what is coming.
+
+### Marking Tasks Done
+
+When a task is finished, mark it done.
+
+The app should give you a clear message so you know the action worked.
+
+### Archiving
+
+Archive old tasks when they should stop being active.
+
+Do not use Planner as a museum for every old thought.
+
+If something is no longer useful, archive it.
 
 ## Reminders
 
 Reminders are for nudges.
 
-They are off by default so Pillar Time does not become noisy.
+They are off by default so the app does not become noisy.
 
-There is usually a master switch plus individual reminder switches. A reminder should only run when the right switches are on.
+Use reminders for things that need a push at the right time.
 
-Reminder channels may include:
+Examples:
 
-- desktop text;
-- desktop audio;
-- Telegram text;
-- Telegram audio.
-
-Use reminders for things that need a nudge, not for everything in your life.
-
-Good reminders are specific:
-
-- "Start end-of-day review at 4:45 PM";
-- "Check whether the client follow-up was sent";
+- "Start end-of-day review at 4:45 PM."
+- "Check whether the client follow-up was sent."
 - "Look at tomorrow's first meeting before stopping work."
+- "Drink water after the morning call."
 
-Bad reminders are vague:
+Bad reminders are vague.
 
-- "Be productive";
-- "Do stuff";
+Examples:
+
+- "Be productive."
+- "Do stuff."
 - "Remember everything."
+
+A good reminder tells you exactly what to do.
 
 ## Reviews
 
 Reviews are planning rituals.
 
-Pillar Time can include templates for:
+Pillar Time may include templates for:
 
 - morning review;
 - midday check;
@@ -300,71 +529,215 @@ Pillar Time can include templates for:
 - quarterly review;
 - annual planning.
 
-Reviews help reduce mental clutter by giving recurring thoughts a home.
+Reviews reduce mental clutter because they give recurring thoughts a home.
 
-Instead of asking "Am I forgetting something?" all day, you can trust that the right review will catch it.
-
-## Intelligence
-
-Intelligence is the optional news and source-grounded brief area.
-
-Use Intelligence when you want a report based on sources like RSS, web pages, Reddit, X, YouTube, podcasts, or documents.
-
-This is separate from the normal day plan.
-
-The day plan should focus on your time, commitments, calendar, Linear work, reminders, and trusted context. Intelligence should not quietly take over the Today screen.
+Instead of worrying all day, you can trust the review to catch the right questions.
 
 ## Meetings
 
-Meetings is where you capture meeting context.
+Meetings is where you capture useful meeting context.
 
 Use it for:
 
-- meeting intent;
+- meeting purpose;
 - notes;
 - decisions;
 - follow-ups;
 - commitments;
-- things to remember for later planning.
+- open questions.
 
-The point is not to make perfect meeting notes. The point is to keep useful meeting facts from disappearing.
+The goal is not perfect meeting notes.
 
-After meetings, Pillar Time should help turn notes into commitments, follow-ups, and future prep.
+The goal is to keep useful facts from disappearing.
+
+After a meeting, Pillar Time should help turn notes into:
+
+- follow-up tasks;
+- future prep;
+- commitments;
+- reminders;
+- Linear work, if needed.
 
 ## Linear
 
-The Linear screen lets you work with Linear issues from inside Pillar Time.
+The Linear screen lets you review project work from inside Pillar Time.
 
-When connected, you can:
+When Linear is connected, you can:
 
 - choose a team;
-- filter by assignee, state, and project;
-- see issues grouped by project;
+- filter issues;
+- group issues by project;
+- see assigned work;
 - create issues;
-- update issue fields;
+- update issues;
 - add comments.
 
-Pillar Time should use Linear data when it builds the day plan. For example, a blocked issue, a due-today issue, or a stale high-priority issue may become a high-leverage suggestion.
+Pillar Time should use Linear when it builds the day plan.
+
+For example, it should notice:
+
+- a Linear issue due today;
+- a stale issue that has not moved;
+- a blocked issue;
+- an issue that unblocks other work;
+- a high-priority issue that needs focus time.
+
+### Linear and Calendar
+
+One important job of Pillar Time is to make time for Linear work.
+
+If a Linear issue is important, Pillar Time can propose a calendar block for it.
+
+Example:
+
+"10:00 AM to 11:30 AM - Linear Execution - Finish calendar approval bug."
+
+That way, project work becomes real time on the calendar instead of just another item in a list.
 
 ## Trusted Context
 
-Trusted Context is where you manage facts the app should rely on.
+Trusted Context is information the app should rely on.
 
-Use it for information that should guide planning, writing, and suggestions.
+Use it for facts that should guide planning.
 
-Trusted Context should be:
+Examples:
 
-- accurate;
-- useful;
-- source-backed when possible;
-- not too long;
-- not full of random memories.
+- "My best deep work happens before noon."
+- "Friday afternoons should stay light."
+- "Client X needs same-day follow-up."
+- "I prefer direct feedback."
+- "Do not schedule optional calls before 10 AM."
 
-You can think of it as the app's "what should I know about you?" layer.
+Trusted Context should be useful and true.
+
+Do not fill it with random memories.
+
+## Identity Statement
+
+Your Identity Statement tells Pillar Time who it is helping.
+
+It also tells the app how to speak to you.
+
+It can include:
+
+- your name;
+- what you are building;
+- what matters most;
+- what you tend to avoid;
+- what kind of tone helps;
+- what you want protected;
+- what you do not want the app to do.
+
+Example:
+
+"Help me spend time on work that compounds. Be direct. Do not let urgent noise crowd out the important thing. If my plan does not match my priorities, tell me."
+
+This should make the brief feel like a coaching session, not a formal report.
+
+## Standing Commitments
+
+Standing Commitments are things that keep mattering even when they are not urgent.
+
+Examples:
+
+- family time;
+- health;
+- writing;
+- deep work;
+- key client relationships;
+- team leadership;
+- weekly review;
+- learning;
+- finances.
+
+These help Pillar Time judge the day.
+
+If your calendar is full of urgent things but none of them match your standing commitments, the app should say so.
+
+## Running To-Do List
+
+The Running To-Do List is a place to dump tasks and loose thoughts.
+
+Use it when something pops into your head and you do not want to lose it.
+
+You can clean it up later.
+
+The point is to move the thought out of your brain and into the system.
+
+## Files and Pasted Context
+
+Pillar Time should let you add context by typing, pasting, or uploading a file.
+
+This is useful for:
+
+- personal operating notes;
+- project plans;
+- meeting notes;
+- task lists;
+- standing commitments;
+- identity statements;
+- strategy docs.
+
+When you add a file, the app should use it to improve planning.
+
+It should not make you retype everything by hand.
+
+## Intelligence
+
+Intelligence is the news and source-grounded brief area.
+
+It can use sources such as:
+
+- RSS feeds;
+- web pages;
+- Reddit;
+- X;
+- YouTube;
+- podcasts;
+- documents.
+
+This is useful when you want a report about the outside world.
+
+But Intelligence should not take over the daily planning flow.
+
+The default day plan should be about your schedule, commitments, Linear work, reminders, meetings, and trusted context.
+
+News is optional context.
+
+It is not the center of Pillar Time.
+
+## Sources
+
+Sources are places Pillar Time can fetch outside information from.
+
+Examples:
+
+- RSS feeds;
+- Reddit threads;
+- X searches;
+- YouTube channels;
+- podcast feeds;
+- web pages.
+
+You can turn sources on or off.
+
+If a source fails, that does not always mean something is broken.
+
+It may mean:
+
+- the link is dead;
+- the site blocks automated access;
+- the service needs login;
+- the app is being rate-limited;
+- the connector needs a better API setup.
+
+Do not keep 100 sources on just because they exist.
+
+Healthy coverage is better than noisy coverage.
 
 ## Settings
 
-Settings is where you connect services and control technical options.
+Settings is where you connect services and check app health.
 
 Common settings include:
 
@@ -375,171 +748,142 @@ Common settings include:
 - Reddit;
 - X;
 - ElevenLabs audio;
-- local speech-to-text setup;
-- app updates;
-- health checks.
+- speech-to-text;
+- updates;
+- connector health.
 
-If something feels broken, Settings is usually the place to check first.
+If something does not work, check Settings first.
 
 ## Connectors
 
 Connectors let Pillar Time talk to outside services.
 
-## Google Calendar
+### Google Calendar
 
 Google Calendar lets Pillar Time read your schedule.
 
-With write access, it can also create approved calendar blocks.
+With write permission, it can also create approved calendar blocks.
 
-Pillar Time should never change your calendar just because it generated a plan. Calendar writes should require approval.
+Pillar Time should understand the difference between:
 
-If calendar approval fails, check whether Calendar needs to be reconnected with write permission.
+- your primary calendar;
+- a shared calendar;
+- a subscribed calendar;
+- an all-day event;
+- a real timed meeting;
+- an event you declined;
+- an event you accepted;
+- an event you organized;
+- an event you are only watching.
 
-## Linear
+This is very important.
+
+The app should not treat every calendar equally.
+
+### Linear
 
 Linear lets Pillar Time read and update project work.
 
 You need a Linear personal API key.
 
-The key is saved locally. Pillar Time should not show the saved key back to the screen.
+The key is saved locally.
 
-## Telegram
+The app should not show the saved key back to the screen.
 
-Telegram can deliver plans or briefs outside the app.
+### Telegram
 
-Telegram can also support commands such as approving a pending calendar proposal, when that feature is configured.
+Telegram can deliver briefs and messages outside the app.
 
-If Telegram delivery says it is unclear whether the message arrived, check Telegram before sending again. This helps avoid duplicate messages.
+It may also support commands, such as approving a pending calendar proposal.
 
-## Model Provider
+If Telegram says delivery is unclear, check Telegram before sending again.
 
-A model provider lets Pillar Time write better summaries, coaching language, and judgment calls.
+The message may have already sent.
 
-Without a model provider, Pillar Time should still work in a simpler deterministic mode.
+### Model Provider
 
-With a model provider, it can be more helpful, but it still should not take actions without approval.
+A model provider helps Pillar Time write better coaching and make better judgments.
 
-## ElevenLabs Audio
+Without it, the app should still make a basic plan.
+
+With it, the app should be more useful and more personal.
+
+### ElevenLabs Audio
 
 ElevenLabs can read briefs aloud.
 
-This is optional. You do not need it for the main planning features.
+This is optional.
 
-## Speech To Text
+You do not need it for the main planning features.
 
-Speech to text can help you add context by voice.
+### Speech To Text
 
-In desktop builds, the app can use a local Whisper model. If the model is not installed, the app may ask whether you want to download it.
+Speech to text lets you add context by voice.
+
+If local speech-to-text is not installed, Pillar Time may ask if you want to download it.
 
 Voice input should be a convenience, not a requirement.
 
 ## Approvals
 
-Approvals are a safety layer.
+Approvals are one of the most important safety features.
 
-Pillar Time may suggest actions, but important outside changes should wait for you.
+Pillar Time may propose actions.
 
-Examples of actions that should need approval:
+You decide whether they happen.
+
+Actions that should need approval include:
 
 - create Google Calendar blocks;
 - update Google Calendar blocks;
 - create Linear issues;
 - update Linear issues;
-- add Linear comments;
-- send external messages in future versions.
+- add Linear comments.
 
 An approval should show what will happen before it happens.
 
-If an approval is old or unclear, do not approve it. Regenerate the plan or make the change manually.
+If the approval is old, unclear, or wrong, do not approve it.
 
-## How Pillar Time Reduces Mental Clutter
+Regenerate the plan or make the change manually.
 
-Pillar Time should reduce mental clutter in seven ways.
+## A Simple Morning Routine
 
-### 1. It gives your thoughts a place to land
-
-Instead of holding tasks in your head, put them into Planner, Today context, Trusted Context, or Meetings.
-
-The rule is: if you are afraid you will forget it, capture it.
-
-### 2. It chooses a small number of priorities
-
-Today's Three keeps the day from becoming a giant pile.
-
-The app should help you decide what matters most today, not just remind you of everything.
-
-### 3. It separates facts from suggestions
-
-A calendar event is a fact.
-
-"You should prep for it" is a suggestion.
-
-"Create a calendar block" is an action.
-
-Pillar Time should keep those separate so you can trust what you are seeing.
-
-### 4. It protects time
-
-Important work needs space.
-
-Pillar Time should propose calendar blocks for work that matters, especially work that is easy to avoid because it is hard, quiet, or not urgent-looking.
-
-### 5. It catches bad assumptions
-
-A good assistant should notice things like:
-
-- you are treating someone else's calendar event as yours;
-- you have too many commitments for the day;
-- you are avoiding the hard task;
-- you are letting urgent noise beat important work;
-- a blocked issue needs a human next step.
-
-### 6. It keeps actions approval-gated
-
-You should be able to trust the app because it does not silently act in public systems.
-
-It can propose. You approve.
-
-### 7. It creates a daily loop
-
-The daily loop is:
-
-1. capture what is on your mind;
-2. generate the day plan;
-3. review the proposed priorities;
-4. approve calendar blocks if they are right;
-5. work the plan;
-6. add missing context when needed;
-7. review what changed.
-
-## A Simple Daily Routine
-
-Here is a good way to use Pillar Time each morning.
+Here is a simple way to use Pillar Time each morning.
 
 1. Open Today.
 2. Add anything important that is in your head.
-3. Check that Calendar and Linear are connected if you need them.
-4. Press **Generate Day Plan**.
-5. Read Today's Three.
-6. Look at the proposed calendar blocks.
-7. Add missing context if the plan is wrong.
-8. Regenerate if needed.
-9. Approve the calendar if it looks right.
-10. Start with the first high-leverage block.
+3. Check that Calendar is connected.
+4. Check that Linear is connected if you need project work included.
+5. Press Generate Day Plan.
+6. Read Today's Three.
+7. Look at Highest Leverage Today.
+8. Check the proposed calendar tiles.
+9. Add missing context if the plan is wrong.
+10. Regenerate if needed.
+11. Approve the calendar if it looks right.
+12. Start with the first protected block.
+
+## A Simple Midday Routine
 
 At midday:
 
-1. Open Today again.
-2. Add any new context.
-3. Regenerate if the day has changed.
-4. Protect the next best block.
+1. Open Today.
+2. Ask what has changed.
+3. Add new context.
+4. Regenerate if the day has shifted.
+5. Protect the next best block.
+6. Move or drop work that no longer fits.
+
+## A Simple End-of-Day Routine
 
 At the end of the day:
 
-1. Mark completed commitments done.
+1. Mark completed work done.
 2. Capture loose ends.
 3. Add follow-ups from meetings.
-4. Let tomorrow start with less clutter.
+4. Note what got blocked.
+5. Check tomorrow's first few events.
+6. Let tomorrow start with less clutter.
 
 ## Good Context To Add
 
@@ -547,68 +891,154 @@ Good context is clear and useful.
 
 Examples:
 
-- "The all-day school calendar event is not mine."
-- "The investor update matters more than the inbox today."
-- "I need a 30-minute follow-up block after the deep work block."
-- "Do not schedule anything after 5 PM unless it is already on my calendar."
-- "The Linear issue about calendar writes is blocked until Google scope is fixed."
-- "I am tired today, so protect one hard thing and leave more buffer."
+- "The all-day event is not mine."
+- "The investor update matters more than inbox cleanup."
+- "Protect a second 30-minute follow-up block after deep work."
+- "Do not schedule anything after 5 PM."
+- "The Linear issue is blocked until Google scope is fixed."
+- "I am tired today, so plan one hard thing and leave more buffer."
+- "This meeting needs 20 minutes of prep."
+- "That shared calendar event is only background context."
 
-## What Not To Use Pillar Time For
+## Bad Context To Add
 
-Do not use Pillar Time as:
+Bad context is vague or not useful.
 
-- a place to dump every random thought forever;
-- a replacement for your own judgment;
-- a tool that should act without review;
-- a medical, legal, financial, or emergency decision-maker;
-- a reason to avoid talking to real people.
+Examples:
 
-Pillar Time should make your judgment sharper. It should not replace it.
+- "Be better."
+- "Do everything."
+- "Make me productive."
+- "Remember all my stuff."
+
+Pillar Time works better when you give it real facts.
+
+## What Pillar Time Should Tell You
+
+A good Pillar Time brief should tell you:
+
+- what matters today;
+- why it matters;
+- what tension it relieves;
+- what it displaces;
+- what needs a decision;
+- what is blocked;
+- what is risky;
+- what can wait;
+- what it wants approval to do;
+- what question you may be avoiding.
+
+It should sound like a clear coach.
+
+It should not sound like a stiff report.
+
+## What Pillar Time Should Not Do
+
+Pillar Time should not:
+
+- pretend everything is fine when the plan is overloaded;
+- treat every calendar as equally important;
+- block your whole day because of a normal all-day event;
+- write to Calendar or Linear without approval;
+- hide connector failures;
+- make news the default focus of Today;
+- replace your judgment;
+- make legal, medical, financial, or emergency decisions for you.
 
 ## Troubleshooting
 
 ### The day plan looks like a news report
 
-Use Today and **Generate Day Plan**, not the Intelligence workflow.
+Use Today and Generate Day Plan.
 
-Today should use calendar, Linear, reminders, meetings, tasks, and context. Intelligence is separate.
+The normal day plan should focus on calendar, Linear, tasks, reminders, meetings, commitments, and trusted context.
+
+Intelligence is separate.
 
 ### The app ignores Linear work
 
 Check Settings and make sure Linear is connected.
 
-Then open the Linear screen and refresh issues.
+Then open Linear and refresh.
+
+If Linear still does not appear in the day plan, regenerate the plan after refresh.
 
 ### Calendar blocks do not get created
 
-Calendar may be connected for reading only.
+Calendar may be connected for read-only access.
 
 Open Settings and reconnect Google Calendar with write permission.
+
+Then try approving the calendar again.
 
 ### The app thinks an all-day event blocks my day
 
 Add context and regenerate.
 
-Example: "This all-day event is just shared calendar context. It is not my commitment and should not block scheduling."
+Example:
+
+"This all-day event is shared calendar context. It is not my commitment and should not block scheduling."
+
+### The app treats someone else's calendar as mine
+
+Add context and regenerate.
+
+Example:
+
+"Only my primary calendars should be treated as mine. Shared calendars are context unless I accepted the event."
 
 ### Telegram says delivery is unclear
 
 Check Telegram before sending again.
 
-Sometimes the message sends but the app does not get a clear acknowledgement quickly.
+Sometimes the message sends but the app does not get a clear answer quickly.
 
 ### The model connector is not ready
 
-The app should still make a basic deterministic plan.
+The app should still make a basic plan.
 
-For better coaching language and judgment, set up a model provider in Settings.
+For better coaching language, set up a model provider in Settings.
 
-### I do not want all connectors on
+### There are too many sources
 
-Leave optional connectors disabled.
+Turn off optional sources you do not need.
 
-Pillar Time should still work with local context. Calendar and Linear make it stronger, but they are not required for every use.
+Pillar Time should work with local context, Calendar, and Linear.
+
+You do not need 100 sources for daily planning.
+
+### The app feels noisy
+
+Turn off extra reminders, sources, and connectors.
+
+Then use:
+
+- Today;
+- Calendar;
+- Linear;
+- Planner;
+- Trusted Context.
+
+Start simple.
+
+## Privacy and Safety
+
+Pillar Time is a local desktop app.
+
+It stores local data in SQLite on your machine.
+
+External services are only used when you connect them.
+
+Examples:
+
+- Google Calendar is used if you connect Calendar.
+- Linear is used if you connect Linear.
+- Telegram is used if you connect Telegram.
+- A model provider is used if you configure one.
+
+Do not paste secrets into normal notes.
+
+Put API keys only into the correct connector settings.
 
 ## What "Working Well" Looks Like
 
