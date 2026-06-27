@@ -81,6 +81,15 @@ test("Today suggestion and quick-capture actions expose save feedback", () => {
   assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/tasks", \{ title: capture\.trim\(\), source: "quick-capture" \}\)\.then\(\(\) => setCapture\(""\)\)/);
 });
 
+test("Today context regenerate stops when context save fails", () => {
+  assert.match(mainSource, /const saveContext = async \(event\) => \{\n\s+event\?\.\preventDefault\?\.\(\);/);
+  assert.match(mainSource, /if \(!value\) \{\n\s+setContextMessage\("Add context before saving\."\);\n\s+return false;\n\s+\}/);
+  assert.match(mainSource, /setContextMessage\("Saved context\."\);\n\s+return true;/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setContextMessage\(error\.message \|\| "Could not save context\."\);\n\s+return false;\n\s+\}/);
+  assert.match(mainSource, /const regenerateWithContext = async \(\) => \{\n\s+if \(contextText\.trim\(\)\) \{\n\s+const saved = await saveContext\(\);\n\s+if \(!saved\) return;\n\s+\}\n\s+await runWorkflow\(\);/);
+  assert.doesNotMatch(mainSource, /if \(contextText\.trim\(\)\) await saveContext\(\{ preventDefault\(\) \{\} \}\);\n\s+await runWorkflow\(\);/);
+});
+
 test("Linear connector cannot be falsely enabled without credentials", () => {
   assert.match(serverSource, /res\.status\(400\)\.json\(\{ error: message, state: state\(\) \}\)/);
   assert.match(serverSource, /Paste a Linear personal API key, or configure LINEAR_API_KEY before enabling Linear\./);
