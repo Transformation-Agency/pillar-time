@@ -46,7 +46,7 @@ import "./styles.css";
 
 const nav = [
   ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
-  ["Context", [["briefs", "Intelligence"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"]]],
+  ["Context", [["briefs", "Intelligence"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"], ["approvals", "Approvals"]]],
   ["Configure", [["briefSetup", "Brief Setup"]]],
   ["System", [["settings", "Settings"]]],
 ];
@@ -2115,8 +2115,19 @@ function Workflow({ state, runWorkflow }) {
 }
 
 function Approvals({ state, mutate }) {
+  const [approvalMessage, setApprovalMessage] = React.useState("");
+  const updateApprovalStatus = async (approval, status) => {
+    setApprovalMessage("");
+    try {
+      await mutate(`/api/approvals/${approval.id}`, { status }, "PATCH");
+      setApprovalMessage(`${approval.title || "Approval"} ${status}.`);
+    } catch (error) {
+      setApprovalMessage(error.message || `Could not ${status} approval.`);
+    }
+  };
   return <Page title="Approvals" desc="Human review is the center of the console. No public posting or document mutation happens automatically." wide>
-    <div className="card table-card">{state.approvals.length ? <table><thead><tr><th>Item</th><th>Risk</th><th>Status</th><th>Run</th><th></th></tr></thead><tbody>{state.approvals.map((a) => <tr key={a.id}><td><strong>{a.title}</strong><small>{a.kind}</small></td><td><Badge tone={a.risk === "high" ? "err" : a.risk === "medium" ? "warn" : "muted"}>{a.risk}</Badge></td><td><Badge tone={a.status === "approved" ? "ok" : a.status === "rejected" ? "err" : "warn"}>{a.status}</Badge></td><td className="mono">{a.runId || "manual"}</td><td>{a.status === "pending" && <div className="row"><Button icon="check" onClick={() => mutate(`/api/approvals/${a.id}`, { status: "approved" }, "PATCH")}>Approve</Button><Button icon="x" onClick={() => mutate(`/api/approvals/${a.id}`, { status: "rejected" }, "PATCH")}>Reject</Button></div>}</td></tr>)}</tbody></table> : <Empty icon="approvals" title="No approvals yet" body="Run the workflow or submit state-changing Telegram requests to create reviewable items." />}</div>
+    {approvalMessage && <p className={approvalMessage.includes("Could not") ? "warn-text" : "ok-text"}>{approvalMessage}</p>}
+    <div className="card table-card">{state.approvals.length ? <table><thead><tr><th>Item</th><th>Risk</th><th>Status</th><th>Run</th><th></th></tr></thead><tbody>{state.approvals.map((a) => <tr key={a.id}><td><strong>{a.title}</strong><small>{a.kind}</small></td><td><Badge tone={a.risk === "high" ? "err" : a.risk === "medium" ? "warn" : "muted"}>{a.risk}</Badge></td><td><Badge tone={a.status === "approved" ? "ok" : a.status === "rejected" ? "err" : "warn"}>{a.status}</Badge></td><td className="mono">{a.runId || "manual"}</td><td>{a.status === "pending" && <div className="row"><Button icon="check" onClick={() => updateApprovalStatus(a, "approved")}>Approve</Button><Button icon="x" onClick={() => updateApprovalStatus(a, "rejected")}>Reject</Button></div>}</td></tr>)}</tbody></table> : <Empty icon="approvals" title="No approvals yet" body="Run the workflow or submit state-changing Telegram requests to create reviewable items." />}</div>
   </Page>;
 }
 
@@ -4503,6 +4514,7 @@ function App() {
     briefSetup: <BriefSetup state={state} mutate={mutate} />,
     linear: <Linear state={state} refresh={refresh} />,
     trustedContext: <TrustedContext state={state} mutate={mutate} />,
+    approvals: <Approvals state={state} mutate={mutate} />,
     telegram: <Telegram state={state} mutate={mutate} refresh={refresh} />,
     settings: <Settings state={state} mutate={mutate} refresh={refresh} desktopUpdate={desktopUpdate} />,
   };
