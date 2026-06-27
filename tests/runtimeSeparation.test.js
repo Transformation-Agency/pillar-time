@@ -203,6 +203,16 @@ test("Reminder and meeting captures expose local success and failure messages", 
   assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/meetings", form\)\.then\(\(\) => setForm\(\{ title: "", startsAt: "", notes: "" \}\)\)/);
 });
 
+test("Review template toggles expose local success and failure messages", () => {
+  assert.match(mainSource, /function Reviews\(\{ state, mutate \}\) \{\n\s+const time = todayTime\(state\);\n\s+const \[reviewMessage, setReviewMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const toggleReview = async \(review\) => \{\n\s+setReviewMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/reviews\/\$\{review\.id\}`, \{ enabled: !review\.enabled \}, "PATCH"\);/);
+  assert.match(mainSource, /setReviewMessage\(`\$\{review\.title\} \$\{review\.enabled \? "disabled" : "enabled"\}\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setReviewMessage\(error\.message \|\| "Could not update review\."\);/);
+  assert.match(mainSource, /\{reviewMessage && <p className=\{reviewMessage\.includes\("enabled"\) \|\| reviewMessage\.includes\("disabled"\) \? "ok-text" : "warn-text"\}>\{reviewMessage\}<\/p>\}/);
+  assert.match(mainSource, /onClick=\{\(\) => toggleReview\(review\)\}/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/reviews\/\$\{review\.id\}`, \{ enabled: !review\.enabled \}, "PATCH"\)\}/);
+});
+
 test("Delivery schedule selects expose accessible labels", () => {
   assert.match(mainSource, /aria-label="Delivery frequency"/);
   assert.match(mainSource, /aria-label="Delivery day"/);

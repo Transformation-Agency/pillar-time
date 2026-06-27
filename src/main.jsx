@@ -1329,13 +1329,24 @@ function Reminders({ state, mutate }) {
 
 function Reviews({ state, mutate }) {
   const time = todayTime(state);
+  const [reviewMessage, setReviewMessage] = React.useState("");
+  const toggleReview = async (review) => {
+    setReviewMessage("");
+    try {
+      await mutate(`/api/time/reviews/${review.id}`, { enabled: !review.enabled }, "PATCH");
+      setReviewMessage(`${review.title} ${review.enabled ? "disabled" : "enabled"}.`);
+    } catch (error) {
+      setReviewMessage(error.message || "Could not update review.");
+    }
+  };
   return <Page title="Reviews" desc="Morning, midday, weekly, monthly, quarterly, and annual review templates." wide>
     <section className="panel">
       <PanelTitle icon="reviews" title="Review Templates" sub="Turn templates on when you are ready for Pillar Time to schedule them." />
+      {reviewMessage && <p className={reviewMessage.includes("enabled") || reviewMessage.includes("disabled") ? "ok-text" : "warn-text"}>{reviewMessage}</p>}
       <div className="review-grid">{(time.reviews || []).map((review) => <div className="time-card" key={review.id}>
         <div className="time-card-head"><div><strong>{review.title}</strong><small>{displayCadence(review.cadence)}{review.description ? ` · ${review.description}` : ""}</small></div><Badge tone={review.enabled ? "ok" : "muted"}>{review.enabled ? "On" : "Off"}</Badge></div>
         <Markdown text={(review.prompts || []).map((question) => `- ${question}`).join("\n")} />
-        <Button icon={review.enabled ? "x" : "check"} onClick={() => mutate(`/api/time/reviews/${review.id}`, { enabled: !review.enabled }, "PATCH")}>{review.enabled ? "Disable" : "Enable"}</Button>
+        <Button icon={review.enabled ? "x" : "check"} onClick={() => toggleReview(review)}>{review.enabled ? "Disable" : "Enable"}</Button>
       </div>)}</div>
     </section>
   </Page>;
