@@ -1077,9 +1077,12 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     event.target.value = "";
   };
   const saveContext = async (event) => {
-    event.preventDefault();
+    event?.preventDefault?.();
     const value = contextText.trim();
-    if (!value) return;
+    if (!value) {
+      setContextMessage("Add context before saving.");
+      return false;
+    }
     setContextMessage("");
     try {
       if (contextType === "identity") {
@@ -1111,12 +1114,17 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
       }
       setContextText("");
       setContextMessage("Saved context.");
+      return true;
     } catch (error) {
       setContextMessage(error.message || "Could not save context.");
+      return false;
     }
   };
   const regenerateWithContext = async () => {
-    if (contextText.trim()) await saveContext({ preventDefault() {} });
+    if (contextText.trim()) {
+      const saved = await saveContext();
+      if (!saved) return;
+    }
     await runWorkflow();
   };
   return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<div className="row tight-row"><Button icon="briefs" onClick={() => setRoute("briefs")} disabled={!latestArtifact}>View Brief</Button><Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Plan</Button></div>}>
