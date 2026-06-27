@@ -4365,8 +4365,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <button type="button" onClick={openAudioBriefSettings}><Icon name="volume" /><strong>ElevenLabs audio</strong><span>Jump to the Audio Briefs settings below.</span></button>
           <button type="button" onClick={() => { setConnectorModal(false); setRedditModal(true); }}><BrandLogo name="Reddit" /><strong>Reddit OAuth API</strong><span>Official app-only OAuth for subreddit sources.</span></button>
           <button type="button" onClick={() => { setConnectorModal(false); setLinearModal(true); }}><BrandLogo name="Linear" /><strong>Linear</strong><span>Read and update project issues.</span></button>
+          <button type="button" onClick={() => { setConnectorModal(false); location.hash = "sources"; }}><Icon name="sources" /><strong>Manage sources</strong><span>Add, pause, resume, or delete monitored feeds and searches.</span></button>
         </div>
-        <p className="hint">Provider credentials live on this Settings page. Source management is not exposed in this build.</p>
+        <p className="hint">Provider credentials live on this Settings page. Source management is available from Context &gt; Sources.</p>
       </div>
     </div>}
     {editingProvider && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeModelProviderSetup(); }}>

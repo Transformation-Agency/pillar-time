@@ -337,6 +337,12 @@ test("Connector picker sends ElevenLabs users to audio settings", () => {
   assert.doesNotMatch(mainSource, /<button type="button" onClick=\{\(\) => setConnectorModal\(false\)\}><Icon name="volume" \/><strong>ElevenLabs audio<\/strong><span>Use the Audio Briefs settings below\.<\/span><\/button>/);
 });
 
+test("Connector picker exposes source management instead of stale hidden-source copy", () => {
+  assert.match(mainSource, /<button type="button" onClick=\{\(\) => \{ setConnectorModal\(false\); location\.hash = "sources"; \}\}><Icon name="sources" \/><strong>Manage sources<\/strong><span>Add, pause, resume, or delete monitored feeds and searches\.<\/span><\/button>/);
+  assert.match(mainSource, /Source management is available from Context &gt; Sources\./);
+  assert.doesNotMatch(mainSource, /Source management is not exposed in this build\./);
+});
+
 test("Local dependency installers ask for consent before starting", () => {
   const ffmpegConsent = /Install FFmpeg with Homebrew now\? Pillar Time will run a local Homebrew install so podcast audio can be processed\./g;
   const whisperConsent = /Download the local Whisper model now\? This stores the speech-to-text model on this Mac for voice input and transcription\./g;
