@@ -203,6 +203,16 @@ test("Reminder and meeting captures expose local success and failure messages", 
   assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/meetings", form\)\.then\(\(\) => setForm\(\{ title: "", startsAt: "", notes: "" \}\)\)/);
 });
 
+test("Reminder row actions expose local success and failure messages", () => {
+  assert.match(mainSource, /const updateReminder = async \(reminder, patch, successMessage\) => \{\n\s+setReminderMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/reminders\/\$\{reminder\.id\}`, patch, "PATCH"\);/);
+  assert.match(mainSource, /setReminderMessage\(successMessage\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setReminderMessage\(error\.message \|\| "Could not update reminder\."\);/);
+  assert.match(mainSource, /onClick=\{\(\) => updateReminder\(reminder, \{ enabled: !reminder\.enabled \}, `\$\{reminder\.title\} \$\{reminder\.enabled \? "disabled" : "enabled"\}\.`\)\}/);
+  assert.match(mainSource, /onClick=\{\(\) => updateReminder\(reminder, \{ pausedUntil: new Date\(Date\.now\(\) \+ 86400000\)\.toISOString\(\) \}, `\$\{reminder\.title\} paused until tomorrow\.`\)\}/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/reminders\/\$\{reminder\.id\}`, \{ enabled: !reminder\.enabled \}, "PATCH"\)\}/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/reminders\/\$\{reminder\.id\}`, \{ pausedUntil: new Date\(Date\.now\(\) \+ 86400000\)\.toISOString\(\) \}, "PATCH"\)\}/);
+});
+
 test("Review template toggles expose local success and failure messages", () => {
   assert.match(mainSource, /function Reviews\(\{ state, mutate \}\) \{\n\s+const time = todayTime\(state\);\n\s+const \[reviewMessage, setReviewMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const toggleReview = async \(review\) => \{\n\s+setReviewMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/reviews\/\$\{review\.id\}`, \{ enabled: !review\.enabled \}, "PATCH"\);/);
