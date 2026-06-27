@@ -1215,6 +1215,15 @@ function Planner({ state, mutate }) {
     if (!window.confirm(`Archive "${title}"? It will leave the active planning backlog and stop showing as a Today candidate.`)) return;
     mutate(`/api/time/tasks/${item.id}`, { status: "archived" }, "PATCH");
   };
+  const completeTask = async (item) => {
+    setPlannerMessage("");
+    try {
+      await mutate(`/api/time/tasks/${item.id}`, { status: "done" }, "PATCH");
+      setPlannerMessage(`${item.title || "Task"} marked done.`);
+    } catch (error) {
+      setPlannerMessage(error.message || "Could not mark task done.");
+    }
+  };
   const createDate = async (event) => {
     event.preventDefault();
     if (!importantDate.title.trim() || !importantDate.startDate) return;
@@ -1228,7 +1237,7 @@ function Planner({ state, mutate }) {
     }
   };
   return <Page title="Planner" desc="Capture obligations, map leverage, and keep personal dates beside work context." wide>
-    {plannerMessage && <p className={plannerMessage.includes("added") ? "ok-text" : "warn-text"}>{plannerMessage}</p>}
+    {plannerMessage && <p className={plannerMessage.includes("Could not") ? "warn-text" : "ok-text"}>{plannerMessage}</p>}
     <div className="split">
       <section className="panel">
         <PanelTitle icon="planner" title="Add Task" sub="Rankable work that can become a Today suggestion." />
@@ -1242,7 +1251,7 @@ function Planner({ state, mutate }) {
       </section>
       <section className="panel">
         <PanelTitle icon="check" title="Task Backlog" sub={`${(time.tasks || []).length} captured tasks.`} />
-        {(time.tasks || []).length ? time.tasks.map((item) => <ListRow key={item.id} title={item.title} sub={`${item.leverageCategory || "admin"} · ${item.status || "inbox"} · ${item.estimateMinutes || 30} min`} right={<div className="row tight-row"><Button icon="check" onClick={() => mutate(`/api/time/tasks/${item.id}`, { status: "done" }, "PATCH")}>Done</Button><Button icon="x" onClick={() => archiveTask(item)}>Archive</Button></div>} />) : <Empty icon="planner" title="No tasks captured" body="Add one task to start giving the ranking engine something real to work with." />}
+        {(time.tasks || []).length ? time.tasks.map((item) => <ListRow key={item.id} title={item.title} sub={`${item.leverageCategory || "admin"} · ${item.status || "inbox"} · ${item.estimateMinutes || 30} min`} right={<div className="row tight-row"><Button icon="check" onClick={() => completeTask(item)}>Done</Button><Button icon="x" onClick={() => archiveTask(item)}>Archive</Button></div>} />) : <Empty icon="planner" title="No tasks captured" body="Add one task to start giving the ranking engine something real to work with." />}
       </section>
     </div>
     <section className="panel time-section">
