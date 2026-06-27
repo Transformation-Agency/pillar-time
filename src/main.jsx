@@ -1272,6 +1272,15 @@ function Reminders({ state, mutate }) {
     if (!window.confirm(`Archive "${title}"? It will disappear from your active reminder list and stop scheduling future nudges.`)) return;
     mutate(`/api/time/reminders/${reminder.id}`, { archive: true }, "PATCH");
   };
+  const updateReminder = async (reminder, patch, successMessage) => {
+    setReminderMessage("");
+    try {
+      await mutate(`/api/time/reminders/${reminder.id}`, patch, "PATCH");
+      setReminderMessage(successMessage);
+    } catch (error) {
+      setReminderMessage(error.message || "Could not update reminder.");
+    }
+  };
   return <Page title="Reminders" desc="Local-first reminders with explicit channel switches and no surprise delivery." wide>
     <div className="metric-grid">
       <Metric label="Master" value={prefs.reminderMasterEnabled ? "On" : "Off"} sub="global reminder gate" alert={!prefs.reminderMasterEnabled} />
@@ -1321,7 +1330,7 @@ function Reminders({ state, mutate }) {
       </section>
       <section className="panel">
         <PanelTitle icon="reminders" title="Reminder List" sub="Pause, enable, disable, or archive any reminder." />
-        {(time.reminders || []).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.type === "sporadic" ? "sporadic" : reminder.scheduleType} · next ${reminder.nextOccurrence.dateKey} ${reminder.nextOccurrence.localTime}` : reminder.type === "sporadic" ? "sporadic window" : reminder.scheduleType} right={<div className="row tight-row"><Button icon={reminder.enabled ? "x" : "check"} onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { enabled: !reminder.enabled }, "PATCH")}>{reminder.enabled ? "Disable" : "Enable"}</Button><Button icon="clock" onClick={() => mutate(`/api/time/reminders/${reminder.id}`, { pausedUntil: new Date(Date.now() + 86400000).toISOString() }, "PATCH")}>Pause</Button><Button icon="x" onClick={() => archiveReminder(reminder)}>Archive</Button></div>} />)}
+        {(time.reminders || []).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.type === "sporadic" ? "sporadic" : reminder.scheduleType} · next ${reminder.nextOccurrence.dateKey} ${reminder.nextOccurrence.localTime}` : reminder.type === "sporadic" ? "sporadic window" : reminder.scheduleType} right={<div className="row tight-row"><Button icon={reminder.enabled ? "x" : "check"} onClick={() => updateReminder(reminder, { enabled: !reminder.enabled }, `${reminder.title} ${reminder.enabled ? "disabled" : "enabled"}.`)}>{reminder.enabled ? "Disable" : "Enable"}</Button><Button icon="clock" onClick={() => updateReminder(reminder, { pausedUntil: new Date(Date.now() + 86400000).toISOString() }, `${reminder.title} paused until tomorrow.`)}>Pause</Button><Button icon="x" onClick={() => archiveReminder(reminder)}>Archive</Button></div>} />)}
       </section>
     </div>
   </Page>;
