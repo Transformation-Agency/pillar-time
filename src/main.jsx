@@ -46,7 +46,7 @@ import "./styles.css";
 
 const nav = [
   ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
-  ["Context", [["briefs", "Intelligence"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"], ["approvals", "Approvals"]]],
+  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"], ["approvals", "Approvals"]]],
   ["Configure", [["briefSetup", "Brief Setup"]]],
   ["System", [["settings", "Settings"]]],
 ];
@@ -1553,6 +1553,7 @@ function Sources({ state, mutate }) {
   const [spotifyResolve, setSpotifyResolve] = React.useState({ loading: false, message: "", tone: "muted" });
   const [transcribing, setTranscribing] = React.useState({});
   const [transcribeMessage, setTranscribeMessage] = React.useState("");
+  const [sourceMessage, setSourceMessage] = React.useState("");
   const ffmpeg = state.runtime?.ffmpeg;
   const stt = state.runtime?.stt;
   const cloudTranscriptionReady = ["openai", "custom"].includes(state.model?.provider) && state.model?.status === "ready";
@@ -1628,16 +1629,41 @@ function Sources({ state, mutate }) {
       setSpotifyResolve({ loading: false, message: error.message, tone: "warn" });
     }
   };
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     const locator = sourceLocator(form.type, { ...form.config, mode });
     const payload = { ...form, locator, config: { ...form.config, mode } };
     const endpoint = editingSource ? `/api/sources/${editingSource.id}` : "/api/sources";
     const method = editingSource ? "PATCH" : "POST";
-    mutate(endpoint, payload, method)
-      .then(() => {
-        resetSourceForm();
-      });
+    setSourceMessage("");
+    try {
+      await mutate(endpoint, payload, method);
+      const action = editingSource ? "updated" : "added";
+      const name = form.name || "Source";
+      resetSourceForm();
+      setSourceMessage(`${name} ${action}.`);
+    } catch (error) {
+      setSourceMessage(error.message || "Could not save source.");
+    }
+  };
+  const updateSourceStatus = async (source, active) => {
+    setSourceMessage("");
+    try {
+      await mutate(`/api/sources/${source.id}`, { status: active ? "paused" : "active" }, "PATCH");
+      setSourceMessage(`${source.name || "Source"} ${active ? "paused" : "activated"}.`);
+    } catch (error) {
+      setSourceMessage(error.message || "Could not update source.");
+    }
+  };
+  const deleteSource = async (source) => {
+    if (!window.confirm(`Delete source "${source.name}"? This removes it from future runs.`)) return;
+    setSourceMessage("");
+    try {
+      await mutate(`/api/sources/${source.id}`, {}, "DELETE");
+      setSourceMessage(`${source.name || "Source"} deleted.`);
+    } catch (error) {
+      setSourceMessage(error.message || "Could not delete source.");
+    }
   };
   const transcribeSource = async (sourceId, mode) => {
     setTranscribing((current) => ({ ...current, [sourceId]: true }));
@@ -1684,6 +1710,7 @@ function Sources({ state, mutate }) {
     <div className="sources-workspace">
       <section className="panel sources-table-card">
         <div className="table-title-row"><h2>Your sources</h2><label className="table-search"><Icon name="search" /><input aria-label="Search sources" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search sources..." /></label></div>
+        {sourceMessage && <p className={sourceMessage.includes("Could not") ? "warn-text" : "ok-text"}>{sourceMessage}</p>}
         {transcribeMessage && <div className="notice source-transcribe-message"><span>{transcribeMessage}</span></div>}
         {state.sources.length ? <table className="source-table simplified"><thead><tr><th>Source</th><th>Type</th><th>Status</th><th>Credentials</th><th></th></tr></thead><tbody>{filteredSources.map((s) => {
         const credential = sourceCredentialLabel(s);
@@ -1692,11 +1719,9 @@ function Sources({ state, mutate }) {
         return <tr key={s.id}>
           <td><div className="source-name-cell"><BrandLogo name={s.type} /><div><strong>{s.name}</strong><small title={displayLocator}>{displayLocator}</small></div></div></td>
           <td>{s.type === "Newsletter" ? "Journal / Library" : s.type}</td>
-          <td><button type="button" className={`source-toggle ${active ? "active" : "paused"}`} onClick={() => mutate(`/api/sources/${s.id}`, { status: active ? "paused" : "active" }, "PATCH")} aria-pressed={active}><span></span>{active ? "Active" : "Paused"}</button></td>
+          <td><button type="button" className={`source-toggle ${active ? "active" : "paused"}`} onClick={() => updateSourceStatus(s, active)} aria-pressed={active}><span></span>{active ? "Active" : "Paused"}</button></td>
           <td><Badge tone={["configured", "not required"].includes(credential) ? "ok" : credential === "optional" ? "muted" : "warn"}>{credential}</Badge></td>
-          <td><div className="source-actions"><button type="button" onClick={() => openEditSource(s)}><Icon name="pencil" />Edit</button><button className="danger" type="button" onClick={() => {
-            if (window.confirm(`Delete source "${s.name}"? This removes it from future runs.`)) mutate(`/api/sources/${s.id}`, {}, "DELETE");
-          }}><Icon name="trash" />Delete</button></div></td>
+          <td><div className="source-actions"><button type="button" onClick={() => openEditSource(s)}><Icon name="pencil" />Edit</button><button className="danger" type="button" onClick={() => deleteSource(s)}><Icon name="trash" />Delete</button></div></td>
         </tr>;
       })}</tbody></table> : <Empty icon="sources" title="No sources yet" body="Add the first real source. The workflow will not invent feed data." />}
         {state.sources.length > 0 && filteredSources.length === 0 && <Empty icon="search" title="No matching sources" body="Clear the search to see all configured sources." />}
@@ -4452,7 +4477,6 @@ function Select({ label, value, onChange, options }) {
 
 function routeFromHash() {
   const route = location.hash.replace(/^#\/?/, "") || "today";
-  if (route === "sources") return "briefs";
   if (route === "lenses") return "briefSetup";
   return route;
 }
@@ -4464,7 +4488,7 @@ function App() {
   const desktopUpdate = useDesktopUpdates();
   const requestRoute = React.useCallback((nextRoute) => {
     const requested = nextRoute || "overview";
-    const next = requested === "sources" ? "briefs" : requested === "lenses" ? "briefSetup" : requested;
+    const next = requested === "lenses" ? "briefSetup" : requested;
     if (route === "briefSetup" && next !== "briefSetup" && window.__pillarBriefUnsavedBriefSetup) {
       const leave = window.confirm("You have unsaved brief setup changes. Leave without saving?");
       if (!leave) {
@@ -4539,6 +4563,7 @@ function App() {
     meetings: <Meetings state={state} mutate={mutate} />,
     overview: <Overview state={state} setRoute={requestRoute} runWorkflow={() => runWorkflow({ runType: "executive_day" })} mutate={mutate} />,
     briefs: <Briefs state={state} runWorkflow={() => runWorkflow({ runType: "intelligence" })} refresh={refresh} />,
+    sources: <Sources state={state} mutate={mutate} />,
     generating: <GeneratingBrief runState={runState} />,
     briefSetup: <BriefSetup state={state} mutate={mutate} />,
     linear: <Linear state={state} refresh={refresh} />,
