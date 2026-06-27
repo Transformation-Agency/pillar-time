@@ -18,6 +18,7 @@
   --accent-dark: #9d4b40;
   --accent-soft: #f6dfd8;
   --accent-pale: #fbede8;
+  --time-purple: #6f3da8;
   --ok: #547d62;
   --ok-soft: #e4f0e7;
   --warn: #b98035;
@@ -111,7 +112,7 @@ button { cursor: pointer; }
 }
 .brand-wordmark-product {
   font-family: "Cormorant Garamond", Georgia, serif;
-  color: #1f3a5f;
+  color: var(--time-purple);
   font-size: 33px;
   font-weight: 650;
   line-height: 1;

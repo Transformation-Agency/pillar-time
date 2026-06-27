@@ -417,7 +417,7 @@ function BrandLogo({ name }) {
 
 function PillarBriefLockup({ alt = "Pillar Time" }) {
   return <span className="brand-lockup" aria-label={alt}>
-    <img className="brand-lockup-icon" src="/assets/pillar-brief-app-icon.png" alt="" aria-hidden="true" />
+    <img className="brand-lockup-icon" src="/assets/pillar-time-app-icon.png" alt="" aria-hidden="true" />
     <span className="brand-wordmark" aria-hidden="true">
       <span className="brand-wordmark-main"><span>P</span><img className="brand-wordmark-pillar" src="/assets/pillar-brief-wordmark-pillar.png" alt="" /><span>LLAR</span></span>
       <span className="brand-wordmark-product">Time</span>
