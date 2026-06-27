@@ -185,6 +185,29 @@ test("High-use placeholder and table controls expose accessible labels", () => {
   assert.match(mainSource, /aria-label="Starter commitment for Today's Three"/);
 });
 
+test("Source table actions expose local success and failure messages", () => {
+  assert.match(mainSource, /\["Context", \[\["briefs", "Intelligence"\], \["sources", "Sources"\], \["meetings", "Meetings"\], \["linear", "Linear"\], \["trustedContext", "Trusted Context"\], \["approvals", "Approvals"\]\]\]/);
+  assert.match(mainSource, /sources: <Sources state=\{state\} mutate=\{mutate\} \/>/);
+  assert.doesNotMatch(mainSource, /if \(route === "sources"\) return "briefs";/);
+  assert.doesNotMatch(mainSource, /requested === "sources" \? "briefs"/);
+  assert.match(mainSource, /function Sources\(\{ state, mutate \}\) \{/);
+  assert.match(mainSource, /const \[sourceMessage, setSourceMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const submit = async \(e\) => \{\n\s+e\.preventDefault\(\);/);
+  assert.match(mainSource, /await mutate\(endpoint, payload, method\);\n\s+const action = editingSource \? "updated" : "added";/);
+  assert.match(mainSource, /setSourceMessage\(`\$\{name\} \$\{action\}\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setSourceMessage\(error\.message \|\| "Could not save source\."\);/);
+  assert.match(mainSource, /const updateSourceStatus = async \(source, active\) => \{\n\s+setSourceMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/sources\/\$\{source\.id\}`, \{ status: active \? "paused" : "active" \}, "PATCH"\);/);
+  assert.match(mainSource, /setSourceMessage\(`\$\{source\.name \|\| "Source"\} \$\{active \? "paused" : "activated"\}\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setSourceMessage\(error\.message \|\| "Could not update source\."\);/);
+  assert.match(mainSource, /const deleteSource = async \(source\) => \{\n\s+if \(!window\.confirm\(`Delete source "\$\{source\.name\}"\? This removes it from future runs\.`\)\) return;/);
+  assert.match(mainSource, /await mutate\(`\/api\/sources\/\$\{source\.id\}`, \{\}, "DELETE"\);\n\s+setSourceMessage\(`\$\{source\.name \|\| "Source"\} deleted\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setSourceMessage\(error\.message \|\| "Could not delete source\."\);/);
+  assert.match(mainSource, /\{sourceMessage && <p className=\{sourceMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{sourceMessage\}<\/p>\}/);
+  assert.match(mainSource, /onClick=\{\(\) => updateSourceStatus\(s, active\)\}/);
+  assert.match(mainSource, /onClick=\{\(\) => deleteSource\(s\)\}/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/sources\/\$\{s\.id\}`, \{ status: active \? "paused" : "active" \}, "PATCH"\)\}/);
+});
+
 test("Planner capture saves expose local success and failure messages", () => {
   assert.match(mainSource, /const \[plannerMessage, setPlannerMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const createTask = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!task\.title\.trim\(\)\) return;\n\s+setPlannerMessage\(""\);/);
@@ -242,7 +265,7 @@ test("Review template toggles expose local success and failure messages", () => 
 });
 
 test("Approval status actions expose local success and failure messages", () => {
-  assert.match(mainSource, /\["Context", \[\["briefs", "Intelligence"\], \["meetings", "Meetings"\], \["linear", "Linear"\], \["trustedContext", "Trusted Context"\], \["approvals", "Approvals"\]\]\]/);
+  assert.match(mainSource, /\["Context", \[\["briefs", "Intelligence"\], \["sources", "Sources"\], \["meetings", "Meetings"\], \["linear", "Linear"\], \["trustedContext", "Trusted Context"\], \["approvals", "Approvals"\]\]\]/);
   assert.match(mainSource, /approvals: <Approvals state=\{state\} mutate=\{mutate\} \/>/);
   assert.match(mainSource, /function Approvals\(\{ state, mutate \}\) \{\n\s+const \[approvalMessage, setApprovalMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const updateApprovalStatus = async \(approval, status\) => \{\n\s+setApprovalMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/approvals\/\$\{approval\.id\}`, \{ status \}, "PATCH"\);/);
