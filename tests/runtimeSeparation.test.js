@@ -246,6 +246,18 @@ test("Documents are reachable and expose local success and failure messages", ()
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/documents\/\$\{d\.id\}`, \{ status: d\.status === "active" \? "archived" : "active" \}, "PATCH"\)\}/);
 });
 
+test("Trusted Context actions expose required-field and proposal feedback", () => {
+  assert.match(mainSource, /function TrustedContext\(\{ state, mutate \}\) \{/);
+  assert.match(mainSource, /const requiredMissing = !factForm\.resourceType\.trim\(\) \|\| !factForm\.fieldKey\.trim\(\) \|\| !String\(factForm\.value \|\| ""\)\.trim\(\);/);
+  assert.match(mainSource, /setMessage\("Add a resource type, field key, and value before saving\."\);\n\s+return;/);
+  assert.match(mainSource, /setMessage\(error\.message \|\| "Could not save profile fact\."\);/);
+  assert.match(mainSource, /setMessage\(error\.message \|\| "Could not refresh envelope\."\);/);
+  assert.match(mainSource, /const updateProposal = async \(proposal, status\) => \{\n\s+setMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/trusted-context\/proposals\/\$\{proposal\.id\}`, \{ status \}, "PATCH"\);\n\s+setMessage\(`Proposal \$\{status\}\.`\);/);
+  assert.match(mainSource, /setMessage\(error\.message \|\| `Could not \$\{status\} proposal\.`\);/);
+  assert.match(mainSource, /disabled=\{!factForm\.resourceType\.trim\(\) \|\| !factForm\.fieldKey\.trim\(\) \|\| !String\(factForm\.value \|\| ""\)\.trim\(\)\}/);
+  assert.match(mainSource, /title=\{!factForm\.resourceType\.trim\(\) \|\| !factForm\.fieldKey\.trim\(\) \|\| !String\(factForm\.value \|\| ""\)\.trim\(\) \? "Add resource type, field key, and value first" : "Save fact"\}/);
+});
+
 test("Planner capture saves expose local success and failure messages", () => {
   assert.match(mainSource, /const \[plannerMessage, setPlannerMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const createTask = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!task\.title\.trim\(\)\) return;\n\s+setPlannerMessage\(""\);/);
