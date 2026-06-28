@@ -3125,7 +3125,7 @@ function Onboarding({ state, mutate, refresh }) {
         setModelMessage(result.error || "No models returned. Enter a model name manually.");
       }
     } catch (error) {
-      setModelMessage(error.message);
+      setModelMessage(error.message || "Could not detect models for this provider.");
     } finally {
       setDetecting(false);
     }
@@ -3176,7 +3176,7 @@ function Onboarding({ state, mutate, refresh }) {
         setBriefDraft(draft);
         setBriefDraftMessage(`Built a starter setup locally. Review and apply ${draft.sections.length} sections.`);
       } else {
-        setBriefDraftMessage(error.message);
+        setBriefDraftMessage(error.message || "Could not draft brief setup.");
       }
     } finally {
       setDraftingBriefSetup(false);
@@ -3203,10 +3203,10 @@ function Onboarding({ state, mutate, refresh }) {
           setBriefDraftMessage("Brief setup saved.");
           await go("linear");
         } catch (fallbackError) {
-          setBriefDraftMessage(fallbackError.message);
+          setBriefDraftMessage(fallbackError.message || "Could not save brief setup.");
         }
       } else {
-        setBriefDraftMessage(error.message);
+        setBriefDraftMessage(error.message || "Could not save brief setup.");
       }
     }
   };
@@ -3249,7 +3249,7 @@ function Onboarding({ state, mutate, refresh }) {
       setSourceMessage(`Found ${nextSuggestions.length} source${nextSuggestions.length === 1 ? "" : "s"}. ${blockedCount ? `${blockedCount} will walk you through setup before they are added.` : "Review the suggestions, then add the ones you want."}`);
       await refresh();
     } catch (error) {
-      setSourceMessage(error.message);
+      setSourceMessage(error.message || "Could not suggest sources.");
     } finally {
       clearInterval(phraseTimer);
       setSuggestingSources(false);
@@ -3377,7 +3377,7 @@ function Onboarding({ state, mutate, refresh }) {
       setPendingSourceIds(new Set());
       await go("calendar");
     } catch (error) {
-      setSourceMessage(error.message);
+      setSourceMessage(error.message || "Could not add selected sources.");
     } finally {
       setSavingSources(false);
     }

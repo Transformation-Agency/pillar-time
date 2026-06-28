@@ -127,6 +127,14 @@ test("Onboarding brief setup disabled actions explain the next step", () => {
   assert.match(mainSource, /disabled=\{!!addSelectedSourcesDisabledReason\} title=\{addSelectedSourcesDisabledReason \|\| "Add selected sources"\}/);
 });
 
+test("Onboarding setup failures have fallback recovery messages", () => {
+  assert.match(mainSource, /setBriefDraftMessage\(error\.message \|\| "Could not draft brief setup\."\);/);
+  assert.match(mainSource, /setBriefDraftMessage\(fallbackError\.message \|\| "Could not save brief setup\."\);/);
+  assert.match(mainSource, /setBriefDraftMessage\(error\.message \|\| "Could not save brief setup\."\);/);
+  assert.match(mainSource, /setSourceMessage\(error\.message \|\| "Could not suggest sources\."\);/);
+  assert.match(mainSource, /setSourceMessage\(error\.message \|\| "Could not add selected sources\."\);/);
+});
+
 test("First-run controls avoid misleading defaults and internal labels", () => {
   assert.match(mainSource, /const defaultOpenAiModel = "gpt-4\.1"/);
   assert.doesNotMatch(mainSource, /gpt-5\.4-mini/);
@@ -606,6 +614,7 @@ test("Onboarding perspective disabled actions explain the next step", () => {
 test("Onboarding model setup disabled actions and save failures explain recovery", () => {
   assert.match(mainSource, /const validateModelDisabledReason = detecting\n\s+\? "Model validation is already running"\n\s+: "";/);
   assert.match(mainSource, /const saveModelDisabledReason = !model\.model\.trim\(\)\n\s+\? "Enter or detect a model name before saving"\n\s+: "";/);
+  assert.match(mainSource, /setModelMessage\(error\.message \|\| "Could not detect models for this provider\."\);/);
   assert.match(mainSource, /setModelMessage\(error\.message \|\| "Could not save model settings\."\);/);
   assert.match(mainSource, /disabled=\{!!validateModelDisabledReason\} title=\{validateModelDisabledReason \|\| "Validate model API key"\}/);
   assert.match(mainSource, /disabled=\{!!saveModelDisabledReason\} title=\{saveModelDisabledReason \|\| "Save model settings"\}/);
