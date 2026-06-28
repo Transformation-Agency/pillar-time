@@ -4189,6 +4189,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     }
   };
   const disableLinearConnector = async () => {
+    if (!window.confirm("Disable Linear connector? Pillar Time will stop refreshing Linear issues and cannot include current Linear work in day planning until you re-enable it.")) return;
     setLinearMessage("");
     try {
       await mutate("/api/connectors/linear", { enabled: false }, "PATCH");
@@ -4755,7 +4756,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <Field label="Linear personal API key" type="password" value={linearConnector.apiKey} onChange={(apiKey) => setLinearConnector({ ...linearConnector, apiKey })} placeholder={state.connectors?.linear?.apiKeySaved ? "Saved. Paste a new key to replace it." : state.connectors?.linear?.credentialStatus === "env" ? "Using LINEAR_API_KEY fallback. Paste to save locally." : "lin_api_..."} />
         <label className="check"><input type="checkbox" checked={linearConnector.enabled} onChange={(event) => setLinearConnector({ ...linearConnector, enabled: event.target.checked })} /> Enable Linear connector</label>
         <p className="hint">Keys are stored locally in the connector credential table and never returned to the UI. Existing `LINEAR_API_KEY` values still work as a fallback.</p>
-        {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("enabled") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
+        {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("enabled") || linearMessage.includes("disabled") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
         <div className="modal-actions">
           <Button type="button" onClick={closeLinearModal}>Cancel</Button>
           <Button type="button" icon="run" onClick={testLinearConnector} disabled={!!settingsLinearTestDisabledReason} title={settingsLinearTestDisabledReason || "Test Linear API key"}>Test</Button>
