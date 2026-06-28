@@ -1106,17 +1106,23 @@ function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = 
       window.__pillarTimeUnsavedTodayInput = false;
     };
   }, [capture, contextText]);
-  const addTask = async (event) => {
-    event.preventDefault();
-    if (!capture.trim()) return;
+  const saveQuickCapture = async () => {
+    const title = capture.trim();
+    if (!title) return true;
     setCaptureMessage("");
     try {
-      await mutate("/api/time/tasks", { title: capture.trim(), source: "quick-capture" });
+      await mutate("/api/time/tasks", { title, source: "quick-capture" });
       setCapture("");
       setCaptureMessage("Captured.");
+      return true;
     } catch (error) {
       setCaptureMessage(error.message || "Could not capture this task.");
+      return false;
     }
+  };
+  const addTask = async (event) => {
+    event.preventDefault();
+    await saveQuickCapture();
   };
   const removeDailyCommitment = async (item) => {
     const title = item.title || "this commitment";
@@ -1203,8 +1209,15 @@ function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = 
     }
     await runWorkflow();
   };
+  const generateDayPlan = async () => {
+    if (capture.trim()) {
+      const savedCapture = await saveQuickCapture();
+      if (!savedCapture) return;
+    }
+    await regenerateWithContext();
+  };
   const viewBriefDisabledReason = latestArtifact ? "" : "Generate a day plan before viewing the brief";
-  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<div className="row tight-row"><Button icon="briefs" onClick={() => setRoute("briefs")} disabled={!!viewBriefDisabledReason} title={viewBriefDisabledReason || "View the latest day-plan brief"}>View Brief</Button><Button icon="run" kind="accent" onClick={runWorkflow} disabled={!!workflowDisabledReason} title={workflowDisabledReason || "Generate a day plan"}>Generate Day Plan</Button></div>}>
+  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<div className="row tight-row"><Button icon="briefs" onClick={() => setRoute("briefs")} disabled={!!viewBriefDisabledReason} title={viewBriefDisabledReason || "View the latest day-plan brief"}>View Brief</Button><Button icon="run" kind="accent" onClick={generateDayPlan} disabled={!!workflowDisabledReason} title={workflowDisabledReason || "Save pending Today input and generate a day plan"}>Generate Day Plan</Button></div>}>
     <div className={`day-plan-preflight ${missingDayPlanContext.length ? "has-gaps" : ""}`}>
       <Icon name={missingDayPlanContext.length ? "help" : "check"} />
       <span>{dayPlanPreflight}</span>

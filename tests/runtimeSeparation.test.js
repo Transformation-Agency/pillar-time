@@ -72,9 +72,10 @@ test("Today suggestion and quick-capture actions expose save feedback", () => {
   assert.match(mainSource, /catch \(error\) \{\n\s+setMessage\(error\.message \|\| "Could not save suggestion feedback\."\);/);
   assert.match(mainSource, /\{message && <p className=\{message\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{message\}<\/p>\}/);
   assert.match(mainSource, /const \[captureMessage, setCaptureMessage\] = React\.useState\(""\);/);
-  assert.match(mainSource, /const addTask = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!capture\.trim\(\)\) return;\n\s+setCaptureMessage\(""\);/);
-  assert.match(mainSource, /await mutate\("\/api\/time\/tasks", \{ title: capture\.trim\(\), source: "quick-capture" \}\);\n\s+setCapture\(""\);\n\s+setCaptureMessage\("Captured\."\);/);
+  assert.match(mainSource, /const saveQuickCapture = async \(\) => \{\n\s+const title = capture\.trim\(\);\n\s+if \(!title\) return true;\n\s+setCaptureMessage\(""\);/);
+  assert.match(mainSource, /await mutate\("\/api\/time\/tasks", \{ title, source: "quick-capture" \}\);\n\s+setCapture\(""\);\n\s+setCaptureMessage\("Captured\."\);\n\s+return true;/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setCaptureMessage\(error\.message \|\| "Could not capture this task\."\);/);
+  assert.match(mainSource, /const addTask = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+await saveQuickCapture\(\);\n\s+\};/);
   assert.match(mainSource, /\{captureMessage && <p className=\{captureMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{captureMessage\}<\/p>\}/);
   assert.doesNotMatch(mainSource, /const accept = \(\) => mutate\("\/api\/time\/commitments"/);
   assert.doesNotMatch(mainSource, /const feedback = \(value\) => mutate\(`\/api\/time\/suggestions/);
@@ -98,6 +99,12 @@ test("Today context regenerate stops when context save fails", () => {
   assert.match(mainSource, /catch \(error\) \{\n\s+setContextMessage\(error\.message \|\| "Could not save context\."\);\n\s+return false;\n\s+\}/);
   assert.match(mainSource, /const regenerateWithContext = async \(\) => \{\n\s+if \(contextText\.trim\(\)\) \{\n\s+const saved = await saveContext\(\);\n\s+if \(!saved\) return;\n\s+\}\n\s+await runWorkflow\(\);/);
   assert.doesNotMatch(mainSource, /if \(contextText\.trim\(\)\) await saveContext\(\{ preventDefault\(\) \{\} \}\);\n\s+await runWorkflow\(\);/);
+});
+
+test("Today generate saves pending input before running", () => {
+  assert.match(mainSource, /const generateDayPlan = async \(\) => \{\n\s+if \(capture\.trim\(\)\) \{\n\s+const savedCapture = await saveQuickCapture\(\);\n\s+if \(!savedCapture\) return;\n\s+\}\n\s+await regenerateWithContext\(\);\n\s+\};/);
+  assert.match(mainSource, /onClick=\{generateDayPlan\} disabled=\{!!workflowDisabledReason\} title=\{workflowDisabledReason \|\| "Save pending Today input and generate a day plan"\}>Generate Day Plan/);
+  assert.doesNotMatch(mainSource, /onClick=\{runWorkflow\} disabled=\{!!workflowDisabledReason\} title=\{workflowDisabledReason \|\| "Generate a day plan"\}>Generate Day Plan/);
 });
 
 test("Today warns before discarding unsaved quick capture or context intake", () => {
@@ -871,7 +878,7 @@ test("Generation actions explain and guard already-running workflows", () => {
   assert.match(mainSource, /finally \{\n\s+runInFlightRef\.current = false;\n\s+\}/);
   assert.match(mainSource, /const workflowDisabledReason = runState\.status === "running" \? "A generation run is already in progress" : "";/);
   assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute, workflowDisabledReason = "" \}\)/);
-  assert.match(mainSource, /disabled=\{!!workflowDisabledReason\} title=\{workflowDisabledReason \|\| "Generate a day plan"\}>Generate Day Plan<\/Button>/);
+  assert.match(mainSource, /disabled=\{!!workflowDisabledReason\} title=\{workflowDisabledReason \|\| "Save pending Today input and generate a day plan"\}>Generate Day Plan<\/Button>/);
   assert.match(mainSource, /disabled=\{!!workflowDisabledReason\} title=\{workflowDisabledReason \|\| "Add context and regenerate the day plan"\}>Add Context & Regenerate<\/Button>/);
   assert.match(mainSource, /function Briefs\(\{ state, runWorkflow, refresh, workflowDisabledReason = "" \}\)/);
   assert.match(mainSource, /disabled=\{!!workflowDisabledReason\} title=\{workflowDisabledReason \|\| "Generate brief"\}>Generate brief<\/Button>/);
