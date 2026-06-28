@@ -2184,13 +2184,18 @@ function BriefSetup({ state, mutate }) {
     ...current,
     analyzers: [...(current.analyzers || []), { id: `analyzer-${Date.now()}`, name: "New Analyzer", role: "Analysis role", description: "", instructions: "Evaluate the selected source items from this analysis angle and name what changes the read.", enabled: true }],
   }));
-  const removeAnalyzer = (index) => markForm((current) => {
-    if ((current.analyzers || []).length <= 1) return current;
-    return {
-      ...current,
-      analyzers: (current.analyzers || []).filter((_, i) => i !== index),
-    };
-  });
+  const removeAnalyzer = (index) => {
+    const analyzer = (form.analyzers || [])[index] || {};
+    const label = analyzer.name || `analyzer ${index + 1}`;
+    if (!window.confirm(`Remove "${label}" from this brief setup? Future generated briefs will stop using that analysis lens until you add it again.`)) return;
+    markForm((current) => {
+      if ((current.analyzers || []).length <= 1) return current;
+      return {
+        ...current,
+        analyzers: (current.analyzers || []).filter((_, i) => i !== index),
+      };
+    });
+  };
   const save = (event) => {
     event?.preventDefault?.();
     setSaveState("saving");

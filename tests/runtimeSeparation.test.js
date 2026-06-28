@@ -440,10 +440,13 @@ test("Brief setup section action controls are labeled and guarded", () => {
 });
 
 test("Brief setup analyzer removal explains the final-analyzer guard", () => {
+  assert.match(mainSource, /const removeAnalyzer = \(index\) => \{\n\s+const analyzer = \(form\.analyzers \|\| \[\]\)\[index\] \|\| \{\};\n\s+const label = analyzer\.name \|\| `analyzer \$\{index \+ 1\}`;\n\s+if \(!window\.confirm\(`Remove "\$\{label\}" from this brief setup\? Future generated briefs will stop using that analysis lens until you add it again\.`\)\) return;\n\s+markForm\(\(current\) => \{/);
   assert.match(mainSource, /if \(\(current\.analyzers \|\| \[\]\)\.length <= 1\) return current;/);
   assert.match(mainSource, /const removeAnalyzerDisabledReason = \(form\.analyzers \|\| \[\]\)\.length <= 1 \? "Keep at least one analyzer for generated briefs\." : "";/);
   assert.match(mainSource, /disabled=\{!!removeAnalyzerDisabledReason\} title=\{removeAnalyzerDisabledReason \|\| `Remove \$\{analyzer\.name \|\| "analyzer"\}`\}/);
+  assert.match(mainSource, /onClick=\{\(\) => removeAnalyzer\(index\)\}/);
   assert.doesNotMatch(mainSource, /disabled=\{\(form\.analyzers \|\| \[\]\)\.length <= 1\}>Remove<\/Button>/);
+  assert.doesNotMatch(mainSource, /const removeAnalyzer = \(index\) => markForm\(\(current\) => \{/);
 });
 
 test("Perspective lens removal confirms before changing deliberation lenses", () => {
