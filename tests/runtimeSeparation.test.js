@@ -132,8 +132,13 @@ test("Onboarding explains setup context and avoids stale recovery copy", () => {
 test("Onboarding step rail persists navigation state", () => {
   assert.match(mainSource, /const go = async \(next\) => \{\n\s+const normalized = normalizeOnboardingStep\(next\);/);
   assert.match(mainSource, /await mutate\("\/api\/onboarding", \{ currentStep: normalized, briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: briefDraft \}, "PATCH"\);/);
-  assert.match(mainSource, /className=\{index === stepIndex \? "active" : index < stepIndex \? "done" : ""\} onClick=\{\(\) => go\(id\)\}/);
+  assert.match(mainSource, /className=\{index === stepIndex \? "active" : index < stepIndex \? "done" : ""\}/);
+  assert.match(mainSource, /onClick=\{\(\) => go\(id\)\}/);
   assert.doesNotMatch(mainSource, /className=\{index === stepIndex \? "active" : index < stepIndex \? "done" : ""\} onClick=\{\(\) => setStep\(id\)\}/);
+});
+
+test("Onboarding step rail exposes the current step semantically", () => {
+  assert.match(mainSource, /aria-current=\{index === stepIndex \? "step" : undefined\}/);
 });
 
 test("Onboarding navigation save failures stay visible", () => {
