@@ -19,6 +19,26 @@ The big goal is simple:
 
 You should be able to open the app, see the real shape of your day, and stop holding the whole plan in your head.
 
+## Quick Start
+
+If you only do five things, do these:
+
+1. Open Today.
+2. Add anything important that is floating around in your head.
+3. Make sure Calendar and Linear are connected if you use them.
+4. Press Generate Day Plan.
+5. Read Today's Three and protect those blocks first.
+
+You do not need to set up every connector.
+
+You do not need a perfect task list.
+
+You do not need to clean up your whole life before using the app.
+
+Start with the real day in front of you.
+
+Pillar Time is supposed to help you make that day clearer.
+
 ## The Main Idea
 
 Most planning apps give you more lists.
@@ -91,6 +111,32 @@ Reminders go into Reminders.
 Then Pillar Time helps sort the pile.
 
 It should not make you look at everything all at once. It should help you focus on the next few things that matter.
+
+## What Goes Where
+
+Use this simple rule:
+
+If it has a time, it belongs on Calendar.
+
+If it is project work, it belongs in Linear or Planner.
+
+If it is a loose thought, put it in the Running To-Do List or quick context.
+
+If it is something you always care about, put it in Standing Commitments.
+
+If it is a fact about how you work, put it in Trusted Context.
+
+If it is how you want the app to talk to you, put it in your Identity Statement.
+
+If it came from a meeting, put it in Meetings.
+
+If it needs a nudge later, put it in Reminders.
+
+If it is outside-world news or research, put it in Intelligence or Sources.
+
+The point is not to file everything perfectly.
+
+The point is to give each thought a home so it stops bouncing around in your head.
 
 ## Important Words
 
