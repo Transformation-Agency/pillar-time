@@ -1898,6 +1898,11 @@ function Linear({ state, refresh }) {
     .filter((item) => !selectedTeam?.key || item.team?.key === selectedTeam.key)
     .sort((a, b) => (a.position || 0) - (b.position || 0));
   const projectOptions = bootstrap.projects;
+  const linearCreateDisabledReason = !newIssue.title.trim()
+    ? "Add an issue title first"
+    : !newIssue.teamId
+      ? "Choose a Linear team first"
+      : "";
 
   const loadBootstrap = React.useCallback(async () => {
     if (!ready) return;
@@ -2050,7 +2055,7 @@ function Linear({ state, refresh }) {
             <Select label="State" value={newIssue.stateId} onChange={(stateId) => setNewIssue({ ...newIssue, stateId })} options={[{ value: "", label: "Default" }, ...stateOptions.map((item) => ({ value: item.id, label: item.name }))]} />
             <Select label="Priority" value={newIssue.priority} onChange={(priority) => setNewIssue({ ...newIssue, priority })} options={[{ value: "", label: "Default" }, { value: "0", label: "No priority" }, { value: "1", label: "Urgent" }, { value: "2", label: "High" }, { value: "3", label: "Medium" }, { value: "4", label: "Low" }]} />
           </div>
-          <div className="modal-actions"><Button icon="plus" kind="primary" disabled={!newIssue.title.trim() || !newIssue.teamId}>Create issue</Button></div>
+          <div className="modal-actions"><Button icon="plus" kind="primary" disabled={!!linearCreateDisabledReason} title={linearCreateDisabledReason || "Create Linear issue"}>Create issue</Button></div>
         </form>
       </section>
     </div>
