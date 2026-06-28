@@ -2011,6 +2011,12 @@ function Linear({ state, refresh }) {
   const [commentDrafts, setCommentDrafts] = React.useState({});
   const [message, setMessage] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+  const hasUnsavedLinearDrafts = !!newIssue.title.trim()
+    || !!newIssue.description.trim()
+    || !!newIssue.projectId
+    || !!newIssue.stateId
+    || !!newIssue.priority
+    || Object.values(commentDrafts).some((draft) => String(draft || "").trim());
 
   const selectedTeam = bootstrap.teams.find((team) => team.key === filters.teamKey) || bootstrap.teams[0];
   const stateOptions = bootstrap.workflowStates
@@ -2069,6 +2075,12 @@ function Linear({ state, refresh }) {
 
   React.useEffect(() => { loadBootstrap(); }, [loadBootstrap]);
   React.useEffect(() => { loadIssues(); }, [loadIssues]);
+  React.useEffect(() => {
+    window.__pillarTimeUnsavedLinearDraft = hasUnsavedLinearDrafts;
+    return () => {
+      window.__pillarTimeUnsavedLinearDraft = false;
+    };
+  }, [hasUnsavedLinearDrafts]);
   React.useEffect(() => {
     if (newIssue.teamId || !selectedTeam?.id) return;
     setNewIssue((current) => ({ ...current, teamId: selectedTeam.id }));
@@ -5013,6 +5025,14 @@ function App() {
         return;
       }
       window.__pillarTimeUnsavedTrustedContextFact = false;
+    }
+    if (route === "linear" && next !== "linear" && window.__pillarTimeUnsavedLinearDraft) {
+      const leave = window.confirm("Discard unsaved Linear draft? New issue details or typed comments will not be saved.");
+      if (!leave) {
+        location.hash = "linear";
+        return;
+      }
+      window.__pillarTimeUnsavedLinearDraft = false;
     }
     setRoute(next);
   }, [route]);
