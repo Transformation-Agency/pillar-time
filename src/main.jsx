@@ -2320,6 +2320,7 @@ function Workflow({ state, runWorkflow }) {
 function Approvals({ state, mutate }) {
   const [approvalMessage, setApprovalMessage] = React.useState("");
   const updateApprovalStatus = async (approval, status) => {
+    if (status === "rejected" && !window.confirm(`Reject "${approval.title || "this approval"}"? It will not execute unless a new proposal is generated.`)) return;
     setApprovalMessage("");
     try {
       await mutate(`/api/approvals/${approval.id}`, { status }, "PATCH");
