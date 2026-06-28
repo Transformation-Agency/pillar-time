@@ -294,6 +294,17 @@ test("Source table actions expose local success and failure messages", () => {
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/sources\/\$\{s\.id\}`, \{ status: active \? "paused" : "active" \}, "PATCH"\)\}/);
 });
 
+test("Telegram page warns before discarding unsaved manual setup", () => {
+  assert.match(mainSource, /function Telegram\(\{ state, mutate, refresh \}\) \{/);
+  assert.match(mainSource, /const \[formBaseline, setFormBaseline\] = React\.useState\(form\);/);
+  assert.match(mainSource, /setFormBaseline\(nextForm\);/);
+  assert.match(mainSource, /window\.__pillarTimeUnsavedTelegramSetup = JSON\.stringify\(form\) !== JSON\.stringify\(formBaseline\);/);
+  assert.match(mainSource, /window\.__pillarTimeUnsavedTelegramSetup = false;/);
+  assert.match(mainSource, /setFormBaseline\(form\);\n\s+window\.__pillarTimeUnsavedTelegramSetup = false;/);
+  assert.match(mainSource, /if \(route === "telegram" && next !== "telegram" && window\.__pillarTimeUnsavedTelegramSetup\) \{\n\s+const leave = window\.confirm\("Discard unsaved Telegram setup changes\? Bot token, chat ID, allowed-user edits, and enable setting will not be saved\."\);/);
+  assert.match(mainSource, /location\.hash = "telegram";\n\s+return;/);
+});
+
 test("Podcast source setup explains disabled resolver and transcription states", () => {
   assert.match(mainSource, /const spotifyResolveDisabledReason = spotifyResolve\.loading\n\s+\? "Spotify RSS resolution is already running"\n\s+: !form\.config\.spotifyUrl\n\s+\? "Paste a Spotify show or episode URL first"\n\s+: "";/);
   assert.match(mainSource, /const podcastTranscriptionDisabledReason = !transcriptionAvailable\n\s+\? "Set up FFmpeg plus local Whisper or a cloud transcription model first"\n\s+: "";/);

@@ -3993,17 +3993,28 @@ function Onboarding({ state, mutate, refresh }) {
 
 function Telegram({ state, mutate, refresh }) {
   const [form, setForm] = React.useState({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
+  const [formBaseline, setFormBaseline] = React.useState(form);
   const [cmd, setCmd] = React.useState("/review");
   const [result, setResult] = React.useState("");
   const [telegramMessage, setTelegramMessage] = React.useState("");
   React.useEffect(() => {
-    setForm({ enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") });
+    const nextForm = { enabled: state.telegram.enabled, botToken: state.telegram.botToken, chatId: state.telegram.chatId, allowedUsers: state.telegram.allowedUsers.join(", ") };
+    setForm(nextForm);
+    setFormBaseline(nextForm);
   }, [state.telegram]);
+  React.useEffect(() => {
+    window.__pillarTimeUnsavedTelegramSetup = JSON.stringify(form) !== JSON.stringify(formBaseline);
+    return () => {
+      window.__pillarTimeUnsavedTelegramSetup = false;
+    };
+  }, [form, formBaseline]);
   const save = async (e) => {
     e.preventDefault();
     setTelegramMessage("");
     try {
       await mutate("/api/telegram", { ...form, allowedUsers: form.allowedUsers.split(",").map((u) => u.trim()).filter(Boolean) }, "PATCH");
+      setFormBaseline(form);
+      window.__pillarTimeUnsavedTelegramSetup = false;
       setTelegramMessage("Telegram settings saved.");
     } catch (error) {
       setTelegramMessage(error.message || "Could not save Telegram settings.");
@@ -4900,6 +4911,14 @@ function App() {
         return;
       }
       window.__pillarBriefUnsavedBriefSetup = false;
+    }
+    if (route === "telegram" && next !== "telegram" && window.__pillarTimeUnsavedTelegramSetup) {
+      const leave = window.confirm("Discard unsaved Telegram setup changes? Bot token, chat ID, allowed-user edits, and enable setting will not be saved.");
+      if (!leave) {
+        location.hash = "telegram";
+        return;
+      }
+      window.__pillarTimeUnsavedTelegramSetup = false;
     }
     setRoute(next);
   }, [route]);
