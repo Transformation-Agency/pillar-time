@@ -609,3 +609,9 @@ test("Calendar approval disabled action explains proposal state", () => {
   assert.match(mainSource, /disabled=\{!canExecute\} title=\{approvalDisabledReason \|\| actionLabel\}/);
   assert.doesNotMatch(mainSource, /disabled=\{!canExecute\}>\{actionLabel\}<\/Button>/);
 });
+
+test("Today view brief action explains empty first-run state", () => {
+  assert.match(mainSource, /const viewBriefDisabledReason = latestArtifact \? "" : "Generate a day plan before viewing the brief";/);
+  assert.match(mainSource, /disabled=\{!!viewBriefDisabledReason\} title=\{viewBriefDisabledReason \|\| "View the latest day-plan brief"\}>View Brief<\/Button>/);
+  assert.doesNotMatch(mainSource, /disabled=\{!latestArtifact\}>View Brief<\/Button>/);
+});
