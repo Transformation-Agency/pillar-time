@@ -163,10 +163,19 @@ test("Modal panels expose dialog semantics", () => {
 test("Planning removal actions ask for confirmation before hiding active items", () => {
   assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute \}\)/);
   assert.match(mainSource, /Remove "\$\{title\}" from Today's Three\? It will stop being protected for today, but the underlying task or source item will not be deleted\./);
+  assert.match(mainSource, /const removeDailyCommitment = async \(item\) => \{\n\s+const title = item\.title \|\| "this commitment";/);
+  assert.match(mainSource, /await mutate\(`\/api\/time\/commitments\/\$\{item\.id\}`, \{ \.\.\.item, status: "removed" \}, "PATCH"\);\n\s+setCommitmentMessage\(`\$\{title\} removed from Today's Three\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setCommitmentMessage\(error\.message \|\| "Could not remove commitment\."\);/);
   assert.match(mainSource, /onClick=\{\(\) => removeDailyCommitment\(item\)\}/);
   assert.match(mainSource, /Archive "\$\{title\}"\? It will leave the active planning backlog and stop showing as a Today candidate\./);
+  assert.match(mainSource, /const archiveTask = async \(item\) => \{\n\s+const title = item\.title \|\| "this task";/);
+  assert.match(mainSource, /await mutate\(`\/api\/time\/tasks\/\$\{item\.id\}`, \{ status: "archived" \}, "PATCH"\);\n\s+setPlannerMessage\(`\$\{title\} archived\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setPlannerMessage\(error\.message \|\| "Could not archive task\."\);/);
   assert.match(mainSource, /onClick=\{\(\) => archiveTask\(item\)\}/);
   assert.match(mainSource, /Archive "\$\{title\}"\? It will disappear from your active reminder list and stop scheduling future nudges\./);
+  assert.match(mainSource, /const archiveReminder = async \(reminder\) => \{\n\s+const title = reminder\.title \|\| "this reminder";/);
+  assert.match(mainSource, /await mutate\(`\/api\/time\/reminders\/\$\{reminder\.id\}`, \{ archive: true \}, "PATCH"\);\n\s+setReminderMessage\(`\$\{title\} archived\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setReminderMessage\(error\.message \|\| "Could not archive reminder\."\);/);
   assert.match(mainSource, /onClick=\{\(\) => archiveReminder\(reminder\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/commitments\/\$\{item\.id\}`, \{ \.\.\.item, status: "removed" \}, "PATCH"\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/tasks\/\$\{item\.id\}`, \{ status: "archived" \}, "PATCH"\)\}/);
@@ -234,7 +243,7 @@ test("Reminder and meeting captures expose local success and failure messages", 
   assert.match(mainSource, /const createReminder = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!form\.title\.trim\(\)\) return;\n\s+setReminderMessage\(""\);/);
   assert.match(mainSource, /await mutate\("\/api\/time\/reminders", form\);\n\s+setForm\(emptyReminderForm\);\n\s+setReminderMessage\("Reminder created\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setReminderMessage\(error\.message \|\| "Could not create reminder\."\);/);
-  assert.match(mainSource, /\{reminderMessage && <p className=\{reminderMessage\.includes\("created"\) \? "ok-text" : "warn-text"\}>\{reminderMessage\}<\/p>\}/);
+  assert.match(mainSource, /\{reminderMessage && <p className=\{reminderMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{reminderMessage\}<\/p>\}/);
   assert.match(mainSource, /const \[meetingMessage, setMeetingMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const createMeeting = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!form\.title\.trim\(\)\) return;\n\s+setMeetingMessage\(""\);/);
   assert.match(mainSource, /await mutate\("\/api\/time\/meetings", form\);\n\s+setForm\(\{ title: "", startsAt: "", notes: "" \}\);\n\s+setMeetingMessage\("Meeting saved\."\);/);
