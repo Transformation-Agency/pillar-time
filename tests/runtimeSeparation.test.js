@@ -117,6 +117,9 @@ test("Onboarding explains setup context and avoids stale recovery copy", () => {
 });
 
 test("Onboarding finish action explains required missing steps", () => {
+  assert.match(mainSource, /const profileSaveDisabledReason = savingFirstName\n\s+\? "Profile is already being saved"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!profileSaveDisabledReason\} title=\{profileSaveDisabledReason \|\| "Start Pillar Time"\}/);
+  assert.match(mainSource, /disabled=\{!!profileSaveDisabledReason\} title=\{profileSaveDisabledReason \|\| "Save profile"\}/);
   assert.match(mainSource, /const finishOnboardingDisabledReason = !reviewReadiness\.ownerNameReady\n\s+\? "Add your first name before finishing onboarding"\n\s+: !reviewReadiness\.scheduleSet\n\s+\? "Choose a delivery schedule before finishing onboarding"\n\s+: "";/);
   assert.match(mainSource, /disabled=\{!canComplete\} title=\{finishOnboardingDisabledReason \|\| "Finish onboarding"\}/);
 });
