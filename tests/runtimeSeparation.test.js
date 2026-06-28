@@ -268,6 +268,12 @@ test("Source table actions expose local success and failure messages", () => {
   assert.doesNotMatch(mainSource, /requested === "sources" \? "briefs"/);
   assert.match(mainSource, /function Sources\(\{ state, mutate \}\) \{/);
   assert.match(mainSource, /const \[sourceMessage, setSourceMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /function sourceCredentialStatus\(type\) \{\n\s+if \(type === "X" \|\| type === "Calendar"\) return "missing";\n\s+if \(type === "Reddit" \|\| type === "YouTube" \|\| type === "Podcast"\) return "optional";\n\s+return "not required";\n\}/);
+  assert.match(mainSource, /const \[sourceFormBaseline, setSourceFormBaseline\] = React\.useState\(emptySourceForm\);/);
+  assert.match(mainSource, /const closeSourceForm = \(\) => \{\n\s+if \(JSON\.stringify\(form\) !== JSON\.stringify\(sourceFormBaseline\)\) \{\n\s+const ok = window\.confirm\("Discard unsaved source changes\? Source name, type, and locator edits will not be saved\."\);/);
+  assert.match(mainSource, /onMouseDown=\{\(event\) => \{ if \(event\.target === event\.currentTarget\) closeSourceForm\(\); \}\}/);
+  assert.match(mainSource, /aria-label="Close source editor" onClick=\{closeSourceForm\}/);
+  assert.match(mainSource, /<Button type="button" onClick=\{closeSourceForm\}>Cancel<\/Button>/);
   assert.match(mainSource, /const submit = async \(e\) => \{\n\s+e\.preventDefault\(\);/);
   assert.match(mainSource, /await mutate\(endpoint, payload, method\);\n\s+const action = editingSource \? "updated" : "added";/);
   assert.match(mainSource, /setSourceMessage\(`\$\{name\} \$\{action\}\.`\);/);
@@ -283,6 +289,8 @@ test("Source table actions expose local success and failure messages", () => {
   assert.match(mainSource, /title=\{active \? "Pause this source for future runs" : "Resume this source for future runs"\}/);
   assert.match(mainSource, /onClick=\{\(\) => updateSourceStatus\(s, active\)\}/);
   assert.match(mainSource, /onClick=\{\(\) => deleteSource\(s\)\}/);
+  assert.doesNotMatch(mainSource, /aria-label="Close source editor" onClick=\{resetSourceForm\}/);
+  assert.doesNotMatch(mainSource, /<Button type="button" onClick=\{resetSourceForm\}>Cancel<\/Button>/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/sources\/\$\{s\.id\}`, \{ status: active \? "paused" : "active" \}, "PATCH"\)\}/);
 });
 
