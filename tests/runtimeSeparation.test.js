@@ -596,6 +596,8 @@ test("Settings credential save failures stay visible in the setup modal", () => 
   assert.match(mainSource, /const saveXConnector = async \(e\) => \{\n\s+e\.preventDefault\(\);\n\s+setXMessage\(""\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setXMessage\(error\.message \|\| "Could not save X API token\."\);/);
   assert.match(mainSource, /\{xMessage && <p className="warn-text">\{xMessage\}<\/p>\}/);
+  assert.match(mainSource, /const settingsXSaveDisabledReason = !xConnector\.apiKey && !state\.connectors\?\.x\?\.apiKeySaved\n\s+\? "Paste an X bearer token before saving"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!settingsXSaveDisabledReason\} title=\{settingsXSaveDisabledReason \|\| "Save X API token"\}/);
   assert.match(mainSource, /const saveTelegram = async \(e\) => \{\n\s+e\.preventDefault\(\);\n\s+setTelegramSetupMessage\(""\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setTelegramSetupMessage\(error\.message \|\| "Could not save Telegram settings\."\);/);
   assert.match(mainSource, /\{telegramSetupMessage && <p className="warn-text">\{telegramSetupMessage\}<\/p>\}/);
