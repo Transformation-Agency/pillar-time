@@ -391,7 +391,7 @@ test("Approval status actions expose local success and failure messages", () => 
   assert.match(mainSource, /\["Context", \[\["briefs", "Intelligence"\], \["sources", "Sources"\], \["documents", "Documents"\], \["meetings", "Meetings"\], \["linear", "Linear"\], \["trustedContext", "Trusted Context"\], \["approvals", "Approvals"\]\]\]/);
   assert.match(mainSource, /approvals: <Approvals state=\{state\} mutate=\{mutate\} \/>/);
   assert.match(mainSource, /function Approvals\(\{ state, mutate \}\) \{\n\s+const \[approvalMessage, setApprovalMessage\] = React\.useState\(""\);/);
-  assert.match(mainSource, /const updateApprovalStatus = async \(approval, status\) => \{\n\s+setApprovalMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/approvals\/\$\{approval\.id\}`, \{ status \}, "PATCH"\);/);
+  assert.match(mainSource, /const updateApprovalStatus = async \(approval, status\) => \{\n\s+if \(status === "rejected" && !window\.confirm\(`Reject "\$\{approval\.title \|\| "this approval"\}"\? It will not execute unless a new proposal is generated\.`\)\) return;\n\s+setApprovalMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/approvals\/\$\{approval\.id\}`, \{ status \}, "PATCH"\);/);
   assert.match(mainSource, /setApprovalMessage\(`\$\{approval\.title \|\| "Approval"\} \$\{status\}\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setApprovalMessage\(error\.message \|\| `Could not \$\{status\} approval\.`\);/);
   assert.match(mainSource, /\{approvalMessage && <p className=\{approvalMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{approvalMessage\}<\/p>\}/);
