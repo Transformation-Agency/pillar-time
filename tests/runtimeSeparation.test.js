@@ -319,15 +319,16 @@ test("Delivery schedule selects expose accessible labels", () => {
 
 test("Brief setup section action controls are labeled and guarded", () => {
   assert.match(mainSource, /const removeBriefSection = \(index\) => \{/);
+  assert.match(mainSource, /const copyBriefSection = \(index\) => markForm\(\(current\) => \{/);
+  assert.match(mainSource, /sections\.splice\(index \+ 1, 0, copy\);/);
   assert.match(mainSource, /Remove "\$\{label\}" from this brief setup\? This section will stop appearing in future generated briefs until you add it again\./);
-  assert.match(mainSource, /aria-label=\{`Copy \$\{section\.label \|\| "section"\} \(not available yet\)`\}/);
-  assert.match(mainSource, /title="Copy section is not available yet" disabled/);
-  assert.match(mainSource, /aria-label=\{`Edit \$\{section\.label \|\| "section"\} inline`\}/);
-  assert.match(mainSource, /title="Edit the title and prompt fields inline" disabled/);
+  assert.match(mainSource, /aria-label=\{`Copy \$\{section\.label \|\| "section"\}`\}/);
+  assert.match(mainSource, /onClick=\{\(\) => copyBriefSection\(index\)\}/);
   assert.match(mainSource, /aria-label=\{`Remove \$\{section\.label \|\| "section"\}`\}/);
   assert.match(mainSource, /onClick=\{\(\) => removeBriefSection\(index\)\}/);
   assert.match(mainSource, /aria-label=\{`Move \$\{section\.label \|\| "section"\} up`\}/);
   assert.match(mainSource, /aria-label=\{`Move \$\{section\.label \|\| "section"\} down`\}/);
+  assert.doesNotMatch(mainSource, /not available yet/);
   assert.doesNotMatch(mainSource, /<Button type="button" icon="copy" \/>/);
   assert.doesNotMatch(mainSource, /<Button type="button" icon="pencil" \/>/);
 });
