@@ -508,6 +508,8 @@ test("Perspective lens removal confirms before changing deliberation lenses", ()
   assert.match(mainSource, /lenses: <Lenses state=\{state\} mutate=\{mutate\} \/>/);
   assert.doesNotMatch(mainSource, /if \(route === "lenses"\) return "briefSetup";/);
   assert.doesNotMatch(mainSource, /requested === "lenses" \? "briefSetup" : requested/);
+  assert.match(mainSource, /window\.__pillarTimeUnsavedPerspectiveLenses = dirty;/);
+  assert.match(mainSource, /if \(route === "lenses" && next !== "lenses" && window\.__pillarTimeUnsavedPerspectiveLenses\) \{\n\s+const leave = window\.confirm\("Discard unsaved perspective lens changes\? Lens names, roles, descriptions, and instructions will not be saved\."\);/);
   assert.match(mainSource, /const removeLens = \(index\) => \{\n\s+const lens = lenses\[index\] \|\| \{\};\n\s+const label = lens\.name \|\| "perspective lens";/);
   assert.match(mainSource, /Remove "\$\{label\}" from deliberations\? It will stop being used after you save perspective lenses\./);
   assert.match(mainSource, /title=\{`Remove \$\{lens\.name \|\| "perspective lens"\}`\} onClick=\{\(\) => removeLens\(index\)\}>Remove<\/Button>/);
