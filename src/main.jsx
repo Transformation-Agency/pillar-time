@@ -2063,6 +2063,18 @@ function BriefSetup({ state, mutate }) {
       sections: current.sections.filter((_, i) => i !== index),
     }));
   };
+  const copyBriefSection = (index) => markForm((current) => {
+    const section = current.sections[index];
+    if (!section) return current;
+    const copy = {
+      ...section,
+      key: `${section.key || "section"}-copy-${Date.now()}`,
+      label: `${section.label || `Section ${index + 1}`} Copy`,
+    };
+    const sections = [...current.sections];
+    sections.splice(index + 1, 0, copy);
+    return { ...current, sections };
+  });
   const dropSection = (target) => markForm((current) => {
     if (dragIndex === null || dragIndex === target) return current;
     const next = [...current.sections];
@@ -2147,8 +2159,7 @@ function BriefSetup({ state, mutate }) {
             <input className="section-title-input" value={section.label} onChange={(event) => updateSection(index, { label: event.target.value })} />
             <div className="section-target-controls"><span className="section-target-select">Standard prompt</span></div>
             <div className="section-actions">
-              <Button type="button" icon="copy" aria-label={`Copy ${section.label || "section"} (not available yet)`} title="Copy section is not available yet" disabled />
-              <Button type="button" icon="pencil" aria-label={`Edit ${section.label || "section"} inline`} title="Edit the title and prompt fields inline" disabled />
+              <Button type="button" icon="copy" aria-label={`Copy ${section.label || "section"}`} title={`Copy ${section.label || "section"}`} onClick={() => copyBriefSection(index)} />
               <Button type="button" icon="trash" aria-label={`Remove ${section.label || "section"}`} title={`Remove ${section.label || "section"}`} onClick={() => removeBriefSection(index)} />
               <Button type="button" aria-label={`Move ${section.label || "section"} up`} title={`Move ${section.label || "section"} up`} onClick={() => moveSection(index, -1)} disabled={index === 0}>↑</Button>
               <Button type="button" aria-label={`Move ${section.label || "section"} down`} title={`Move ${section.label || "section"} down`} onClick={() => moveSection(index, 1)} disabled={index === form.sections.length - 1}>↓</Button>
