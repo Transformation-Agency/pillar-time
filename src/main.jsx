@@ -1864,7 +1864,12 @@ function Lenses({ state, mutate }) {
   };
   const updateLens = (index, patch) => editLenses((current) => current.map((lens, i) => i === index ? { ...lens, ...patch } : lens));
   const addLens = () => editLenses((current) => [...current, { id: `perspective-${Date.now()}`, name: "New Perspective", role: "Point of view", description: "", instructions: "Read the saved brief from this perspective and name what it notices, worries about, and would do next.", enabled: true }]);
-  const removeLens = (index) => editLenses((current) => current.filter((_, i) => i !== index));
+  const removeLens = (index) => {
+    const lens = lenses[index] || {};
+    const label = lens.name || "perspective lens";
+    if (!window.confirm(`Remove "${label}" from deliberations? It will stop being used after you save perspective lenses.`)) return;
+    editLenses((current) => current.filter((_, i) => i !== index));
+  };
   const save = async () => {
     setMessage("");
     try {
@@ -1893,7 +1898,7 @@ function Lenses({ state, mutate }) {
             <Field label="Role" value={lens.role || ""} onChange={(role) => updateLens(index, { role })} />
             <TextArea label="Description" value={lens.description || ""} onChange={(description) => updateLens(index, { description })} rows={2} />
             <TextArea label="Instructions" value={lens.instructions || ""} onChange={(instructions) => updateLens(index, { instructions })} rows={3} />
-            <Button type="button" icon="trash" onClick={() => removeLens(index)}>Remove</Button>
+            <Button type="button" icon="trash" title={`Remove ${lens.name || "perspective lens"}`} onClick={() => removeLens(index)}>Remove</Button>
           </div>;
         })}
       </div>

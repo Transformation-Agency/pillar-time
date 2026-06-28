@@ -417,6 +417,13 @@ test("Brief setup analyzer removal explains the final-analyzer guard", () => {
   assert.doesNotMatch(mainSource, /disabled=\{\(form\.analyzers \|\| \[\]\)\.length <= 1\}>Remove<\/Button>/);
 });
 
+test("Perspective lens removal confirms before changing deliberation lenses", () => {
+  assert.match(mainSource, /const removeLens = \(index\) => \{\n\s+const lens = lenses\[index\] \|\| \{\};\n\s+const label = lens\.name \|\| "perspective lens";/);
+  assert.match(mainSource, /Remove "\$\{label\}" from deliberations\? It will stop being used after you save perspective lenses\./);
+  assert.match(mainSource, /title=\{`Remove \$\{lens\.name \|\| "perspective lens"\}`\} onClick=\{\(\) => removeLens\(index\)\}>Remove<\/Button>/);
+  assert.doesNotMatch(mainSource, /const removeLens = \(index\) => editLenses\(\(current\) => current\.filter\(\(_, i\) => i !== index\)\);/);
+});
+
 test("Brief setup save failures expose the actual error message", () => {
   assert.match(mainSource, /const \[saveState, setSaveState\] = React\.useState\("saved"\);/);
   assert.match(mainSource, /const \[saveError, setSaveError\] = React\.useState\(""\);/);
