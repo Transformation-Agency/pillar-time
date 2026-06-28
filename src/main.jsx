@@ -1332,6 +1332,7 @@ function Reminders({ state, mutate }) {
   const [form, setForm] = React.useState(emptyReminderForm);
   const [reminderMessage, setReminderMessage] = React.useState("");
   const savePrefs = async (patch, label) => {
+    if (patch.reminderMasterEnabled === true && !window.confirm("Turn on Master reminders? Enabled reminders may start sending future desktop or Telegram nudges.")) return;
     setReminderMessage("");
     try {
       await mutate("/api/time/preferences", { ...prefs, ...patch }, "PATCH");
