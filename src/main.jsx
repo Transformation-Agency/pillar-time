@@ -3012,6 +3012,9 @@ function Onboarding({ state, mutate, refresh }) {
   const linearTestDisabledReason = !linearConnector.apiKey && state.connectors?.linear?.credentialStatus === "missing"
     ? "Paste a Linear API key before testing"
     : "";
+  const linearSaveDisabledReason = !linearConnector.apiKey && !state.connectors?.linear?.apiKeySaved && state.connectors?.linear?.credentialStatus !== "env"
+    ? "Paste a Linear API key before saving, or skip Linear for now"
+    : "";
   const onboardingFfmpegDisabledReason = ffmpegBusy
     ? "FFmpeg setup is already running"
     : "";
@@ -3750,7 +3753,7 @@ function Onboarding({ state, mutate, refresh }) {
           <div className="setup-card-head"><BrandLogo name="Linear" /><div><h3>Linear</h3><p>Use a personal API key from Linear Settings &gt; Security &amp; access.</p></div><Badge tone={linearConnected ? "ok" : "muted"}>{linearConnected ? "Connected" : "Optional"}</Badge></div>
           <Field label="Linear personal API key" type="password" value={linearConnector.apiKey} onChange={(apiKey) => setLinearConnector({ ...linearConnector, apiKey })} placeholder={state.connectors?.linear?.apiKeySaved ? "Saved. Paste a new key to replace it." : state.connectors?.linear?.credentialStatus === "env" ? "Using LINEAR_API_KEY fallback. Paste to save locally." : "lin_api_..."} />
           {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("saved") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
-          <div className="row"><Button type="button" icon="run" onClick={testLinearAccess} disabled={!!linearTestDisabledReason} title={linearTestDisabledReason || "Test Linear API key"}>Test</Button><Button type="button" icon="save" onClick={saveLinearAccess}>Save Linear</Button></div>
+          <div className="row"><Button type="button" icon="run" onClick={testLinearAccess} disabled={!!linearTestDisabledReason} title={linearTestDisabledReason || "Test Linear API key"}>Test</Button><Button type="button" icon="save" onClick={saveLinearAccess} disabled={!!linearSaveDisabledReason} title={linearSaveDisabledReason || "Save Linear connector"}>Save Linear</Button></div>
         </div>
         <div className="row"><Button onClick={() => go("setup")}>Back</Button><Button onClick={() => go("calendar")}>Skip Linear</Button><Button kind="primary" onClick={() => go("calendar")}>Continue</Button></div>
       </section>}
