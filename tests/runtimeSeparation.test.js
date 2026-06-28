@@ -322,10 +322,12 @@ test("Trusted Context actions expose required-field and proposal feedback", () =
   assert.match(mainSource, /setMessage\("Add a resource type, field key, and value before saving\."\);\n\s+return;/);
   assert.match(mainSource, /setMessage\(error\.message \|\| "Could not save profile fact\."\);/);
   assert.match(mainSource, /setMessage\(error\.message \|\| "Could not refresh envelope\."\);/);
-  assert.match(mainSource, /const updateProposal = async \(proposal, status\) => \{\n\s+setMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/trusted-context\/proposals\/\$\{proposal\.id\}`, \{ status \}, "PATCH"\);\n\s+setMessage\(`Proposal \$\{status\}\.`\);/);
+  assert.match(mainSource, /const updateProposal = async \(proposal, status\) => \{\n\s+const label = proposal\.fieldKey \|\| proposal\.resourceType \|\| "this memory proposal";\n\s+const confirmation = status === "approved"\n\s+\? `Approve "\$\{label\}" as trusted context\? Pillar Time may use it in future planning and coaching\.`\n\s+: `Reject "\$\{label\}"\? It will not be used as trusted context unless a new proposal is created\.`;\n\s+if \(!window\.confirm\(confirmation\)\) return;\n\s+setMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/trusted-context\/proposals\/\$\{proposal\.id\}`, \{ status \}, "PATCH"\);\n\s+setMessage\(`Proposal \$\{status\}\.`\);/);
   assert.match(mainSource, /setMessage\(error\.message \|\| `Could not \$\{status\} proposal\.`\);/);
   assert.match(mainSource, /disabled=\{!factForm\.resourceType\.trim\(\) \|\| !factForm\.fieldKey\.trim\(\) \|\| !String\(factForm\.value \|\| ""\)\.trim\(\)\}/);
   assert.match(mainSource, /title=\{!factForm\.resourceType\.trim\(\) \|\| !factForm\.fieldKey\.trim\(\) \|\| !String\(factForm\.value \|\| ""\)\.trim\(\) \? "Add resource type, field key, and value first" : "Save fact"\}/);
+  assert.match(mainSource, /title="Approve this proposal as trusted context" onClick=\{\(\) => updateProposal\(proposal, "approved"\)\}>Approve<\/Button>/);
+  assert.match(mainSource, /title="Reject this proposal without using it" onClick=\{\(\) => updateProposal\(proposal, "rejected"\)\}>Reject<\/Button>/);
 });
 
 test("Planner capture saves expose local success and failure messages", () => {
