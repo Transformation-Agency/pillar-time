@@ -603,3 +603,9 @@ test("Brief reader audio disabled actions explain setup and busy states", () => 
   assert.match(mainSource, /disabled=\{!!briefAudioDisabledReason\} title=\{briefAudioDisabledReason \|\| "Restart brief audio"\}/);
   assert.doesNotMatch(mainSource, /disabled=\{audioBusy \|\| state\.tts\?\.status !== "ready"\}>/);
 });
+
+test("Calendar approval disabled action explains proposal state", () => {
+  assert.match(mainSource, /const approvalDisabledReason = canExecute\n\s+\? ""\n\s+: status === "executed"\n\s+\? "Calendar blocks have already been added"\n\s+: status === "rejected"\n\s+\? "This calendar proposal was rejected"\n\s+: "Generate a day plan with a calendar proposal first";/);
+  assert.match(mainSource, /disabled=\{!canExecute\} title=\{approvalDisabledReason \|\| actionLabel\}/);
+  assert.doesNotMatch(mainSource, /disabled=\{!canExecute\}>\{actionLabel\}<\/Button>/);
+});

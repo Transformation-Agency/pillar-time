@@ -1022,6 +1022,13 @@ function ProposedCalendarTiles({ artifact, approvals = [], mutate, setRoute }) {
           ? "Calendar Rejected"
           : "No Approval Available";
   const canExecute = status === "pending" || status === "approved";
+  const approvalDisabledReason = canExecute
+    ? ""
+    : status === "executed"
+      ? "Calendar blocks have already been added"
+      : status === "rejected"
+        ? "This calendar proposal was rejected"
+        : "Generate a day plan with a calendar proposal first";
   const approve = async () => {
     if (!approval) {
       setMessage("No pending calendar approval found.");
@@ -1040,7 +1047,7 @@ function ProposedCalendarTiles({ artifact, approvals = [], mutate, setRoute }) {
   return <section className="panel proposed-calendar-panel">
     <div className="proposed-calendar-head">
       <PanelTitle icon="calendar" title="Proposed Calendar" sub="Approval-gated blocks built around hard calendar commitments." />
-      <Button icon={status === "approved" ? "restart" : "check"} kind="primary" onClick={approve} disabled={!canExecute}>{actionLabel}</Button>
+      <Button icon={status === "approved" ? "restart" : "check"} kind="primary" onClick={approve} disabled={!canExecute} title={approvalDisabledReason || actionLabel}>{actionLabel}</Button>
     </div>
     {approval && status !== "pending" && <div className={`approval-state-note ${status === "executed" ? "ok-text" : status === "approved" ? "warn-text" : "muted-text"}`}>
       {status === "approved" ? `Approved, but not written to Google Calendar${approval.resolutionNote ? `: ${approval.resolutionNote}` : "."}` : `Calendar proposal ${status}.`}
