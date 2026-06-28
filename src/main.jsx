@@ -1924,6 +1924,9 @@ function Linear({ state, refresh }) {
     : !newIssue.teamId
       ? "Choose a Linear team first"
       : "";
+  const linearRefreshDisabledReason = loading
+    ? "Linear issues are already loading"
+    : "";
 
   const loadBootstrap = React.useCallback(async () => {
     if (!ready) return;
@@ -2030,7 +2033,7 @@ function Linear({ state, refresh }) {
   return <Page
     title="Linear"
     desc="Review and update Transformation Agency work without leaving Pillar Time."
-    action={<div className="page-actions"><Button icon="run" onClick={loadIssues} disabled={loading}>{loading ? "Loading..." : "Refresh"}</Button></div>}
+    action={<div className="page-actions"><Button icon="run" onClick={loadIssues} disabled={!!linearRefreshDisabledReason} title={linearRefreshDisabledReason || "Refresh Linear issues"}>{loading ? "Loading..." : "Refresh"}</Button></div>}
     wide
   >
     <div className="settings-dashboard">
@@ -2447,8 +2450,11 @@ function Briefs({ state, runWorkflow, refresh }) {
 }
 
 function DeliberationPanel({ deliberation, onRegenerate, busy }) {
+  const regenerateDisabledReason = busy
+    ? "Perspective deliberation is already regenerating"
+    : "";
   return <section className="deliberation-panel">
-    <div className="builder-head"><div><h2>Perspective deliberation</h2><p>{deliberation.generatedAt ? new Date(deliberation.generatedAt).toLocaleString() : "Saved result"}</p></div><Button icon="restart" onClick={onRegenerate} disabled={busy}>{busy ? "Regenerating..." : "Regenerate deliberation"}</Button></div>
+    <div className="builder-head"><div><h2>Perspective deliberation</h2><p>{deliberation.generatedAt ? new Date(deliberation.generatedAt).toLocaleString() : "Saved result"}</p></div><Button icon="restart" onClick={onRegenerate} disabled={!!regenerateDisabledReason} title={regenerateDisabledReason || "Regenerate deliberation"}>{busy ? "Regenerating..." : "Regenerate deliberation"}</Button></div>
     <div className="deliberation-grid">
       {(deliberation.perspectives || []).map((item, index) => <div className="deliberation-card" key={`${item.name}-${index}`}>
         <strong>{item.name}</strong>

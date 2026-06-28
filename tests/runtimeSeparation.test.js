@@ -235,6 +235,8 @@ test("High-use placeholder and table controls expose accessible labels", () => {
   assert.match(mainSource, /disabled=\{!String\(commentDrafts\[issue\.id\] \|\| ""\)\.trim\(\)\}/);
   assert.match(mainSource, /title=\{!String\(commentDrafts\[issue\.id\] \|\| ""\)\.trim\(\) \? "Type a comment first" : `Add comment to \$\{issue\.identifier \|\| issue\.title\}`\}/);
   assert.match(mainSource, /const linearCreateDisabledReason = !newIssue\.title\.trim\(\)\n\s+\? "Add an issue title first"\n\s+: !newIssue\.teamId\n\s+\? "Choose a Linear team first"\n\s+: "";/);
+  assert.match(mainSource, /const linearRefreshDisabledReason = loading\n\s+\? "Linear issues are already loading"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!linearRefreshDisabledReason\} title=\{linearRefreshDisabledReason \|\| "Refresh Linear issues"\}/);
   assert.match(mainSource, /disabled=\{!!linearCreateDisabledReason\} title=\{linearCreateDisabledReason \|\| "Create Linear issue"\}/);
   assert.match(mainSource, /aria-label="Search briefs"/);
   assert.match(mainSource, /aria-label="Starter commitment for Today's Three"/);
@@ -654,6 +656,11 @@ test("Brief reader audio disabled actions explain setup and busy states", () => 
   assert.match(mainSource, /disabled=\{!!briefAudioDisabledReason\} title=\{briefAudioDisabledReason \|\| "Generate or play brief audio"\}/);
   assert.match(mainSource, /disabled=\{!!briefAudioDisabledReason\} title=\{briefAudioDisabledReason \|\| "Restart brief audio"\}/);
   assert.doesNotMatch(mainSource, /disabled=\{audioBusy \|\| state\.tts\?\.status !== "ready"\}>/);
+});
+
+test("Perspective deliberation regeneration explains busy state", () => {
+  assert.match(mainSource, /const regenerateDisabledReason = busy\n\s+\? "Perspective deliberation is already regenerating"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!regenerateDisabledReason\} title=\{regenerateDisabledReason \|\| "Regenerate deliberation"\}/);
 });
 
 test("Calendar approval disabled action explains proposal state", () => {
