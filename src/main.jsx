@@ -4381,6 +4381,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     : !String(telegramForm.chatId || "").trim()
       ? "Add a Telegram chat ID before saving"
       : "";
+  const settingsRedditClientDisabledReason = !redditConnector.clientId && !state.connectors?.reddit?.apiKeySaved
+    ? "Paste a Reddit client ID before testing or saving"
+    : "";
   const openProvider = (provider) => {
     setModel({ enabled: true, provider, model: provider === state.model.provider ? state.model.model || defaultModelForProvider(provider) : defaultModelForProvider(provider), apiKey: "", baseUrl: provider === state.model.provider ? state.model.baseUrl || "" : "" });
     setModelOptions([]);
@@ -4703,7 +4706,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <Field label="Client secret" type="password" value={redditConnector.clientSecret} onChange={(clientSecret) => setRedditConnector({ ...redditConnector, clientSecret })} placeholder={state.connectors?.reddit?.apiKeySaved ? "Saved if configured. Paste to replace it." : "Required for script/web app; blank for installed app"} />
         {redditConnector.grantType === "installed_client" && <Field label="Device ID" value={redditConnector.deviceId} onChange={(deviceId) => setRedditConnector({ ...redditConnector, deviceId })} placeholder="DO_NOT_TRACK_THIS_DEVICE" />}
         {redditMessage && <p className={redditMessage.includes("ready") || redditMessage.includes("saved") ? "ok-text" : "warn-text"}>{redditMessage}</p>}
-        <div className="modal-actions"><Button type="button" onClick={closeRedditModal}>Cancel</Button><Button type="button" icon="run" onClick={testRedditConnector}>Test</Button><Button icon="save" kind="primary">Save Reddit OAuth</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeRedditModal}>Cancel</Button><Button type="button" icon="run" onClick={testRedditConnector} disabled={!!settingsRedditClientDisabledReason} title={settingsRedditClientDisabledReason || "Test Reddit OAuth"}>Test</Button><Button icon="save" kind="primary" disabled={!!settingsRedditClientDisabledReason} title={settingsRedditClientDisabledReason || "Save Reddit OAuth"}>Save Reddit OAuth</Button></div>
       </form>
     </div>}
     {linearModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeLinearModal(); }}>
