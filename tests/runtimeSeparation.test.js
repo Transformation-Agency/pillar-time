@@ -434,6 +434,12 @@ test("Google Calendar modal warns before discarding unsaved calendar selections"
   assert.match(mainSource, /<Button type="button" onClick=\{closeGoogleCalendarModal\}>Cancel<\/Button>/);
 });
 
+test("Google Calendar disconnect failures stay visible in the connector modal", () => {
+  assert.match(mainSource, /const disconnectGoogleCalendar = async \(\) => \{\n\s+if \(!window\.confirm\("Disconnect Google Calendar\? Pillar Time will stop reading your agenda and cannot create approved schedule blocks until you reconnect\."\)\) return;\n\s+setGoogleCalendarMessage\(""\);\n\s+try \{\n\s+await mutate\("\/api\/google-calendar\/disconnect", \{\}, "POST"\);/);
+  assert.match(mainSource, /setGoogleCalendarMessage\("Google Calendar disconnected\."\);\n\s+\} catch \(error\) \{\n\s+setGoogleCalendarMessage\(error\.message \|\| "Could not disconnect Google Calendar\."\);/);
+  assert.doesNotMatch(mainSource, /setGoogleCalendarMessage\(""\);\n\s+await mutate\("\/api\/google-calendar\/disconnect", \{\}, "POST"\);\n\s+setGoogleCalendarSelection\(\["primary"\]\);/);
+});
+
 test("Linear setup warns before discarding unsaved connector edits", () => {
   assert.match(mainSource, /const closeLinearModal = \(\) => \{/);
   assert.match(mainSource, /const hasUnsavedLinearChanges = !!linearConnector\.apiKey \|\| linearConnector\.enabled !== savedEnabled;/);
