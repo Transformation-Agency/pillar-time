@@ -447,11 +447,21 @@ async function api(path, options) {
 }
 
 async function openExternalUrl(url) {
+  const showFallback = () => {
+    window.dispatchEvent(new CustomEvent("pillar-time:external-link-fallback", {
+      detail: { url },
+    }));
+  };
+  const openBrowserFallback = (target) => {
+    const popup = window.open(target || url, "_blank", "noopener,noreferrer");
+    if (!popup) showFallback();
+    return !!popup;
+  };
   try {
     const result = await api("/api/runtime/open-url", { method: "POST", body: JSON.stringify({ url }) });
-    if (!result.opened) window.open(result.url || url, "_blank", "noopener,noreferrer");
+    if (!result.opened) openBrowserFallback(result.url || url);
   } catch {
-    window.open(url, "_blank", "noopener,noreferrer");
+    openBrowserFallback(url);
   }
 }
 
@@ -623,6 +633,7 @@ function useDesktopUpdates() {
 
 function Shell({ route, setRoute, state, desktopUpdate, children }) {
   const [helpOpen, setHelpOpen] = React.useState(false);
+  const [externalLinkNotice, setExternalLinkNotice] = React.useState("");
   const helpRef = React.useRef(null);
   const counts = {};
   const updateVisible = desktopUpdate?.isDesktop && ["available", "installed"].includes(desktopUpdate.status);
@@ -651,6 +662,13 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [helpOpen]);
+  React.useEffect(() => {
+    const onExternalLinkFallback = (event) => {
+      setExternalLinkNotice(event.detail?.url || "The link could not be opened automatically.");
+    };
+    window.addEventListener("pillar-time:external-link-fallback", onExternalLinkFallback);
+    return () => window.removeEventListener("pillar-time:external-link-fallback", onExternalLinkFallback);
+  }, []);
   return <div className="app">
     <header className="app-header">
       <button className="brand" onClick={() => setRoute("today")}>
@@ -689,6 +707,12 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
         <div className="row tight-row">
           <Button type="button" icon="settings" onClick={() => setRoute("settings")}>Settings</Button>
           {desktopUpdate.status === "installed" && <Button type="button" icon="restart" kind="primary" onClick={desktopUpdate.restartApp}>Restart</Button>}
+        </div>
+      </div>}
+      {externalLinkNotice && <div className="desktop-update-banner external-link-fallback">
+        <div><strong>Could not open the link automatically</strong><span>Copy this URL and paste it into your browser: {externalLinkNotice}</span></div>
+        <div className="row tight-row">
+          <Button type="button" icon="x" onClick={() => setExternalLinkNotice("")}>Dismiss</Button>
         </div>
       </div>}
       <section className="scroll">{children}</section>

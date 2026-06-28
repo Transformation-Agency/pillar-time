@@ -19,6 +19,35 @@ The big goal is simple:
 
 You should be able to open the app, see the real shape of your day, and stop holding the whole plan in your head.
 
+## Table of Contents
+
+- Quick Start
+- The Main Idea
+- How Pillar Time Reduces Mental Clutter
+- What Goes Where
+- Important Words
+- First Setup
+- The Main Screens
+- Today
+- Planner
+- Reminders
+- Reviews
+- Meetings
+- Linear
+- Trusted Context
+- Identity Statement
+- Standing Commitments
+- Running To-Do List
+- Intelligence
+- Sources
+- Settings
+- Connectors
+- Approvals
+- Simple Daily Routines
+- Troubleshooting
+- Privacy and Safety
+- What "Working Well" Looks Like
+
 ## Quick Start
 
 If you only do five things, do these:
@@ -38,6 +67,28 @@ You do not need to clean up your whole life before using the app.
 Start with the real day in front of you.
 
 Pillar Time is supposed to help you make that day clearer.
+
+## The Short Version
+
+Pillar Time is for answering one question:
+
+"What is the best use of my attention today?"
+
+It does not try to make you busier.
+
+It tries to help you:
+
+- see what is already promised;
+- catch what you forgot;
+- choose what matters most;
+- protect real work time;
+- avoid false urgency;
+- ask for approval before changing outside systems;
+- end the day with fewer loose ends.
+
+Think of it like a calm planning assistant.
+
+It looks at your calendar, work, tasks, reminders, meetings, and saved context. Then it helps you choose what to do next.
 
 ## The Main Idea
 
@@ -112,6 +163,23 @@ Then Pillar Time helps sort the pile.
 
 It should not make you look at everything all at once. It should help you focus on the next few things that matter.
 
+## The Mental Clutter Rule
+
+If a thought keeps repeating in your head, put it into Pillar Time.
+
+Examples:
+
+- "I cannot forget that follow-up."
+- "I need to make time for that Linear issue."
+- "That meeting needs prep."
+- "That all-day event is not really mine."
+- "I need a lighter afternoon."
+- "This project matters more than my inbox."
+
+Once the thought is in the app, you do not have to keep holding it.
+
+Pillar Time should help decide where it belongs and whether it matters today.
+
 ## What Goes Where
 
 Use this simple rule:
@@ -137,6 +205,30 @@ If it is outside-world news or research, put it in Intelligence or Sources.
 The point is not to file everything perfectly.
 
 The point is to give each thought a home so it stops bouncing around in your head.
+
+## Quick Feature Map
+
+Use Today when you want the plan for right now.
+
+Use Planner when you need to capture tasks and important dates.
+
+Use Reminders when you want a future nudge.
+
+Use Reviews when you want recurring planning questions.
+
+Use Meetings when you want to save prep notes, decisions, or follow-ups.
+
+Use Linear when you want to see or update project work.
+
+Use Trusted Context when you want the app to remember important facts about you, your work, and your preferences.
+
+Use Intelligence when you want outside-world news or source-based research.
+
+Use Sources when you want to control what Intelligence watches.
+
+Use Approvals when you want to review actions before Pillar Time writes to Calendar or Linear.
+
+Use Settings when a connector, model, update, or credential needs attention.
 
 ## Important Words
 
@@ -238,6 +330,25 @@ When you first open Pillar Time, you should set up only what you need.
 You do not need every connector.
 
 A simple setup can still be useful.
+
+### If You Feel Overwhelmed
+
+Do not set up everything at once.
+
+Start with this:
+
+1. Add one identity statement.
+2. Add three standing commitments.
+3. Add five running to-do items.
+4. Connect Google Calendar.
+5. Connect Linear only if you use Linear for real work.
+6. Press Generate Day Plan.
+
+That is enough to start.
+
+You can add sources, audio, Telegram, podcasts, and other extras later.
+
+Pillar Time should reduce clutter, not become another clutter project.
 
 ### Step 1: Add Your Identity Statement
 
@@ -392,6 +503,75 @@ The app should:
 The day plan should not be a news report.
 
 It should be about your time, work, commitments, and next actions.
+
+### What Happens When You Generate
+
+When you press Generate Day Plan, Pillar Time should do a few jobs in order.
+
+First, it gathers facts.
+
+It looks at:
+
+- Calendar;
+- Linear;
+- Planner tasks;
+- reminders;
+- meeting notes;
+- trusted context;
+- your identity statement;
+- standing commitments;
+- the running to-do list;
+- optional intelligence sources, if they are turned on.
+
+Second, it sorts the facts.
+
+It should ask:
+
+- Which calendar events are real hard blocks?
+- Which all-day events are only background context?
+- Which shared calendar events are not really yours?
+- Which Linear issues need time today?
+- Which tasks are urgent?
+- Which tasks are high leverage?
+- Which things are blocked?
+- Which things can wait?
+
+Third, it builds a proposed day.
+
+It should choose:
+
+- Today's Three;
+- other high-leverage options;
+- prep blocks;
+- follow-up blocks;
+- Linear execution blocks;
+- admin blocks;
+- recovery or buffer blocks.
+
+Fourth, it writes the brief.
+
+The brief should explain the plan in plain language.
+
+It should tell you why the plan makes sense, what tension it relieves, and what tradeoffs it makes.
+
+Fifth, it asks before taking action.
+
+It should not write to Google Calendar or Linear just because it generated a plan.
+
+Generated actions must wait for your approval.
+
+### What Generate Should Not Do
+
+Generate Day Plan should not:
+
+- fill your calendar without permission;
+- treat every all-day event as a full-day blocker;
+- treat every shared calendar as yours;
+- ignore Linear work when Linear is connected;
+- turn optional news into the main focus;
+- pretend a connector worked when it failed;
+- bury important warnings;
+- make the day look easier than it really is.
 
 ### Reading the Day Plan
 
