@@ -2329,6 +2329,7 @@ function Approvals({ state, mutate }) {
     }
   };
   const executeApproval = async (approval) => {
+    if (!window.confirm(`Execute "${approval.title || "this approved action"}" now? Pillar Time may write to Google Calendar or Linear, then record the result in the audit log.`)) return;
     setApprovalMessage("");
     try {
       await mutate(`/api/approvals/${approval.id}/execute`, {}, "POST");

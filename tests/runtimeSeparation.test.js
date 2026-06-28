@@ -402,7 +402,7 @@ test("Approval status actions expose local success and failure messages", () => 
 });
 
 test("Approvals page exposes explicit execution after approval", () => {
-  assert.match(mainSource, /const executeApproval = async \(approval\) => \{\n\s+setApprovalMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/approvals\/\$\{approval\.id\}\/execute`, \{\}, "POST"\);/);
+  assert.match(mainSource, /const executeApproval = async \(approval\) => \{\n\s+if \(!window\.confirm\(`Execute "\$\{approval\.title \|\| "this approved action"\}" now\? Pillar Time may write to Google Calendar or Linear, then record the result in the audit log\.`\)\) return;\n\s+setApprovalMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/approvals\/\$\{approval\.id\}\/execute`, \{\}, "POST"\);/);
   assert.match(mainSource, /setApprovalMessage\(`\$\{approval\.title \|\| "Approval"\} executed\.`\);/);
   assert.match(mainSource, /setApprovalMessage\(error\.message \|\| "Could not execute approval\."\);/);
   assert.match(mainSource, /desc="Human review is the center of the console\. Approve first, then execute to write to Calendar or Linear\."/);
