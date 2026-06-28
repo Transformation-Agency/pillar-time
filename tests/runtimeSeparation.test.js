@@ -672,6 +672,13 @@ test("Backend connection errors offer retry and clear after recovery", () => {
   assert.doesNotMatch(mainSource, /API error: \{error\}/);
 });
 
+test("Initial boot loading state explains local startup", () => {
+  assert.match(mainSource, /if \(!state\) return <div className="boot" role="status" aria-live="polite">/);
+  assert.match(mainSource, /Starting Pillar Time\.\.\./);
+  assert.match(mainSource, /Loading the local backend and your local workspace data\. This can take a moment after install or update\./);
+  assert.doesNotMatch(mainSource, /if \(!state\) return <div className="boot">Loading Pillar Time\.\.\.<\/div>;/);
+});
+
 test("Onboarding exit actions surface failures instead of failing silently", () => {
   assert.match(mainSource, /const \[onboardingActionMessage, setOnboardingActionMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /setOnboardingActionMessage\(error\.message \|\| "Could not finish onboarding\. Try again or finish later\."\);/);

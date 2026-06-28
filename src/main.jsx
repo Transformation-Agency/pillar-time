@@ -4885,7 +4885,10 @@ function App() {
     <p>{error}</p>
     <button type="button" onClick={refresh}>Retry connection</button>
   </div>;
-  if (!state) return <div className="boot">Loading Pillar Time...</div>;
+  if (!state) return <div className="boot" role="status" aria-live="polite">
+    <strong>Starting Pillar Time...</strong>
+    <p>Loading the local backend and your local workspace data. This can take a moment after install or update.</p>
+  </div>;
   if (!state.onboarding?.completed) return <Onboarding state={state} mutate={mutate} refresh={refresh} />;
   const screens = {
     today: <Today state={state} mutate={mutate} runWorkflow={() => runWorkflow({ runType: "executive_day" })} setRoute={requestRoute} />,
