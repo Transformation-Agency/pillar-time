@@ -233,6 +233,7 @@ test("High-use placeholder and table controls expose accessible labels", () => {
   assert.match(mainSource, /disabled=\{!form\.title\.trim\(\)\} title=\{!form\.title\.trim\(\) \? "Add a reminder title first" : "Create reminder"\}/);
   assert.match(mainSource, /disabled=\{!form\.title\.trim\(\)\} title=\{!form\.title\.trim\(\) \? "Add a meeting title first" : "Save meeting"\}/);
   assert.match(mainSource, /aria-label="Search sources"/);
+  assert.match(mainSource, /aria-label="Search perspective lenses"/);
   assert.match(mainSource, /aria-label=\{`State for \$\{issue\.identifier \|\| issue\.title\}`\}/);
   assert.match(mainSource, /aria-label=\{`Comment on \$\{issue\.identifier \|\| issue\.title\}`\}/);
   assert.match(mainSource, /disabled=\{!String\(commentDrafts\[issue\.id\] \|\| ""\)\.trim\(\)\}/);
