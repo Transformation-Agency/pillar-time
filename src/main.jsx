@@ -1989,7 +1989,7 @@ function Linear({ state, refresh }) {
             <td><Badge>{issue.priorityLabel || issue.priority || "No priority"}</Badge></td>
             <td>{issue.dueDate || "-"}</td>
             <td><input aria-label={`Comment on ${issue.identifier || issue.title}`} value={commentDrafts[issue.id] || ""} onChange={(event) => setCommentDrafts((current) => ({ ...current, [issue.id]: event.target.value }))} placeholder="Add comment..." /></td>
-            <td><div className="source-actions"><button type="button" onClick={() => addComment(issue)}><Icon name="send" />Comment</button>{issue.url && <button type="button" onClick={() => openExternalUrl(issue.url)}><Icon name="external" />Open</button>}</div></td>
+            <td><div className="source-actions"><button type="button" onClick={() => addComment(issue)} disabled={!String(commentDrafts[issue.id] || "").trim()} title={!String(commentDrafts[issue.id] || "").trim() ? "Type a comment first" : `Add comment to ${issue.identifier || issue.title}`}><Icon name="send" />Comment</button>{issue.url && <button type="button" onClick={() => openExternalUrl(issue.url)}><Icon name="external" />Open</button>}</div></td>
           </tr>)}</tbody></table>
         </div>) : <Empty icon="linear" title={loading ? "Loading Linear issues" : "No matching issues"} body={loading ? "Fetching current work from Linear." : "Adjust filters or create a new issue below."} />}
       </section>
