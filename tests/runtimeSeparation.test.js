@@ -664,10 +664,12 @@ test("Settings credential save failures stay visible in the setup modal", () => 
 });
 
 test("Telegram command tool exposes success and failure feedback", () => {
-  assert.match(mainSource, /const runCmd = async \(\) => \{\n\s+setTelegramMessage\(""\);\n\s+setResult\(""\);\n\s+try \{\n\s+const r = await mutate\("\/api\/telegram\/commands", \{ command: cmd \}\);\n\s+setResult\(r\.result\);\n\s+setTelegramMessage\(`\$\{cmd\} command completed\.`\);/);
+  assert.match(mainSource, /const runCmd = async \(\) => \{\n\s+if \(!window\.confirm\(`Run Telegram command "\$\{cmd\}" now\? This may approve or change local workflow state just like a Telegram message\.`\)\) return;\n\s+setTelegramMessage\(""\);\n\s+setResult\(""\);\n\s+try \{\n\s+const r = await mutate\("\/api\/telegram\/commands", \{ command: cmd \}\);\n\s+setResult\(r\.result\);\n\s+setTelegramMessage\(`\$\{cmd\} command completed\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setTelegramMessage\(error\.message \|\| "Could not run Telegram command\."\);/);
   assert.match(mainSource, /setTelegramMessage\(error\.message \|\| "Could not save Telegram settings\."\);/);
   assert.match(mainSource, /setTelegramMessage\(error\.message \|\| "Could not send Telegram test\."\);/);
+  assert.match(mainSource, /const telegramCommandDisabledReason = !cmd\n\s+\? "No Telegram command selected"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!telegramCommandDisabledReason\} title=\{telegramCommandDisabledReason \|\| "Run selected Telegram command"\}/);
   assert.doesNotMatch(mainSource, /const runCmd = async \(\) => \{ const r = await mutate\("\/api\/telegram\/commands", \{ command: cmd \}\); setResult\(r\.result\); \};/);
 });
 
