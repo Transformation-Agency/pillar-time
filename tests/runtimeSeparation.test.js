@@ -253,6 +253,9 @@ test("High-use placeholder and table controls expose accessible labels", () => {
   assert.match(mainSource, /aria-label=\{`Comment on \$\{issue\.identifier \|\| issue\.title\}`\}/);
   assert.match(mainSource, /disabled=\{!String\(commentDrafts\[issue\.id\] \|\| ""\)\.trim\(\)\}/);
   assert.match(mainSource, /title=\{!String\(commentDrafts\[issue\.id\] \|\| ""\)\.trim\(\) \? "Type a comment first" : `Add comment to \$\{issue\.identifier \|\| issue\.title\}`\}/);
+  assert.match(mainSource, /const hasUnsavedLinearDrafts = !!newIssue\.title\.trim\(\)\n\s+\|\| !!newIssue\.description\.trim\(\)\n\s+\|\| !!newIssue\.projectId\n\s+\|\| !!newIssue\.stateId\n\s+\|\| !!newIssue\.priority\n\s+\|\| Object\.values\(commentDrafts\)\.some\(\(draft\) => String\(draft \|\| ""\)\.trim\(\)\);/);
+  assert.match(mainSource, /window\.__pillarTimeUnsavedLinearDraft = hasUnsavedLinearDrafts;/);
+  assert.match(mainSource, /if \(route === "linear" && next !== "linear" && window\.__pillarTimeUnsavedLinearDraft\) \{\n\s+const leave = window\.confirm\("Discard unsaved Linear draft\? New issue details or typed comments will not be saved\."\);/);
   assert.match(mainSource, /const linearCreateDisabledReason = !newIssue\.title\.trim\(\)\n\s+\? "Add an issue title first"\n\s+: !newIssue\.teamId\n\s+\? "Choose a Linear team first"\n\s+: "";/);
   assert.match(mainSource, /const linearRefreshDisabledReason = loading\n\s+\? "Linear issues are already loading"\n\s+: "";/);
   assert.match(mainSource, /disabled=\{!!linearRefreshDisabledReason\} title=\{linearRefreshDisabledReason \|\| "Refresh Linear issues"\}/);
