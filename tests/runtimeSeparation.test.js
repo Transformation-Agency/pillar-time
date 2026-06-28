@@ -647,6 +647,8 @@ test("Settings credential save failures stay visible in the setup modal", () => 
   assert.match(mainSource, /const \[xMessage, setXMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const saveModel = async \(e\) => \{\n\s+e\.preventDefault\(\);\n\s+setDetectError\(""\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setDetectError\(error\.message \|\| "Could not save model provider\."\);/);
+  assert.match(mainSource, /const settingsModelSaveDisabledReason = !String\(model\.model \|\| ""\)\.trim\(\)\n\s+\? "Enter or detect a model name before saving"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!settingsModelSaveDisabledReason\} title=\{settingsModelSaveDisabledReason \|\| "Save model provider"\}>Save provider<\/Button>/);
   assert.match(mainSource, /const saveXConnector = async \(e\) => \{\n\s+e\.preventDefault\(\);\n\s+setXMessage\(""\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setXMessage\(error\.message \|\| "Could not save X API token\."\);/);
   assert.match(mainSource, /\{xMessage && <p className="warn-text">\{xMessage\}<\/p>\}/);
