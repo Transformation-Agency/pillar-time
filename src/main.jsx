@@ -1633,6 +1633,14 @@ function Sources({ state, mutate }) {
   const stt = state.runtime?.stt;
   const cloudTranscriptionReady = ["openai", "custom"].includes(state.model?.provider) && state.model?.status === "ready";
   const transcriptionAvailable = ffmpeg?.available !== false && (stt?.available || cloudTranscriptionReady);
+  const spotifyResolveDisabledReason = spotifyResolve.loading
+    ? "Spotify RSS resolution is already running"
+    : !form.config.spotifyUrl
+      ? "Paste a Spotify show or episode URL first"
+      : "";
+  const podcastTranscriptionDisabledReason = !transcriptionAvailable
+    ? "Set up FFmpeg plus local Whisper or a cloud transcription model first"
+    : "";
   const definition = sourceDefinitions[form.type];
   const mode = definition.modes[form.config.mode] ? form.config.mode : Object.keys(definition.modes)[0];
   const modeDefinition = definition.modes[mode];
@@ -1701,7 +1709,7 @@ function Sources({ state, mutate }) {
       }));
       setSpotifyResolve({ loading: false, message: `Resolved ${result.podcastTitle} RSS feed (${result.confidence} confidence).`, tone: "ok" });
     } catch (error) {
-      setSpotifyResolve({ loading: false, message: error.message, tone: "warn" });
+      setSpotifyResolve({ loading: false, message: error.message || "Could not resolve Spotify RSS feed.", tone: "warn" });
     }
   };
   const submit = async (e) => {
@@ -1826,14 +1834,14 @@ function Sources({ state, mutate }) {
           {form.type === "Calendar" && <label className="check"><input type="checkbox" checked={form.config.includeAttendees !== false} onChange={(event) => updateConfig("includeAttendees", event.target.checked)} /> Include attendee names in brief context</label>}
           {form.type === "Calendar" && <label className="check"><input type="checkbox" checked={form.config.includeDescriptions === true} onChange={(event) => updateConfig("includeDescriptions", event.target.checked)} /> Include event descriptions</label>}
           {form.type === "Podcast" && mode === "spotify" && <div className="row">
-            <Button type="button" icon="run" onClick={resolveSpotify} disabled={!form.config.spotifyUrl || spotifyResolve.loading}>{spotifyResolve.loading ? "Resolving..." : "Resolve RSS"}</Button>
+            <Button type="button" icon="run" onClick={resolveSpotify} disabled={!!spotifyResolveDisabledReason} title={spotifyResolveDisabledReason || "Resolve Spotify RSS feed"}>{spotifyResolve.loading ? "Resolving..." : "Resolve RSS"}</Button>
             {spotifyResolve.message && <Badge tone={spotifyResolve.tone}>{spotifyResolve.message}</Badge>}
           </div>}
           {form.type === "Podcast" && <div className={`notice ${transcriptionAvailable ? "" : "notice-warn"}`}>
             <strong>{transcriptionAvailable ? "Podcast transcription available" : "Podcast transcription unavailable"}</strong>
             <span>{transcriptionAvailable ? "Podcast audio can be split with FFmpeg and transcribed with local Whisper or your configured cloud fallback." : "Set up FFmpeg plus local Whisper STT or an OpenAI-compatible transcription endpoint before podcast audio can be transcribed."}</span>
           </div>}
-          {form.type === "Podcast" && <label className="check"><input type="checkbox" checked={form.config.transcribeNewEpisodes !== false && transcriptionAvailable} disabled={!transcriptionAvailable} onChange={(event) => updateConfig("transcribeNewEpisodes", event.target.checked)} /> Transcribe new episodes for briefs</label>}
+          {form.type === "Podcast" && <label className="check" title={podcastTranscriptionDisabledReason || "Transcribe new podcast episodes for briefs"}><input type="checkbox" checked={form.config.transcribeNewEpisodes !== false && transcriptionAvailable} disabled={!!podcastTranscriptionDisabledReason} onChange={(event) => updateConfig("transcribeNewEpisodes", event.target.checked)} /> Transcribe new episodes for briefs</label>}
         </div>
         <div className="modal-actions"><Button type="button" onClick={resetSourceForm}>Cancel</Button><Button icon={editingSource ? "save" : "plus"} kind="primary">{editingSource ? "Save source" : "Add source"}</Button></div>
       </form>
