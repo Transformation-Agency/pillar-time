@@ -2327,15 +2327,25 @@ function BriefSetup({ state, mutate }) {
 }
 
 function Documents({ state, mutate }) {
-  const [form, setForm] = React.useState({ title: "", type: "Note", visibility: "private", tags: "", body: "" });
+  const emptyDocumentForm = { title: "", type: "Note", visibility: "private", tags: "", body: "" };
+  const [form, setForm] = React.useState(emptyDocumentForm);
+  const [formBaseline, setFormBaseline] = React.useState(emptyDocumentForm);
   const [documentMessage, setDocumentMessage] = React.useState("");
+  React.useEffect(() => {
+    window.__pillarTimeUnsavedDocumentDraft = JSON.stringify(form) !== JSON.stringify(formBaseline);
+    return () => {
+      window.__pillarTimeUnsavedDocumentDraft = false;
+    };
+  }, [form, formBaseline]);
   const submit = async (event) => {
     event.preventDefault();
     if (!form.title.trim()) return;
     setDocumentMessage("");
     try {
       await mutate("/api/documents", { ...form, tags: form.tags.split(",").map((tag) => tag.trim()).filter(Boolean) });
-      setForm({ title: "", type: "Note", visibility: "private", tags: "", body: "" });
+      setForm(emptyDocumentForm);
+      setFormBaseline(emptyDocumentForm);
+      window.__pillarTimeUnsavedDocumentDraft = false;
       setDocumentMessage("Document created.");
     } catch (error) {
       setDocumentMessage(error.message || "Could not create document.");
@@ -4919,6 +4929,14 @@ function App() {
         return;
       }
       window.__pillarTimeUnsavedTelegramSetup = false;
+    }
+    if (route === "documents" && next !== "documents" && window.__pillarTimeUnsavedDocumentDraft) {
+      const leave = window.confirm("Discard unsaved document draft? Title, tags, and pasted body text will not be saved.");
+      if (!leave) {
+        location.hash = "documents";
+        return;
+      }
+      window.__pillarTimeUnsavedDocumentDraft = false;
     }
     setRoute(next);
   }, [route]);

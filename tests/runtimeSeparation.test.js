@@ -318,6 +318,12 @@ test("Documents are reachable and expose local success and failure messages", ()
   assert.match(mainSource, /documents: FileText,/);
   assert.match(mainSource, /documents: <Documents state=\{state\} mutate=\{mutate\} \/>/);
   assert.match(mainSource, /function Documents\(\{ state, mutate \}\) \{/);
+  assert.match(mainSource, /const emptyDocumentForm = \{ title: "", type: "Note", visibility: "private", tags: "", body: "" \};/);
+  assert.match(mainSource, /const \[formBaseline, setFormBaseline\] = React\.useState\(emptyDocumentForm\);/);
+  assert.match(mainSource, /window\.__pillarTimeUnsavedDocumentDraft = JSON\.stringify\(form\) !== JSON\.stringify\(formBaseline\);/);
+  assert.match(mainSource, /setFormBaseline\(emptyDocumentForm\);\n\s+window\.__pillarTimeUnsavedDocumentDraft = false;/);
+  assert.match(mainSource, /if \(route === "documents" && next !== "documents" && window\.__pillarTimeUnsavedDocumentDraft\) \{\n\s+const leave = window\.confirm\("Discard unsaved document draft\? Title, tags, and pasted body text will not be saved\."\);/);
+  assert.match(mainSource, /location\.hash = "documents";\n\s+return;/);
   assert.match(mainSource, /const \[documentMessage, setDocumentMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const submit = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!form\.title\.trim\(\)\) return;\n\s+setDocumentMessage\(""\);/);
   assert.match(mainSource, /await mutate\("\/api\/documents"/);
