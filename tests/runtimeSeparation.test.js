@@ -619,6 +619,13 @@ test("Telegram command tool exposes success and failure feedback", () => {
   assert.doesNotMatch(mainSource, /const runCmd = async \(\) => \{ const r = await mutate\("\/api\/telegram\/commands", \{ command: cmd \}\); setResult\(r\.result\); \};/);
 });
 
+test("Telegram page advanced actions explain missing credentials", () => {
+  assert.match(mainSource, /const telegramSaveDisabledReason = form\.enabled && !String\(form\.botToken \|\| ""\)\.trim\(\)\n\s+\? "Paste a Telegram bot token before saving"\n\s+: form\.enabled && !String\(form\.chatId \|\| ""\)\.trim\(\)\n\s+\? "Add a Telegram chat ID before saving"\n\s+: "";/);
+  assert.match(mainSource, /const telegramTestDisabledReason = !state\.telegram\.enabled \|\| !state\.telegram\.botToken \|\| !state\.telegram\.chatId\n\s+\? "Save Telegram bot token and chat ID before sending a test"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!telegramSaveDisabledReason\} title=\{telegramSaveDisabledReason \|\| "Save Telegram Settings"\}>Save Telegram Settings<\/Button>/);
+  assert.match(mainSource, /disabled=\{!!telegramTestDisabledReason\} title=\{telegramTestDisabledReason \|\| "Send Telegram test"\}>Send Test<\/Button>/);
+});
+
 test("Backend connection errors offer retry and clear after recovery", () => {
   assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
   assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);
