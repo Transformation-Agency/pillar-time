@@ -3844,6 +3844,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const [sttMessage, setSettingsSttMessage] = React.useState("");
   const [healthBusy, setHealthBusy] = React.useState(false);
   const [healthMessage, setHealthMessage] = React.useState("");
+  const [settingsMessage, setSettingsMessage] = React.useState("");
   React.useEffect(() => {
     if (editingProvider) return;
     setModel({
@@ -4271,7 +4272,13 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const reopenOnboarding = async () => {
     const ok = window.confirm("Reopen first-run onboarding? Pillar Time will return to the welcome flow, but your saved settings, connectors, and local data stay in place.");
     if (!ok) return;
-    await mutate("/api/onboarding/reset", {});
+    setSettingsMessage("");
+    try {
+      await mutate("/api/onboarding/reset", {});
+      setSettingsMessage("First-run onboarding reopened.");
+    } catch (error) {
+      setSettingsMessage(error.message || "Could not reopen onboarding.");
+    }
   };
   const updateTone = desktopUpdate?.status === "current" || desktopUpdate?.status === "installed" ? "ok" : desktopUpdate?.status === "error" ? "warn" : "muted";
   const updateLabel = desktopUpdate?.status === "available"
@@ -4289,6 +4296,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     action={<div className="page-actions"><Button icon="templates" onClick={reopenOnboarding}>Reopen onboarding</Button><Button icon="plus" kind="primary" onClick={() => setConnectorModal(true)}>Add connector</Button></div>}
     wide
   >
+    {settingsMessage && <p className={settingsMessage.includes("Could not") ? "warn-text" : "ok-text"}>{settingsMessage}</p>}
     <div className="settings-dashboard">
       {desktopUpdate?.isDesktop && <section className="panel connector-card">
         <div className="connector-head">

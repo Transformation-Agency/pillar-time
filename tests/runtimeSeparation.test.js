@@ -418,6 +418,13 @@ test("Local dependency installers ask for consent before starting", () => {
   assert.match(mainSource, /const ok = window\.confirm\("Download the local Whisper model now\? This stores the speech-to-text model on this Mac for voice input and transcription\."\);\n\s+if \(!ok\) return;\n\s+setSettingsSttBusy\(true\);/);
 });
 
+test("Settings onboarding reset exposes success and failure feedback", () => {
+  assert.match(mainSource, /const \[settingsMessage, setSettingsMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const reopenOnboarding = async \(\) => \{\n\s+const ok = window\.confirm\("Reopen first-run onboarding\? Pillar Time will return to the welcome flow, but your saved settings, connectors, and local data stay in place\."\);\n\s+if \(!ok\) return;\n\s+setSettingsMessage\(""\);\n\s+try \{\n\s+await mutate\("\/api\/onboarding\/reset", \{\}\);\n\s+setSettingsMessage\("First-run onboarding reopened\."\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setSettingsMessage\(error\.message \|\| "Could not reopen onboarding\."\);/);
+  assert.match(mainSource, /\{settingsMessage && <p className=\{settingsMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{settingsMessage\}<\/p>\}/);
+});
+
 test("Google Calendar modal warns before discarding unsaved calendar selections", () => {
   assert.match(mainSource, /const closeGoogleCalendarModal = \(\) => \{\n\s+if \(googleCalendarSelectionDirty\) \{/);
   assert.match(mainSource, /Discard unsaved Google Calendar selection changes\? Your daily planning inputs will keep using the previously saved calendars\./);
