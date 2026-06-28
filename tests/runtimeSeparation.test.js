@@ -601,6 +601,8 @@ test("Settings credential save failures stay visible in the setup modal", () => 
   assert.match(mainSource, /const saveTelegram = async \(e\) => \{\n\s+e\.preventDefault\(\);\n\s+setTelegramSetupMessage\(""\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setTelegramSetupMessage\(error\.message \|\| "Could not save Telegram settings\."\);/);
   assert.match(mainSource, /\{telegramSetupMessage && <p className="warn-text">\{telegramSetupMessage\}<\/p>\}/);
+  assert.match(mainSource, /const settingsTelegramSaveDisabledReason = !String\(telegramForm\.botToken \|\| ""\)\.trim\(\)\n\s+\? "Paste a Telegram bot token before saving"\n\s+: !String\(telegramForm\.chatId \|\| ""\)\.trim\(\)\n\s+\? "Add a Telegram chat ID before saving"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!settingsTelegramSaveDisabledReason\} title=\{settingsTelegramSaveDisabledReason \|\| "Save Telegram settings"\}/);
   assert.doesNotMatch(mainSource, /mutate\("\/api\/model", \{ \.\.\.model, enabled: true \}, "PATCH"\)\.then\(\(\) => setEditingProvider\(""\)\)/);
   assert.doesNotMatch(mainSource, /mutate\("\/api\/connectors\/x", \{ \.\.\.xConnector, enabled: true \}, "PATCH"\)\.then\(\(\) => setXModal\(false\)\)/);
   assert.doesNotMatch(mainSource, /mutate\("\/api\/telegram", \{ \.\.\.telegramForm, enabled: true, allowedUsers:[\s\S]*?\.then\(\(\) => setTelegramModal\(false\)\)/);
