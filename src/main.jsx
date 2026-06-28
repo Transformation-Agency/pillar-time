@@ -3015,6 +3015,9 @@ function Onboarding({ state, mutate, refresh }) {
   const linearSaveDisabledReason = !linearConnector.apiKey && !state.connectors?.linear?.apiKeySaved && state.connectors?.linear?.credentialStatus !== "env"
     ? "Paste a Linear API key before saving, or skip Linear for now"
     : "";
+  const xSaveDisabledReason = !xConnector.apiKey && !state.connectors?.x?.apiKeySaved
+    ? "Paste an X bearer token before saving, or skip X sources for now"
+    : "";
   const onboardingFfmpegDisabledReason = ffmpegBusy
     ? "FFmpeg setup is already running"
     : "";
@@ -3821,7 +3824,7 @@ function Onboarding({ state, mutate, refresh }) {
           </div>
           <Field label="Bearer token" type="password" value={xConnector.apiKey} onChange={(apiKey) => setXConnector({ ...xConnector, apiKey })} placeholder={state.connectors?.x?.apiKeySaved ? "Saved. Paste a new token to replace it." : "Paste X bearer token"} />
           {xMessage && <p className={xMessage.includes("saved") ? "ok-text" : "warn-text"}>{xMessage}</p>}
-          <div className="row"><Button type="button" onClick={() => skipPrerequisiteSources("x")}>Skip X sources</Button><Button icon="save" kind="primary">Save X API</Button></div>
+          <div className="row"><Button type="button" onClick={() => skipPrerequisiteSources("x")}>Skip X sources</Button><Button icon="save" kind="primary" disabled={!!xSaveDisabledReason} title={xSaveDisabledReason || "Save X API token"}>Save X API</Button></div>
         </form>}
         {(pendingPrereqKeys.includes("ffmpeg") || pendingPrereqKeys.includes("transcriptionModel")) && <div className="setup-card">
           <div className="setup-card-head"><BrandLogo name="Podcast" /><div><h3>Podcast transcription</h3><p>Podcast sources need FFmpeg for long audio processing and either local Whisper STT or an OpenAI-compatible transcription model.</p></div><Badge tone={!pendingPrereqKeys.includes("ffmpeg") && !pendingPrereqKeys.includes("transcriptionModel") ? "ok" : "warn"}>Setup required</Badge></div>

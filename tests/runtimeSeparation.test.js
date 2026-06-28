@@ -127,10 +127,12 @@ test("Onboarding finish action explains required missing steps", () => {
 test("Onboarding access actions explain disabled setup states", () => {
   assert.match(mainSource, /const linearTestDisabledReason = !linearConnector\.apiKey && state\.connectors\?\.linear\?\.credentialStatus === "missing"\n\s+\? "Paste a Linear API key before testing"\n\s+: "";/);
   assert.match(mainSource, /const linearSaveDisabledReason = !linearConnector\.apiKey && !state\.connectors\?\.linear\?\.apiKeySaved && state\.connectors\?\.linear\?\.credentialStatus !== "env"\n\s+\? "Paste a Linear API key before saving, or skip Linear for now"\n\s+: "";/);
+  assert.match(mainSource, /const xSaveDisabledReason = !xConnector\.apiKey && !state\.connectors\?\.x\?\.apiKeySaved\n\s+\? "Paste an X bearer token before saving, or skip X sources for now"\n\s+: "";/);
   assert.match(mainSource, /const voiceInputDisabledReason = !speechSupported && !listening\n\s+\? "Voice input is not available in this WebView"\n\s+: "";/);
   assert.match(mainSource, /const continueAfterAccessDisabledReason = savingSources\n\s+\? "Sources are being added"\n\s+: !pendingSources\.length\n\s+\? "No pending sources are ready to add"\n\s+: "";/);
   assert.match(mainSource, /disabled=\{!!linearTestDisabledReason\} title=\{linearTestDisabledReason \|\| "Test Linear API key"\}/);
   assert.match(mainSource, /disabled=\{!!linearSaveDisabledReason\} title=\{linearSaveDisabledReason \|\| "Save Linear connector"\}/);
+  assert.match(mainSource, /disabled=\{!!xSaveDisabledReason\} title=\{xSaveDisabledReason \|\| "Save X API token"\}/);
   assert.match(mainSource, /disabled=\{!!voiceInputDisabledReason\} title=\{voiceInputDisabledReason \|\| "Start voice input"\}/);
   assert.match(mainSource, /disabled=\{!!continueAfterAccessDisabledReason\} title=\{continueAfterAccessDisabledReason \|\| "Continue with ready sources"\}/);
 });
