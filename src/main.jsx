@@ -4272,7 +4272,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       if (result.error) setDetectError(result.error);
       if ((!model.model || model.provider !== requestProvider) && result.models?.length) setModel((m) => ({ ...m, provider: requestProvider, model: defaultModelForProvider(requestProvider) || result.models[0] }));
     } catch (error) {
-      setDetectError(error.message);
+      setDetectError(error.message || "Could not detect models for this provider.");
     } finally {
       setDetecting(false);
     }
@@ -4317,6 +4317,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     { service: "Linear", sub: "Read and update TRA issues", type: "Project", logo: "Linear", status: linearConnected ? "Connected" : state.connectors?.linear?.credentialStatus === "missing" ? "Needs key" : "Disabled", connected: linearConnected, action: "linear" },
   ];
   const visibleModelOptions = modelOptionsProvider === (editingProvider || model.provider) ? modelOptions : [];
+  const settingsModelDetectDisabledReason = detecting
+    ? "Model detection is already running"
+    : "";
   const openProvider = (provider) => {
     setModel({ enabled: true, provider, model: provider === state.model.provider ? state.model.model || defaultModelForProvider(provider) : defaultModelForProvider(provider), apiKey: "", baseUrl: provider === state.model.provider ? state.model.baseUrl || "" : "" });
     setModelOptions([]);
@@ -4598,7 +4601,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <Field label="API key" type="password" value={model.apiKey} onChange={(apiKey) => setModel({ ...model, apiKey })} placeholder={(state.model.providerCredentials?.[editingProvider]?.apiKeySaved || (state.model.provider === editingProvider && state.model.apiKeySaved)) ? "Saved. Paste a new key to replace it." : "Paste provider API key"} />
         {visibleModelOptions.length ? <Select label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} options={visibleModelOptions.includes(model.model) || !model.model ? visibleModelOptions : [model.model, ...visibleModelOptions]} /> : <Field label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} placeholder={detecting ? "Detecting models..." : "Enter a model or paste key for auto-detect"} />}
         {detectError && <p className="warn-text">{detectError}</p>}
-        <div className="modal-actions"><Button type="button" onClick={closeModelProviderSetup}>Cancel</Button><Button type="button" icon="search" onClick={detectModels} disabled={detecting}>{detecting ? "Detecting..." : "Detect models"}</Button><Button icon="save" kind="primary">Save provider</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeModelProviderSetup}>Cancel</Button><Button type="button" icon="search" onClick={detectModels} disabled={!!settingsModelDetectDisabledReason} title={settingsModelDetectDisabledReason || "Detect provider models"}>{detecting ? "Detecting..." : "Detect models"}</Button><Button icon="save" kind="primary">Save provider</Button></div>
       </form>
     </div>}
     {telegramModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeTelegramModal(); }}>

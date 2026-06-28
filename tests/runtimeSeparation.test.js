@@ -642,3 +642,10 @@ test("Local dependency setup controls explain busy states and fallback errors", 
   assert.doesNotMatch(mainSource, /disabled=\{ffmpegBusy\}>\{ffmpegBusy \? "Checking\.\.\." : "Re-check"\}/);
   assert.doesNotMatch(mainSource, /disabled=\{sttBusy\}>\{sttBusy \? "Downloading\.\.\." : "Download model"\}/);
 });
+
+test("Settings model detection disabled action explains busy state", () => {
+  assert.match(mainSource, /setDetectError\(error\.message \|\| "Could not detect models for this provider\."\);/);
+  assert.match(mainSource, /const settingsModelDetectDisabledReason = detecting\n\s+\? "Model detection is already running"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!settingsModelDetectDisabledReason\} title=\{settingsModelDetectDisabledReason \|\| "Detect provider models"\}/);
+  assert.doesNotMatch(mainSource, /disabled=\{detecting\}>\{detecting \? "Detecting\.\.\." : "Detect models"\}/);
+});
