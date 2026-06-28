@@ -404,6 +404,15 @@ test("Connector picker sends ElevenLabs users to audio settings", () => {
   assert.doesNotMatch(mainSource, /<button type="button" onClick=\{\(\) => setConnectorModal\(false\)\}><Icon name="volume" \/><strong>ElevenLabs audio<\/strong><span>Use the Audio Briefs settings below\.<\/span><\/button>/);
 });
 
+test("Audio setup disabled buttons explain the required next step", () => {
+  assert.match(mainSource, /const detectVoicesDisabledReason = busy\n\s+\? "Audio setup is busy"\n\s+: !apiKey && !state\.tts\?\.apiKeySaved\n\s+\? "Paste an ElevenLabs API key first"\n\s+: "";/);
+  assert.match(mainSource, /const previewDisabledReason = busy\n\s+\? "Audio setup is busy"\n\s+: !voiceId\n\s+\? "Choose or detect a voice first"\n\s+: "";/);
+  assert.match(mainSource, /const saveAudioDisabledReason = busy\n\s+\? "Audio setup is busy"\n\s+: !voiceId && !apiKey && !state\.tts\?\.apiKeySaved\n\s+\? "Paste an API key or choose a voice before saving"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!detectVoicesDisabledReason\} title=\{detectVoicesDisabledReason \|\| "Detect ElevenLabs voices"\}/);
+  assert.match(mainSource, /disabled=\{!!previewDisabledReason\} title=\{previewDisabledReason \|\| "Play audio preview"\}/);
+  assert.match(mainSource, /disabled=\{!!saveAudioDisabledReason\} title=\{saveAudioDisabledReason \|\| "Save audio settings"\}/);
+});
+
 test("Connector picker exposes source management instead of stale hidden-source copy", () => {
   assert.match(mainSource, /<button type="button" onClick=\{\(\) => \{ setConnectorModal\(false\); location\.hash = "sources"; \}\}><Icon name="sources" \/><strong>Manage sources<\/strong><span>Add, pause, resume, or delete monitored feeds and searches\.<\/span><\/button>/);
   assert.match(mainSource, /Source management is available from Context &gt; Sources\./);

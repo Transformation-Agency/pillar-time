@@ -2734,6 +2734,21 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
   const [busy, setBusy] = React.useState(false);
   const [previewUrl, setPreviewUrl] = React.useState("");
   const selectedVoice = voices.find((voice) => voice.id === voiceId);
+  const detectVoicesDisabledReason = busy
+    ? "Audio setup is busy"
+    : !apiKey && !state.tts?.apiKeySaved
+      ? "Paste an ElevenLabs API key first"
+      : "";
+  const previewDisabledReason = busy
+    ? "Audio setup is busy"
+    : !voiceId
+      ? "Choose or detect a voice first"
+      : "";
+  const saveAudioDisabledReason = busy
+    ? "Audio setup is busy"
+    : !voiceId && !apiKey && !state.tts?.apiKeySaved
+      ? "Paste an API key or choose a voice before saving"
+      : "";
   const fetchVoices = async () => {
     const result = await api("/api/tts/voices", { method: "POST", body: JSON.stringify({ apiKey }) });
     const nextVoices = result.voices || [];
@@ -2821,7 +2836,7 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
     </div>
     <Field label="ElevenLabs API key" type="password" value={apiKey} onChange={setApiKey} placeholder={state.tts?.apiKeySaved ? "Saved. Paste a new key to replace it." : "Paste ElevenLabs API key"} />
     <div className="row">
-      <Button type="button" icon="search" onClick={detectVoices} disabled={busy || (!apiKey && !state.tts?.apiKeySaved)}>{busy ? "Checking..." : "Detect voices"}</Button>
+      <Button type="button" icon="search" onClick={detectVoices} disabled={!!detectVoicesDisabledReason} title={detectVoicesDisabledReason || "Detect ElevenLabs voices"}>{busy ? "Checking..." : "Detect voices"}</Button>
       <label className="check"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /> Enable audio brief</label>
     </div>
     {voices.length > 0 && <Select label="Voice" value={voiceId} onChange={setVoiceId} options={voices.map((voice) => ({ value: voice.id, label: `${voice.name}${voice.category ? ` · ${voice.category}` : ""}` }))} />}
@@ -2836,8 +2851,8 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
     {message && <p className={message.includes("saved") || message.includes("Detected") || message.includes("Preview") ? "ok-text" : "warn-text"}>{message}</p>}
     <div className="row">
       {onSkip && <Button type="button" onClick={onSkip}>Skip audio</Button>}
-      <Button type="button" icon="volume" onClick={preview} disabled={busy || !voiceId}>Play preview</Button>
-      <Button icon="save" kind="primary" disabled={busy || (!voiceId && !apiKey && !state.tts?.apiKeySaved)}>{busy ? "Saving..." : "Save audio"}</Button>
+      <Button type="button" icon="volume" onClick={preview} disabled={!!previewDisabledReason} title={previewDisabledReason || "Play audio preview"}>Play preview</Button>
+      <Button icon="save" kind="primary" disabled={!!saveAudioDisabledReason} title={saveAudioDisabledReason || "Save audio settings"}>{busy ? "Saving..." : "Save audio"}</Button>
     </div>
   </form>;
 }
