@@ -130,9 +130,14 @@ test("Onboarding explains setup context and avoids stale recovery copy", () => {
 });
 
 test("Onboarding step rail persists navigation state", () => {
-  assert.match(mainSource, /const go = async \(next\) => \{\n\s+const normalized = normalizeOnboardingStep\(next\);\n\s+setStep\(normalized\);\n\s+await mutate\("\/api\/onboarding", \{ currentStep: normalized, briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: briefDraft \}, "PATCH"\);/);
+  assert.match(mainSource, /const go = async \(next\) => \{\n\s+const normalized = normalizeOnboardingStep\(next\);/);
+  assert.match(mainSource, /await mutate\("\/api\/onboarding", \{ currentStep: normalized, briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: briefDraft \}, "PATCH"\);/);
   assert.match(mainSource, /className=\{index === stepIndex \? "active" : index < stepIndex \? "done" : ""\} onClick=\{\(\) => go\(id\)\}/);
   assert.doesNotMatch(mainSource, /className=\{index === stepIndex \? "active" : index < stepIndex \? "done" : ""\} onClick=\{\(\) => setStep\(id\)\}/);
+});
+
+test("Onboarding navigation save failures stay visible", () => {
+  assert.match(mainSource, /const go = async \(next\) => \{\n\s+const normalized = normalizeOnboardingStep\(next\);\n\s+setOnboardingActionMessage\(""\);\n\s+setStep\(normalized\);\n\s+try \{\n\s+await mutate\("\/api\/onboarding", \{ currentStep: normalized, briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: briefDraft \}, "PATCH"\);\n\s+\} catch \(error\) \{\n\s+setOnboardingActionMessage\(error\.message \|\| "Could not save onboarding progress\. You can keep going, but reload may return to the previous step\."\);/);
 });
 
 test("Onboarding finish action explains required missing steps", () => {
