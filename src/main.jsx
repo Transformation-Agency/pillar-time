@@ -4152,7 +4152,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       setGoogleCalendarMessage("Google consent opened in your browser. Complete it, then return here; Pillar Time will update the status automatically.");
       await openExternalUrl(result.authUrl);
     } catch (error) {
-      setGoogleCalendarMessage(error.message);
+      setGoogleCalendarMessage(error.message || "Could not start Google Calendar connection.");
     }
   };
   const testGoogleCalendar = async () => {
@@ -4162,7 +4162,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       setGoogleCalendarMessage("Google Calendar is connected and ready.");
       await refresh();
     } catch (error) {
-      setGoogleCalendarMessage(error.message);
+      setGoogleCalendarMessage(error.message || "Google Calendar test failed.");
       await refresh();
     }
   };
@@ -4175,7 +4175,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       setGoogleCalendarMessage("Calendar list refreshed.");
       await refresh();
     } catch (error) {
-      setGoogleCalendarMessage(error.message);
+      setGoogleCalendarMessage(error.message || "Could not refresh Google Calendar list.");
       await refresh();
     }
   };
@@ -4186,7 +4186,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       setGoogleCalendarSelectionDirty(false);
       setGoogleCalendarMessage("Calendar selection saved.");
     } catch (error) {
-      setGoogleCalendarMessage(error.message);
+      setGoogleCalendarMessage(error.message || "Could not save Google Calendar selection.");
     }
   };
   const toggleGoogleCalendar = (calendarId) => {

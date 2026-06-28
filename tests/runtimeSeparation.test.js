@@ -469,6 +469,14 @@ test("Google Calendar disconnect failures stay visible in the connector modal", 
   assert.doesNotMatch(mainSource, /setGoogleCalendarMessage\(""\);\n\s+await mutate\("\/api\/google-calendar\/disconnect", \{\}, "POST"\);\n\s+setGoogleCalendarSelection\(\["primary"\]\);/);
 });
 
+test("Google Calendar setup actions have fallback failure messages", () => {
+  assert.match(mainSource, /setGoogleCalendarMessage\(error\.message \|\| "Could not start Google Calendar connection\."\);/);
+  assert.match(mainSource, /setGoogleCalendarMessage\(error\.message \|\| "Google Calendar test failed\."\);/);
+  assert.match(mainSource, /setGoogleCalendarMessage\(error\.message \|\| "Could not refresh Google Calendar list\."\);/);
+  assert.match(mainSource, /setGoogleCalendarMessage\(error\.message \|\| "Could not save Google Calendar selection\."\);/);
+  assert.doesNotMatch(mainSource, /setGoogleCalendarMessage\(error\.message\);\n\s+await refresh\(\);/);
+});
+
 test("Linear setup warns before discarding unsaved connector edits", () => {
   assert.match(mainSource, /const closeLinearModal = \(\) => \{/);
   assert.match(mainSource, /const hasUnsavedLinearChanges = !!linearConnector\.apiKey \|\| linearConnector\.enabled !== savedEnabled;/);
