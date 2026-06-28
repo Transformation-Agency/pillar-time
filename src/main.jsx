@@ -3792,7 +3792,7 @@ function Onboarding({ state, mutate, refresh }) {
   return <div className="onboarding-shell">
     <aside className="onboarding-rail">
       <PillarBriefLockup />
-      <div className="onboarding-progress">{steps.map((id, index) => <button key={id} className={index === stepIndex ? "active" : index < stepIndex ? "done" : ""} onClick={() => setStep(id)}><b>{index + 1}</b><span>{stepLabels[id] || id}</span></button>)}</div>
+      <div className="onboarding-progress">{steps.map((id, index) => <button key={id} className={index === stepIndex ? "active" : index < stepIndex ? "done" : ""} onClick={() => go(id)}><b>{index + 1}</b><span>{stepLabels[id] || id}</span></button>)}</div>
     </aside>
     <main className="onboarding-main">
       <button className="onboarding-skip" type="button" onClick={skipOnboarding}><Icon name="x" />Skip and set up manually</button>

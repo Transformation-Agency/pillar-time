@@ -129,6 +129,12 @@ test("Onboarding explains setup context and avoids stale recovery copy", () => {
   assert.doesNotMatch(mainSource, /change it later from the home screen/);
 });
 
+test("Onboarding step rail persists navigation state", () => {
+  assert.match(mainSource, /const go = async \(next\) => \{\n\s+const normalized = normalizeOnboardingStep\(next\);\n\s+setStep\(normalized\);\n\s+await mutate\("\/api\/onboarding", \{ currentStep: normalized, briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: briefDraft \}, "PATCH"\);/);
+  assert.match(mainSource, /className=\{index === stepIndex \? "active" : index < stepIndex \? "done" : ""\} onClick=\{\(\) => go\(id\)\}/);
+  assert.doesNotMatch(mainSource, /className=\{index === stepIndex \? "active" : index < stepIndex \? "done" : ""\} onClick=\{\(\) => setStep\(id\)\}/);
+});
+
 test("Onboarding finish action explains required missing steps", () => {
   assert.match(mainSource, /const profileSaveDisabledReason = savingFirstName\n\s+\? "Profile is already being saved"\n\s+: "";/);
   assert.match(mainSource, /disabled=\{!!profileSaveDisabledReason\} title=\{profileSaveDisabledReason \|\| "Start Pillar Time"\}/);
