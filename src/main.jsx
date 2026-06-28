@@ -2287,6 +2287,7 @@ function Documents({ state, mutate }) {
   };
   const updateDocumentStatus = async (document) => {
     const nextStatus = document.status === "active" ? "archived" : "active";
+    if (nextStatus === "archived" && !window.confirm(`Archive "${document.title || "Document"}"? It will stop being used as active retrieval context until you reactivate it.`)) return;
     setDocumentMessage("");
     try {
       await mutate(`/api/documents/${document.id}`, { status: nextStatus }, "PATCH");
@@ -2299,7 +2300,7 @@ function Documents({ state, mutate }) {
     {documentMessage && <p className={documentMessage.includes("Could not") ? "warn-text" : "ok-text"}>{documentMessage}</p>}
     <div className="split">
       <form className="card form" onSubmit={submit}><h2>Create document</h2><Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} required /><Select label="Type" value={form.type} onChange={(type) => setForm({ ...form, type })} options={["Doctrine", "Memo", "Project", "Note", "Transcript", "Post"]} /><Select label="Visibility" value={form.visibility} onChange={(visibility) => setForm({ ...form, visibility })} options={["private", "team", "public"]} /><Field label="Tags" value={form.tags} onChange={(tags) => setForm({ ...form, tags })} placeholder="doctrine, q2" /><TextArea label="Body" value={form.body} onChange={(body) => setForm({ ...form, body })} rows={9} /><Button icon="plus" kind="primary" disabled={!form.title.trim()} title={!form.title.trim() ? "Add a document title first" : "Create document"}>Create Document</Button></form>
-      <div className="card table-card"><h2>Corpus</h2>{state.documents.length ? state.documents.map((d) => <ListRow key={d.id} title={d.title} sub={`${d.type} · ${d.wordCount} words · ${d.visibility}`} right={<Button icon={d.status === "active" ? "x" : "check"} onClick={() => updateDocumentStatus(d)}>{d.status === "active" ? "Archive" : "Reactivate"}</Button>} />) : <Empty icon="documents" title="No documents yet" body="Create a document by pasting text into the form before retrieval can affect workflow output." />}</div>
+      <div className="card table-card"><h2>Corpus</h2>{state.documents.length ? state.documents.map((d) => <ListRow key={d.id} title={d.title} sub={`${d.type} · ${d.wordCount} words · ${d.visibility}`} right={<Button icon={d.status === "active" ? "x" : "check"} onClick={() => updateDocumentStatus(d)} title={d.status === "active" ? "Archive document from active retrieval context" : "Reactivate document for retrieval context"}>{d.status === "active" ? "Archive" : "Reactivate"}</Button>} />) : <Empty icon="documents" title="No documents yet" body="Create a document by pasting text into the form before retrieval can affect workflow output." />}</div>
     </div>
   </Page>;
 }
