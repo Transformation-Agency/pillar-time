@@ -387,11 +387,14 @@ test("Planner task completion exposes local success and failure messages", () =>
 });
 
 test("Reminder and meeting captures expose local success and failure messages", () => {
+  assert.match(mainSource, /const \[formBaseline, setFormBaseline\] = React\.useState\(emptyReminderForm\);/);
+  assert.match(mainSource, /window\.__pillarTimeUnsavedReminderDraft = JSON\.stringify\(form\) !== JSON\.stringify\(formBaseline\);/);
+  assert.match(mainSource, /if \(route === "reminders" && next !== "reminders" && window\.__pillarTimeUnsavedReminderDraft\) \{\n\s+const leave = window\.confirm\("Discard unsaved reminder draft\? Title, body, schedule, and channel edits will not be saved\."\);/);
   assert.match(mainSource, /const \[reminderMessage, setReminderMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const savePrefs = async \(patch, label\) => \{\n\s+if \(patch\.reminderMasterEnabled === true && !window\.confirm\("Turn on Master reminders\? Enabled reminders may start sending future desktop or Telegram nudges\."\)\) return;\n\s+setReminderMessage\(""\);\n\s+try \{\n\s+await mutate\("\/api\/time\/preferences", \{ \.\.\.prefs, \.\.\.patch \}, "PATCH"\);\n\s+setReminderMessage\(`\$\{label\} saved\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setReminderMessage\(error\.message \|\| "Could not update reminder settings\."\);/);
   assert.match(mainSource, /const createReminder = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!form\.title\.trim\(\)\) return;\n\s+if \(form\.enabled && !window\.confirm\(`Create "\$\{form\.title\}" enabled immediately\? Pillar Time may schedule future desktop or Telegram nudges when Master reminders are on\.`\)\) return;\n\s+setReminderMessage\(""\);/);
-  assert.match(mainSource, /await mutate\("\/api\/time\/reminders", form\);\n\s+setForm\(emptyReminderForm\);\n\s+setReminderMessage\("Reminder created\."\);/);
+  assert.match(mainSource, /await mutate\("\/api\/time\/reminders", form\);\n\s+setForm\(emptyReminderForm\);\n\s+setFormBaseline\(emptyReminderForm\);\n\s+window\.__pillarTimeUnsavedReminderDraft = false;\n\s+setReminderMessage\("Reminder created\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setReminderMessage\(error\.message \|\| "Could not create reminder\."\);/);
   assert.match(mainSource, /\{reminderMessage && <p className=\{reminderMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{reminderMessage\}<\/p>\}/);
   assert.match(mainSource, /onChange=\{\(event\) => savePrefs\(\{ \[key\]: event\.target\.checked \}, label\)\}/);

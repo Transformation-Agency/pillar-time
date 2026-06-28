@@ -1354,7 +1354,14 @@ function Reminders({ state, mutate }) {
   const masterRemindersOn = !!prefs.reminderMasterEnabled;
   const emptyReminderForm = { title: "", body: "", type: "regular", scheduleType: "daily", localTime: "09:00", enabled: false, channels: { desktopText: true, telegramText: false }, sporadic: { windowStart: "10:00", windowEnd: "16:00", count: 2, minGapMinutes: 120 } };
   const [form, setForm] = React.useState(emptyReminderForm);
+  const [formBaseline, setFormBaseline] = React.useState(emptyReminderForm);
   const [reminderMessage, setReminderMessage] = React.useState("");
+  React.useEffect(() => {
+    window.__pillarTimeUnsavedReminderDraft = JSON.stringify(form) !== JSON.stringify(formBaseline);
+    return () => {
+      window.__pillarTimeUnsavedReminderDraft = false;
+    };
+  }, [form, formBaseline]);
   const savePrefs = async (patch, label) => {
     if (patch.reminderMasterEnabled === true && !window.confirm("Turn on Master reminders? Enabled reminders may start sending future desktop or Telegram nudges.")) return;
     setReminderMessage("");
@@ -1373,6 +1380,8 @@ function Reminders({ state, mutate }) {
     try {
       await mutate("/api/time/reminders", form);
       setForm(emptyReminderForm);
+      setFormBaseline(emptyReminderForm);
+      window.__pillarTimeUnsavedReminderDraft = false;
       setReminderMessage("Reminder created.");
     } catch (error) {
       setReminderMessage(error.message || "Could not create reminder.");
@@ -4977,6 +4986,14 @@ function App() {
         return;
       }
       window.__pillarTimeUnsavedPlannerDraft = false;
+    }
+    if (route === "reminders" && next !== "reminders" && window.__pillarTimeUnsavedReminderDraft) {
+      const leave = window.confirm("Discard unsaved reminder draft? Title, body, schedule, and channel edits will not be saved.");
+      if (!leave) {
+        location.hash = "reminders";
+        return;
+      }
+      window.__pillarTimeUnsavedReminderDraft = false;
     }
     setRoute(next);
   }, [route]);
