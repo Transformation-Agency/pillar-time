@@ -4373,6 +4373,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const settingsModelDetectDisabledReason = detecting
     ? "Model detection is already running"
     : "";
+  const settingsXSaveDisabledReason = !xConnector.apiKey && !state.connectors?.x?.apiKeySaved
+    ? "Paste an X bearer token before saving"
+    : "";
   const openProvider = (provider) => {
     setModel({ enabled: true, provider, model: provider === state.model.provider ? state.model.model || defaultModelForProvider(provider) : defaultModelForProvider(provider), apiKey: "", baseUrl: provider === state.model.provider ? state.model.baseUrl || "" : "" });
     setModelOptions([]);
@@ -4680,7 +4683,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <div className="modal-head"><div><h2>X search API</h2><p>Add or replace the official bearer token used for X search.</p></div><button type="button" aria-label="Close X API setup" onClick={closeXModal}><Icon name="x" /></button></div>
         <Field label="Bearer token" type="password" value={xConnector.apiKey} onChange={(apiKey) => setXConnector({ ...xConnector, apiKey })} placeholder={state.connectors?.x?.apiKeySaved ? "Saved. Paste a new token to replace it." : "Paste X bearer token"} />
         {xMessage && <p className="warn-text">{xMessage}</p>}
-        <div className="modal-actions"><Button type="button" onClick={closeXModal}>Cancel</Button><Button icon="save" kind="primary">Save X API</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeXModal}>Cancel</Button><Button icon="save" kind="primary" disabled={!!settingsXSaveDisabledReason} title={settingsXSaveDisabledReason || "Save X API token"}>Save X API</Button></div>
       </form>
     </div>}
     {redditModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeRedditModal(); }}>
