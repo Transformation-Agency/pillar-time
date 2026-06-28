@@ -1747,7 +1747,7 @@ function Sources({ state, mutate }) {
         setTranscribeMessage(`Transcribed "${payload.episode.title}" for future briefs (${payload.words} words, ${payload.chunks} audio chunk${payload.chunks === 1 ? "" : "s"}).`);
       }
     } catch (error) {
-      setTranscribeMessage(error.message);
+      setTranscribeMessage(error.message || "Could not transcribe podcast episode.");
     } finally {
       setTranscribing((current) => ({ ...current, [sourceId]: false }));
     }
