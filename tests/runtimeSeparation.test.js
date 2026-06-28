@@ -121,6 +121,15 @@ test("Onboarding finish action explains required missing steps", () => {
   assert.match(mainSource, /disabled=\{!canComplete\} title=\{finishOnboardingDisabledReason \|\| "Finish onboarding"\}/);
 });
 
+test("Onboarding access actions explain disabled setup states", () => {
+  assert.match(mainSource, /const linearTestDisabledReason = !linearConnector\.apiKey && state\.connectors\?\.linear\?\.credentialStatus === "missing"\n\s+\? "Paste a Linear API key before testing"\n\s+: "";/);
+  assert.match(mainSource, /const voiceInputDisabledReason = !speechSupported && !listening\n\s+\? "Voice input is not available in this WebView"\n\s+: "";/);
+  assert.match(mainSource, /const continueAfterAccessDisabledReason = savingSources\n\s+\? "Sources are being added"\n\s+: !pendingSources\.length\n\s+\? "No pending sources are ready to add"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!linearTestDisabledReason\} title=\{linearTestDisabledReason \|\| "Test Linear API key"\}/);
+  assert.match(mainSource, /disabled=\{!!voiceInputDisabledReason\} title=\{voiceInputDisabledReason \|\| "Start voice input"\}/);
+  assert.match(mainSource, /disabled=\{!!continueAfterAccessDisabledReason\} title=\{continueAfterAccessDisabledReason \|\| "Continue with ready sources"\}/);
+});
+
 test("Onboarding brief setup disabled actions explain the next step", () => {
   assert.match(mainSource, /const briefPromptTooShort = briefPrompt\.trim\(\)\.length < 20;/);
   assert.match(mainSource, /const generateBriefSetupDisabledReason = draftingBriefSetup\n\s+\? "Brief setup draft is already being generated"\n\s+: briefPromptTooShort\n\s+\? "Describe your brief request in at least 20 characters"\n\s+: "";/);

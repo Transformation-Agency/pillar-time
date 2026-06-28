@@ -2978,6 +2978,9 @@ function Onboarding({ state, mutate, refresh }) {
       : !suggestions.length
         ? "Generate source suggestions first"
         : "";
+  const linearTestDisabledReason = !linearConnector.apiKey && state.connectors?.linear?.credentialStatus === "missing"
+    ? "Paste a Linear API key before testing"
+    : "";
   const onboardingFfmpegDisabledReason = ffmpegBusy
     ? "FFmpeg setup is already running"
     : "";
@@ -3261,6 +3264,9 @@ function Onboarding({ state, mutate, refresh }) {
     }
   };
   const speechSupported = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && !!(window.AudioContext || window.webkitAudioContext);
+  const voiceInputDisabledReason = !speechSupported && !listening
+    ? "Voice input is not available in this WebView"
+    : "";
   React.useEffect(() => () => {
     stopRecorderRef.current?.();
     streamRef.current?.getTracks?.().forEach((track) => track.stop());
@@ -3388,6 +3394,11 @@ function Onboarding({ state, mutate, refresh }) {
     }
   };
   const pendingSources = suggestions.filter((source) => pendingSourceIds.has(source.id));
+  const continueAfterAccessDisabledReason = savingSources
+    ? "Sources are being added"
+    : !pendingSources.length
+      ? "No pending sources are ready to add"
+      : "";
   const pendingPrereqKeys = [...new Set(pendingSources.flatMap((source) => sourcePrerequisiteKeys(source, state)))];
   const blockedPendingSources = pendingSources.filter((source) => !sourceReadyForOnboarding(source, state));
   const saveXAccess = async (event) => {
@@ -3708,7 +3719,7 @@ function Onboarding({ state, mutate, refresh }) {
           <div className="setup-card-head"><BrandLogo name="Linear" /><div><h3>Linear</h3><p>Use a personal API key from Linear Settings &gt; Security &amp; access.</p></div><Badge tone={linearConnected ? "ok" : "muted"}>{linearConnected ? "Connected" : "Optional"}</Badge></div>
           <Field label="Linear personal API key" type="password" value={linearConnector.apiKey} onChange={(apiKey) => setLinearConnector({ ...linearConnector, apiKey })} placeholder={state.connectors?.linear?.apiKeySaved ? "Saved. Paste a new key to replace it." : state.connectors?.linear?.credentialStatus === "env" ? "Using LINEAR_API_KEY fallback. Paste to save locally." : "lin_api_..."} />
           {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("saved") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
-          <div className="row"><Button type="button" icon="run" onClick={testLinearAccess} disabled={!linearConnector.apiKey && state.connectors?.linear?.credentialStatus === "missing"}>Test</Button><Button type="button" icon="save" onClick={saveLinearAccess}>Save Linear</Button></div>
+          <div className="row"><Button type="button" icon="run" onClick={testLinearAccess} disabled={!!linearTestDisabledReason} title={linearTestDisabledReason || "Test Linear API key"}>Test</Button><Button type="button" icon="save" onClick={saveLinearAccess}>Save Linear</Button></div>
         </div>
         <div className="row"><Button onClick={() => go("setup")}>Back</Button><Button onClick={() => go("calendar")}>Skip Linear</Button><Button kind="primary" onClick={() => go("calendar")}>Continue</Button></div>
       </section>}
@@ -3717,7 +3728,7 @@ function Onboarding({ state, mutate, refresh }) {
         <p>Optional: describe the viewpoints you want available when you deliberate a saved brief. You can skip this and add them later.</p>
         <div className="perspective-prompt-row">
           <TextArea label="Perspective request" value={perspectivePrompt} onChange={setPerspectivePrompt} rows={5} placeholder="Example: give me a skeptical investor, a product strategist, a policy watcher, and a media narrative lens." />
-          <Button type="button" icon="mic" onClick={listenForPerspectivePrompt} disabled={!speechSupported && !listening}>{listening ? "Stop" : "Speak"}</Button>
+          <Button type="button" icon="mic" onClick={listenForPerspectivePrompt} disabled={!!voiceInputDisabledReason} title={voiceInputDisabledReason || "Start voice input"}>{listening ? "Stop" : "Speak"}</Button>
         </div>
         {!speechSupported && <p className="hint">Voice input is not available in this WebView, but typed input works normally.</p>}
         <div className="row"><Button onClick={() => go("setup")}>Back</Button><Button icon="run" onClick={generatePerspectives} disabled={!!generatePerspectivesDisabledReason} title={generatePerspectivesDisabledReason || "Generate perspective lenses"}>{generatingPerspectives ? "Generating..." : "Generate lenses"}</Button><Button onClick={() => suggestSources()}>Skip</Button><Button icon="save" kind="primary" onClick={() => savePerspectives("sources")} disabled={!!savePerspectivesDisabledReason} title={savePerspectivesDisabledReason || "Save perspective lenses and continue"}>Save and continue</Button></div>
@@ -3803,7 +3814,7 @@ function Onboarding({ state, mutate, refresh }) {
           </div>}
           <div className="row"><Button type="button" onClick={() => skipPrerequisiteSources("transcription")}>Skip transcription sources</Button></div>
         </div>}
-        <div className="row"><Button onClick={() => go("sources")}>Back</Button><Button icon="plus" kind="primary" disabled={savingSources || !pendingSources.length} onClick={continueAfterAccess}>{savingSources ? "Adding..." : "Continue with ready sources"}</Button></div>
+        <div className="row"><Button onClick={() => go("sources")}>Back</Button><Button icon="plus" kind="primary" disabled={!!continueAfterAccessDisabledReason} title={continueAfterAccessDisabledReason || "Continue with ready sources"} onClick={continueAfterAccess}>{savingSources ? "Adding..." : "Continue with ready sources"}</Button></div>
         {sourceMessage && <p className={sourceMessage.includes("added") || sourceMessage.includes("Skipped") ? "ok-text" : "warn-text"}>{sourceMessage}</p>}
       </section>}
       {step === "calendar" && <section className="onboarding-panel onboarding-panel-wide">
