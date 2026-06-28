@@ -1065,10 +1065,16 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
       setCaptureMessage(error.message || "Could not capture this task.");
     }
   };
-  const removeDailyCommitment = (item) => {
+  const removeDailyCommitment = async (item) => {
     const title = item.title || "this commitment";
     if (!window.confirm(`Remove "${title}" from Today's Three? It will stop being protected for today, but the underlying task or source item will not be deleted.`)) return;
-    mutate(`/api/time/commitments/${item.id}`, { ...item, status: "removed" }, "PATCH");
+    setCommitmentMessage("");
+    try {
+      await mutate(`/api/time/commitments/${item.id}`, { ...item, status: "removed" }, "PATCH");
+      setCommitmentMessage(`${title} removed from Today's Three.`);
+    } catch (error) {
+      setCommitmentMessage(error.message || "Could not remove commitment.");
+    }
   };
   const completeDailyCommitment = async (item) => {
     setCommitmentMessage("");
@@ -1210,10 +1216,16 @@ function Planner({ state, mutate }) {
       setPlannerMessage(error.message || "Could not add task.");
     }
   };
-  const archiveTask = (item) => {
+  const archiveTask = async (item) => {
     const title = item.title || "this task";
     if (!window.confirm(`Archive "${title}"? It will leave the active planning backlog and stop showing as a Today candidate.`)) return;
-    mutate(`/api/time/tasks/${item.id}`, { status: "archived" }, "PATCH");
+    setPlannerMessage("");
+    try {
+      await mutate(`/api/time/tasks/${item.id}`, { status: "archived" }, "PATCH");
+      setPlannerMessage(`${title} archived.`);
+    } catch (error) {
+      setPlannerMessage(error.message || "Could not archive task.");
+    }
   };
   const completeTask = async (item) => {
     setPlannerMessage("");
@@ -1287,10 +1299,16 @@ function Reminders({ state, mutate }) {
       setReminderMessage(error.message || "Could not create reminder.");
     }
   };
-  const archiveReminder = (reminder) => {
+  const archiveReminder = async (reminder) => {
     const title = reminder.title || "this reminder";
     if (!window.confirm(`Archive "${title}"? It will disappear from your active reminder list and stop scheduling future nudges.`)) return;
-    mutate(`/api/time/reminders/${reminder.id}`, { archive: true }, "PATCH");
+    setReminderMessage("");
+    try {
+      await mutate(`/api/time/reminders/${reminder.id}`, { archive: true }, "PATCH");
+      setReminderMessage(`${title} archived.`);
+    } catch (error) {
+      setReminderMessage(error.message || "Could not archive reminder.");
+    }
   };
   const updateReminder = async (reminder, patch, successMessage) => {
     setReminderMessage("");
@@ -1326,7 +1344,7 @@ function Reminders({ state, mutate }) {
     <div className="split time-section">
       <section className="panel">
         <PanelTitle icon="plus" title="Create Reminder" sub="The new reminder is off unless you enable it." />
-        {reminderMessage && <p className={reminderMessage.includes("created") ? "ok-text" : "warn-text"}>{reminderMessage}</p>}
+        {reminderMessage && <p className={reminderMessage.includes("Could not") ? "warn-text" : "ok-text"}>{reminderMessage}</p>}
         <form className="form" onSubmit={createReminder}>
           <Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} />
           <TextArea label="Body" value={form.body} rows={3} onChange={(body) => setForm({ ...form, body })} />
