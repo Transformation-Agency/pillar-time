@@ -1472,15 +1472,25 @@ function Reviews({ state, mutate }) {
 
 function Meetings({ state, mutate }) {
   const time = todayTime(state);
-  const [form, setForm] = React.useState({ title: "", startsAt: "", notes: "" });
+  const emptyMeetingForm = { title: "", startsAt: "", notes: "" };
+  const [form, setForm] = React.useState(emptyMeetingForm);
+  const [formBaseline, setFormBaseline] = React.useState(emptyMeetingForm);
   const [meetingMessage, setMeetingMessage] = React.useState("");
+  React.useEffect(() => {
+    window.__pillarTimeUnsavedMeetingDraft = JSON.stringify(form) !== JSON.stringify(formBaseline);
+    return () => {
+      window.__pillarTimeUnsavedMeetingDraft = false;
+    };
+  }, [form, formBaseline]);
   const createMeeting = async (event) => {
     event.preventDefault();
     if (!form.title.trim()) return;
     setMeetingMessage("");
     try {
       await mutate("/api/time/meetings", form);
-      setForm({ title: "", startsAt: "", notes: "" });
+      setForm(emptyMeetingForm);
+      setFormBaseline(emptyMeetingForm);
+      window.__pillarTimeUnsavedMeetingDraft = false;
       setMeetingMessage("Meeting saved.");
     } catch (error) {
       setMeetingMessage(error.message || "Could not save meeting.");
@@ -4937,6 +4947,14 @@ function App() {
         return;
       }
       window.__pillarTimeUnsavedDocumentDraft = false;
+    }
+    if (route === "meetings" && next !== "meetings" && window.__pillarTimeUnsavedMeetingDraft) {
+      const leave = window.confirm("Discard unsaved meeting notes? Title, start time, and notes will not be saved.");
+      if (!leave) {
+        location.hash = "meetings";
+        return;
+      }
+      window.__pillarTimeUnsavedMeetingDraft = false;
     }
     setRoute(next);
   }, [route]);
