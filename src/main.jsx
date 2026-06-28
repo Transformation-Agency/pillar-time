@@ -4100,12 +4100,19 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     }
   };
   const toggleGoogleCalendar = (calendarId) => {
-    setGoogleCalendarSelectionDirty(true);
     setGoogleCalendarSelection((current) => {
       if (current.includes(calendarId)) {
         const next = current.filter((item) => item !== calendarId);
-        return next.length ? next : current;
+        if (!next.length) {
+          setGoogleCalendarMessage("Keep at least one calendar selected for daily planning.");
+          return current;
+        }
+        setGoogleCalendarSelectionDirty(true);
+        setGoogleCalendarMessage("");
+        return next;
       }
+      setGoogleCalendarSelectionDirty(true);
+      setGoogleCalendarMessage("");
       return [...current, calendarId];
     });
   };
