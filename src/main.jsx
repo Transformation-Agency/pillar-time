@@ -2007,6 +2007,15 @@ function Linear({ state, refresh }) {
     }
   };
 
+  const changeIssueState = (issue, stateId) => {
+    if (!stateId || stateId === issue.state?.id) return;
+    const nextState = stateOptions.find((item) => item.id === stateId);
+    const issueLabel = issue.identifier ? `${issue.identifier} · ${issue.title}` : issue.title || "this Linear issue";
+    const stateLabel = nextState?.name || "the selected state";
+    if (!window.confirm(`Move "${issueLabel}" to "${stateLabel}" in Linear? This will update the issue in your Linear workspace.`)) return;
+    patchIssue(issue, { stateId });
+  };
+
   const createIssue = async (event) => {
     event.preventDefault();
     setMessage("");
@@ -2077,7 +2086,7 @@ function Linear({ state, refresh }) {
           <div className="source-config-title"><Icon name="box" />{group.name}<Badge>{group.issues.length}</Badge></div>
           <table className="source-table simplified"><thead><tr><th>Issue</th><th>State</th><th>Priority</th><th>Due</th><th>Comment</th><th></th></tr></thead><tbody>{group.issues.map((issue) => <tr key={issue.id}>
             <td><div className="source-name-cell"><BrandLogo name="Linear" /><div><strong>{issue.identifier} · {issue.title}</strong><small>{issue.assignee?.displayName || issue.assignee?.name || "Unassigned"} · {issue.updatedAt ? relativeTime(issue.updatedAt) : "No update"}</small></div></div></td>
-            <td><select aria-label={`State for ${issue.identifier || issue.title}`} value={issue.state?.id || ""} onChange={(event) => patchIssue(issue, { stateId: event.target.value })}>{stateOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></td>
+            <td><select aria-label={`State for ${issue.identifier || issue.title}`} value={issue.state?.id || ""} onChange={(event) => changeIssueState(issue, event.target.value)}>{stateOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></td>
             <td><Badge>{issue.priorityLabel || issue.priority || "No priority"}</Badge></td>
             <td>{issue.dueDate || "-"}</td>
             <td><input aria-label={`Comment on ${issue.identifier || issue.title}`} value={commentDrafts[issue.id] || ""} onChange={(event) => setCommentDrafts((current) => ({ ...current, [issue.id]: event.target.value }))} placeholder="Add comment..." /></td>
