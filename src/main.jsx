@@ -2384,6 +2384,11 @@ function Briefs({ state, runWorkflow, refresh }) {
   const avgSignals = state.workflowRuns.length
     ? Math.round(state.workflowRuns.reduce((sum, run) => sum + (run.artifact?.selectedIssues?.length || 0), 0) / state.workflowRuns.length)
     : 0;
+  const briefAudioDisabledReason = audioBusy
+    ? "Audio generation is already running"
+    : state.tts?.status !== "ready"
+      ? "Set up ElevenLabs in Settings before playing briefs aloud"
+      : "";
   return <Page title="Your briefs" desc="Review past briefings, open a full digest, or generate a fresh one." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate brief</Button>}>
     {state.workflowRuns.length ? <div className="briefs-layout">
       <aside className="panel recent-briefs">
@@ -2403,8 +2408,8 @@ function Briefs({ state, runWorkflow, refresh }) {
       <section className="panel brief-reader">
         {selected ? selected.status === "running" ? <BriefGenerationProgress run={selected} /> : <>
           <div className="brief-reader-actions">
-            <Button icon="volume" onClick={playBriefAudio} disabled={audioBusy || state.tts?.status !== "ready"}>{audioBusy ? "Generating..." : audioPlaying ? "Pause" : audioUrl ? "Play audio" : "Generate audio"}</Button>
-            {audioUrl && <Button icon="restart" onClick={restartBriefAudio} disabled={audioBusy || state.tts?.status !== "ready"}>Restart</Button>}
+            <Button icon="volume" onClick={playBriefAudio} disabled={!!briefAudioDisabledReason} title={briefAudioDisabledReason || "Generate or play brief audio"}>{audioBusy ? "Generating..." : audioPlaying ? "Pause" : audioUrl ? "Play audio" : "Generate audio"}</Button>
+            {audioUrl && <Button icon="restart" onClick={restartBriefAudio} disabled={!!briefAudioDisabledReason} title={briefAudioDisabledReason || "Restart brief audio"}>Restart</Button>}
             {state.tts?.status !== "ready" && <span>Set up ElevenLabs in Settings to play briefs aloud.</span>}
           </div>
           {audioMessage && <p className={audioMessage.includes("generated") ? "ok-text" : "warn-text"}>{audioMessage}</p>}
