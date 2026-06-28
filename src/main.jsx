@@ -47,7 +47,7 @@ import "./styles.css";
 const nav = [
   ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
   ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["documents", "Documents"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"], ["approvals", "Approvals"]]],
-  ["Configure", [["briefSetup", "Brief Setup"]]],
+  ["Configure", [["briefSetup", "Brief Setup"], ["lenses", "Perspective Lenses"]]],
   ["System", [["settings", "Settings"]]],
 ];
 
@@ -4811,7 +4811,6 @@ function Select({ label, value, onChange, options }) {
 
 function routeFromHash() {
   const route = location.hash.replace(/^#\/?/, "") || "today";
-  if (route === "lenses") return "briefSetup";
   return route;
 }
 
@@ -4821,8 +4820,7 @@ function App() {
   const { state, error, mutate, refresh } = useConsoleState();
   const desktopUpdate = useDesktopUpdates();
   const requestRoute = React.useCallback((nextRoute) => {
-    const requested = nextRoute || "overview";
-    const next = requested === "lenses" ? "briefSetup" : requested;
+    const next = nextRoute || "overview";
     if (route === "briefSetup" && next !== "briefSetup" && window.__pillarBriefUnsavedBriefSetup) {
       const leave = window.confirm("You have unsaved brief setup changes. Leave without saving?");
       if (!leave) {
@@ -4901,6 +4899,7 @@ function App() {
     sources: <Sources state={state} mutate={mutate} />,
     generating: <GeneratingBrief runState={runState} />,
     briefSetup: <BriefSetup state={state} mutate={mutate} />,
+    lenses: <Lenses state={state} mutate={mutate} />,
     linear: <Linear state={state} refresh={refresh} />,
     trustedContext: <TrustedContext state={state} mutate={mutate} />,
     approvals: <Approvals state={state} mutate={mutate} />,
