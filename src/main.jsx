@@ -4354,6 +4354,15 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const xConnected = state.connectors?.x?.status === "ready";
   const redditConnected = state.connectors?.reddit?.status === "ready";
   const linearConnected = state.connectors?.linear?.status === "ready";
+  const settingsLinearTestDisabledReason = !linearConnector.apiKey && state.connectors?.linear?.credentialStatus === "missing"
+    ? "Paste a Linear API key before testing"
+    : "";
+  const settingsLinearSaveDisabledReason = !linearConnector.apiKey && !state.connectors?.linear?.apiKeySaved && state.connectors?.linear?.credentialStatus !== "env"
+    ? "Paste a Linear API key before saving, or leave Linear disabled"
+    : "";
+  const settingsLinearOpenDisabledReason = !linearConnected
+    ? "Connect Linear before opening issues"
+    : "";
   const googleCalendarConnected = state.connectors?.googleCalendar?.status === "ready";
   const googleCalendarCanWrite = !!state.connectors?.googleCalendar?.canWrite;
   const googleCalendarNeedsWriteReconnect = googleCalendarConnected && !googleCalendarCanWrite;
@@ -4730,10 +4739,10 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("enabled") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
         <div className="modal-actions">
           <Button type="button" onClick={closeLinearModal}>Cancel</Button>
-          <Button type="button" icon="run" onClick={testLinearConnector}>Test</Button>
+          <Button type="button" icon="run" onClick={testLinearConnector} disabled={!!settingsLinearTestDisabledReason} title={settingsLinearTestDisabledReason || "Test Linear API key"}>Test</Button>
           {state.connectors?.linear?.enabled ? <Button type="button" icon="trash" onClick={disableLinearConnector}>Disable</Button> : null}
-          <Button type="button" icon="save" onClick={enableLinearConnector}>Save</Button>
-          <Button type="button" icon="linear" kind="primary" onClick={() => { if (closeLinearModal()) location.hash = "linear"; }}>Open Linear</Button>
+          <Button type="button" icon="save" onClick={enableLinearConnector} disabled={!!settingsLinearSaveDisabledReason} title={settingsLinearSaveDisabledReason || "Save Linear connector"}>Save</Button>
+          <Button type="button" icon="linear" kind="primary" onClick={() => { if (closeLinearModal()) location.hash = "linear"; }} disabled={!!settingsLinearOpenDisabledReason} title={settingsLinearOpenDisabledReason || "Open Linear issues"}>Open Linear</Button>
         </div>
       </div>
     </div>}

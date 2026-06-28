@@ -556,6 +556,15 @@ test("Linear setup warns before discarding unsaved connector edits", () => {
   assert.doesNotMatch(mainSource, /aria-label="Close Linear setup" onClick=\{\(\) => setLinearModal\(false\)\}/);
 });
 
+test("Settings Linear setup actions explain missing credentials", () => {
+  assert.match(mainSource, /const settingsLinearTestDisabledReason = !linearConnector\.apiKey && state\.connectors\?\.linear\?\.credentialStatus === "missing"\n\s+\? "Paste a Linear API key before testing"\n\s+: "";/);
+  assert.match(mainSource, /const settingsLinearSaveDisabledReason = !linearConnector\.apiKey && !state\.connectors\?\.linear\?\.apiKeySaved && state\.connectors\?\.linear\?\.credentialStatus !== "env"\n\s+\? "Paste a Linear API key before saving, or leave Linear disabled"\n\s+: "";/);
+  assert.match(mainSource, /const settingsLinearOpenDisabledReason = !linearConnected\n\s+\? "Connect Linear before opening issues"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!settingsLinearTestDisabledReason\} title=\{settingsLinearTestDisabledReason \|\| "Test Linear API key"\}>Test<\/Button>/);
+  assert.match(mainSource, /disabled=\{!!settingsLinearSaveDisabledReason\} title=\{settingsLinearSaveDisabledReason \|\| "Save Linear connector"\}>Save<\/Button>/);
+  assert.match(mainSource, /disabled=\{!!settingsLinearOpenDisabledReason\} title=\{settingsLinearOpenDisabledReason \|\| "Open Linear issues"\}>Open Linear<\/Button>/);
+});
+
 test("X and Reddit setup warn before discarding unsaved credentials", () => {
   assert.match(mainSource, /const closeXModal = \(\) => \{/);
   assert.match(mainSource, /Discard unsaved X API token\? The pasted bearer token will not be saved\./);
