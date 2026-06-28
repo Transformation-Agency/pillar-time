@@ -593,6 +593,12 @@ test("Settings Linear setup actions explain missing credentials", () => {
   assert.match(mainSource, /disabled=\{!!settingsLinearOpenDisabledReason\} title=\{settingsLinearOpenDisabledReason \|\| "Open Linear issues"\}>Open Linear<\/Button>/);
 });
 
+test("Settings Linear disable confirms and reports success as non-warning", () => {
+  assert.match(mainSource, /const disableLinearConnector = async \(\) => \{\n\s+if \(!window\.confirm\("Disable Linear connector\? Pillar Time will stop refreshing Linear issues and cannot include current Linear work in day planning until you re-enable it\."\)\) return;/);
+  assert.match(mainSource, /await mutate\("\/api\/connectors\/linear", \{ enabled: false \}, "PATCH"\);\n\s+setLinearMessage\("Linear connector disabled\."\);/);
+  assert.match(mainSource, /\{linearMessage && <p className=\{linearMessage\.includes\("ready"\) \|\| linearMessage\.includes\("enabled"\) \|\| linearMessage\.includes\("disabled"\) \? "ok-text" : "warn-text"\}>\{linearMessage\}<\/p>\}/);
+});
+
 test("X and Reddit setup warn before discarding unsaved credentials", () => {
   assert.match(mainSource, /const closeXModal = \(\) => \{/);
   assert.match(mainSource, /Discard unsaved X API token\? The pasted bearer token will not be saved\./);
