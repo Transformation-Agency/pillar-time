@@ -264,6 +264,14 @@ test("Source table actions expose local success and failure messages", () => {
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/sources\/\$\{s\.id\}`, \{ status: active \? "paused" : "active" \}, "PATCH"\)\}/);
 });
 
+test("Podcast source setup explains disabled resolver and transcription states", () => {
+  assert.match(mainSource, /const spotifyResolveDisabledReason = spotifyResolve\.loading\n\s+\? "Spotify RSS resolution is already running"\n\s+: !form\.config\.spotifyUrl\n\s+\? "Paste a Spotify show or episode URL first"\n\s+: "";/);
+  assert.match(mainSource, /const podcastTranscriptionDisabledReason = !transcriptionAvailable\n\s+\? "Set up FFmpeg plus local Whisper or a cloud transcription model first"\n\s+: "";/);
+  assert.match(mainSource, /setSpotifyResolve\(\{ loading: false, message: error\.message \|\| "Could not resolve Spotify RSS feed\.", tone: "warn" \}\);/);
+  assert.match(mainSource, /disabled=\{!!spotifyResolveDisabledReason\} title=\{spotifyResolveDisabledReason \|\| "Resolve Spotify RSS feed"\}/);
+  assert.match(mainSource, /title=\{podcastTranscriptionDisabledReason \|\| "Transcribe new podcast episodes for briefs"\}><input type="checkbox" checked=\{form\.config\.transcribeNewEpisodes !== false && transcriptionAvailable\} disabled=\{!!podcastTranscriptionDisabledReason\}/);
+});
+
 test("Documents are reachable and expose local success and failure messages", () => {
   assert.match(mainSource, /\["Context", \[\["briefs", "Intelligence"\], \["sources", "Sources"\], \["documents", "Documents"\], \["meetings", "Meetings"\], \["linear", "Linear"\], \["trustedContext", "Trusted Context"\], \["approvals", "Approvals"\]\]\]/);
   assert.match(mainSource, /documents: FileText,/);
