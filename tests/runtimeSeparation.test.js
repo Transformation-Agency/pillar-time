@@ -160,6 +160,10 @@ test("First-run controls avoid misleading defaults and internal labels", () => {
   assert.match(mainSource, /Missing connectors will be reported/);
   assert.match(mainSource, /Local health check/);
   assert.match(mainSource, /runSettingsHealthCheck/);
+  assert.match(mainSource, /const settingsUpdateCheckDisabledReason = desktopUpdate\?\.status === "installing"\n\s+\? "Update installation is already running"\n\s+: desktopUpdate\?\.status === "checking"\n\s+\? "Update check is already running"\n\s+: "";/);
+  assert.match(mainSource, /const settingsHealthCheckDisabledReason = healthBusy\n\s+\? "Local health check is already running"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!settingsUpdateCheckDisabledReason\} title=\{settingsUpdateCheckDisabledReason \|\| "Check for signed desktop updates"\}/);
+  assert.match(mainSource, /disabled=\{!!settingsHealthCheckDisabledReason\} title=\{settingsHealthCheckDisabledReason \|\| "Run local health check"\}/);
   assert.match(mainSource, /No blocking local health warnings detected from current state/);
   assert.doesNotMatch(mainSource, /All systems operational/);
   assert.match(mainSource, /const reopenOnboarding/);
@@ -417,6 +421,8 @@ test("Help update menu exposes expanded state and keyboard dismissal", () => {
   assert.match(mainSource, /window\.removeEventListener\("keydown", onKeyDown\)/);
   assert.match(mainSource, /aria-haspopup="menu" aria-expanded=\{helpOpen\} aria-controls="help-update-menu"/);
   assert.match(mainSource, /id="help-update-menu" className="help-menu" role="menu" aria-label="Help and update actions"/);
+  assert.match(mainSource, /const updateCheckDisabledReason = desktopUpdate\?\.status === "installing"\n\s+\? "Update installation is already running"\n\s+: updateBusy\n\s+\? "Update check is already running"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!updateCheckDisabledReason\} title=\{updateCheckDisabledReason \|\| "Check for signed desktop updates"\}/);
   assert.match(mainSource, /<Button type="button" role="menuitem" icon="run" onClick=\{\(\) => desktopUpdate\.checkForUpdates\(\)\}/);
   assert.match(mainSource, /<Button type="button" role="menuitem" icon="download" kind="primary" onClick=\{desktopUpdate\.installUpdate\}>Install Update<\/Button>/);
   assert.match(mainSource, /<Button type="button" role="menuitem" icon="restart" kind="primary" onClick=\{desktopUpdate\.restartApp\}>Restart to Update<\/Button>/);

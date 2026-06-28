@@ -638,6 +638,11 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
   const counts = {};
   const updateVisible = desktopUpdate?.isDesktop && ["available", "installed"].includes(desktopUpdate.status);
   const updateBusy = ["checking", "checking-silent", "installing"].includes(desktopUpdate?.status);
+  const updateCheckDisabledReason = desktopUpdate?.status === "installing"
+    ? "Update installation is already running"
+    : updateBusy
+      ? "Update check is already running"
+      : "";
   const updateStatus = desktopUpdate?.status === "available"
     ? `Update ${desktopUpdate.update?.version ? `v${desktopUpdate.update.version}` : ""} available`
     : desktopUpdate?.status === "installed"
@@ -693,7 +698,7 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
             <span>{desktopUpdate?.isDesktop ? (desktopUpdate.progress || desktopUpdate.message || updateStatus) : "Updates are available in the desktop app."}</span>
           </div>
           {desktopUpdate?.isDesktop && <div className="help-menu-actions">
-            <Button type="button" role="menuitem" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={updateBusy}>{desktopUpdate?.status === "checking" ? "Checking..." : "Check for Updates"}</Button>
+            <Button type="button" role="menuitem" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={!!updateCheckDisabledReason} title={updateCheckDisabledReason || "Check for signed desktop updates"}>{desktopUpdate?.status === "checking" ? "Checking..." : "Check for Updates"}</Button>
             {desktopUpdate.status === "available" && <Button type="button" role="menuitem" icon="download" kind="primary" onClick={desktopUpdate.installUpdate}>Install Update</Button>}
             {desktopUpdate.status === "installed" && <Button type="button" role="menuitem" icon="restart" kind="primary" onClick={desktopUpdate.restartApp}>Restart to Update</Button>}
             <Button type="button" role="menuitem" icon="settings" onClick={() => { setHelpOpen(false); setRoute("settings"); }}>Open Update Settings</Button>
@@ -4444,6 +4449,14 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         : desktopUpdate?.status === "current"
           ? "Up to date"
           : "Desktop only";
+  const settingsUpdateCheckDisabledReason = desktopUpdate?.status === "installing"
+    ? "Update installation is already running"
+    : desktopUpdate?.status === "checking"
+      ? "Update check is already running"
+      : "";
+  const settingsHealthCheckDisabledReason = healthBusy
+    ? "Local health check is already running"
+    : "";
   return <Page
     title="Settings"
     desc="Configure the models, services, and APIs used to analyze, research, and deliver your brief."
@@ -4463,7 +4476,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <Badge tone={updateTone}>{desktopUpdate.update?.version ? `v${desktopUpdate.update.version}` : updateLabel}</Badge>
           <span>{desktopUpdate.progress || desktopUpdate.message || "Check for signed updates."}</span>
           <div className="row tight-row">
-            <Button type="button" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={desktopUpdate.status === "checking" || desktopUpdate.status === "installing"}>{desktopUpdate.status === "checking" ? "Checking..." : "Check"}</Button>
+            <Button type="button" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={!!settingsUpdateCheckDisabledReason} title={settingsUpdateCheckDisabledReason || "Check for signed desktop updates"}>{desktopUpdate.status === "checking" ? "Checking..." : "Check"}</Button>
             {desktopUpdate.status === "available" && <Button type="button" icon="download" kind="primary" onClick={desktopUpdate.installUpdate}>Install</Button>}
             {desktopUpdate.status === "installed" && <Button type="button" icon="restart" kind="primary" onClick={desktopUpdate.restartApp}>Restart</Button>}
           </div>
@@ -4583,7 +4596,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           {healthWarnings.length > 4 && <span>- {healthWarnings.length - 4} more warning{healthWarnings.length - 4 === 1 ? "" : "s"} visible in connector sections above.</span>}
           {healthMessage && <span>{healthMessage}</span>}
         </div>
-        <Button type="button" icon="run" onClick={runSettingsHealthCheck} disabled={healthBusy}>{healthBusy ? "Checking..." : "Run health check"}</Button>
+        <Button type="button" icon="run" onClick={runSettingsHealthCheck} disabled={!!settingsHealthCheckDisabledReason} title={settingsHealthCheckDisabledReason || "Run local health check"}>{healthBusy ? "Checking..." : "Run health check"}</Button>
       </section>
 
       <section className="panel audit-settings">
