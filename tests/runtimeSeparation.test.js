@@ -410,6 +410,13 @@ test("Brief setup section action controls are labeled and guarded", () => {
   assert.doesNotMatch(mainSource, /<Button type="button" icon="pencil" \/>/);
 });
 
+test("Brief setup analyzer removal explains the final-analyzer guard", () => {
+  assert.match(mainSource, /if \(\(current\.analyzers \|\| \[\]\)\.length <= 1\) return current;/);
+  assert.match(mainSource, /const removeAnalyzerDisabledReason = \(form\.analyzers \|\| \[\]\)\.length <= 1 \? "Keep at least one analyzer for generated briefs\." : "";/);
+  assert.match(mainSource, /disabled=\{!!removeAnalyzerDisabledReason\} title=\{removeAnalyzerDisabledReason \|\| `Remove \$\{analyzer\.name \|\| "analyzer"\}`\}/);
+  assert.doesNotMatch(mainSource, /disabled=\{\(form\.analyzers \|\| \[\]\)\.length <= 1\}>Remove<\/Button>/);
+});
+
 test("Brief setup save failures expose the actual error message", () => {
   assert.match(mainSource, /const \[saveState, setSaveState\] = React\.useState\("saved"\);/);
   assert.match(mainSource, /const \[saveError, setSaveError\] = React\.useState\(""\);/);

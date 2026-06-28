@@ -2166,10 +2166,13 @@ function BriefSetup({ state, mutate }) {
     ...current,
     analyzers: [...(current.analyzers || []), { id: `analyzer-${Date.now()}`, name: "New Analyzer", role: "Analysis role", description: "", instructions: "Evaluate the selected source items from this analysis angle and name what changes the read.", enabled: true }],
   }));
-  const removeAnalyzer = (index) => markForm((current) => ({
-    ...current,
-    analyzers: (current.analyzers || []).filter((_, i) => i !== index),
-  }));
+  const removeAnalyzer = (index) => markForm((current) => {
+    if ((current.analyzers || []).length <= 1) return current;
+    return {
+      ...current,
+      analyzers: (current.analyzers || []).filter((_, i) => i !== index),
+    };
+  });
   const save = (event) => {
     event?.preventDefault?.();
     setSaveState("saving");
@@ -2186,6 +2189,7 @@ function BriefSetup({ state, mutate }) {
   };
   if (!form) return null;
   const enabledSections = form.sections.filter((section) => section.enabled !== false);
+  const removeAnalyzerDisabledReason = (form.analyzers || []).length <= 1 ? "Keep at least one analyzer for generated briefs." : "";
   return <Page title="Brief setup" desc="Define the owner, voice, and section flow for every brief." wide action={<Badge tone={saveState === "error" ? "warn" : saveState === "unsaved" ? "warn" : saveState === "saved" ? "ok" : "muted"}>{saveState === "saving" ? "Saving..." : saveState === "error" ? "Save failed" : saveState === "unsaved" ? "Unsaved changes" : "Saved"}</Badge>}>
     {saveError && <p className="warn-text">Could not save brief setup: {saveError}</p>}
     <div className="setup-layout">
@@ -2209,7 +2213,7 @@ function BriefSetup({ state, mutate }) {
             <Field label="Role" value={analyzer.role || ""} onChange={(role) => updateAnalyzer(index, { role })} />
             <TextArea label="Description" value={analyzer.description || ""} onChange={(description) => updateAnalyzer(index, { description })} rows={2} />
             <TextArea label="Instructions" value={analyzer.instructions || ""} onChange={(instructions) => updateAnalyzer(index, { instructions })} rows={3} />
-            <Button type="button" icon="trash" onClick={() => removeAnalyzer(index)} disabled={(form.analyzers || []).length <= 1}>Remove</Button>
+            <Button type="button" icon="trash" onClick={() => removeAnalyzer(index)} disabled={!!removeAnalyzerDisabledReason} title={removeAnalyzerDisabledReason || `Remove ${analyzer.name || "analyzer"}`}>Remove</Button>
           </div>)}
         </div>
       </section>
