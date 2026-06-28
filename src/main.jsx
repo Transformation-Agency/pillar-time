@@ -1467,13 +1467,18 @@ function TrustedContext({ state, mutate }) {
   React.useEffect(() => setPreview(context.envelopePreview), [context.envelopePreview]);
   const saveFact = async (event) => {
     event.preventDefault();
+    const requiredMissing = !factForm.resourceType.trim() || !factForm.fieldKey.trim() || !String(factForm.value || "").trim();
+    if (requiredMissing) {
+      setMessage("Add a resource type, field key, and value before saving.");
+      return;
+    }
     setMessage("");
     try {
       await mutate("/api/trusted-context/facts", factForm, "POST");
       setFactForm((current) => ({ ...current, value: "" }));
       setMessage("Fact saved.");
     } catch (error) {
-      setMessage(error.message);
+      setMessage(error.message || "Could not save profile fact.");
     }
   };
   const previewEnvelope = async () => {
@@ -1486,11 +1491,17 @@ function TrustedContext({ state, mutate }) {
       setPreview(result.envelope);
       setMessage("Envelope refreshed.");
     } catch (error) {
-      setMessage(error.message);
+      setMessage(error.message || "Could not refresh envelope.");
     }
   };
   const updateProposal = async (proposal, status) => {
-    await mutate(`/api/trusted-context/proposals/${proposal.id}`, { status }, "PATCH");
+    setMessage("");
+    try {
+      await mutate(`/api/trusted-context/proposals/${proposal.id}`, { status }, "PATCH");
+      setMessage(`Proposal ${status}.`);
+    } catch (error) {
+      setMessage(error.message || `Could not ${status} proposal.`);
+    }
   };
   const toneForVisibility = (visibility) => visibility === "private" ? "warn" : visibility === "public" ? "ok" : "muted";
   return <Page
@@ -1541,9 +1552,9 @@ function TrustedContext({ state, mutate }) {
             <Select label="Trust level" value={factForm.trustLevel} onChange={(trustLevel) => setFactForm({ ...factForm, trustLevel })} options={Object.keys(health.trustLevels || { verified_canonical_profile: 6, imported_unverified: 9 }).map((value) => ({ value, label: value }))} />
             <Select label="Verification" value={factForm.verificationStatus} onChange={(verificationStatus) => setFactForm({ ...factForm, verificationStatus })} options={["verified", "user_confirmed", "source_verified", "system_verified", "unverified", "observed", "inferred"].map((value) => ({ value, label: value }))} />
           </div>
-          <Button icon="save" kind="primary">Save fact</Button>
+          <Button icon="save" kind="primary" disabled={!factForm.resourceType.trim() || !factForm.fieldKey.trim() || !String(factForm.value || "").trim()} title={!factForm.resourceType.trim() || !factForm.fieldKey.trim() || !String(factForm.value || "").trim() ? "Add resource type, field key, and value first" : "Save fact"}>Save fact</Button>
         </form>
-        {message && <p className={message.includes("saved") || message.includes("refreshed") ? "ok-text" : "warn-text"}>{message}</p>}
+        {message && <p className={message.includes("saved") || message.includes("refreshed") || message.includes("approved") || message.includes("rejected") ? "ok-text" : "warn-text"}>{message}</p>}
       </section>
       <section className="panel">
         <PanelTitle icon="trustedContext" title="Memory Proposals" sub={`${(context.proposals || []).filter((item) => item.status === "proposed").length} proposed`} />
