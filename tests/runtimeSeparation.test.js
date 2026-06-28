@@ -505,6 +505,15 @@ test("Desktop update restart asks before quitting the app", () => {
   assert.doesNotMatch(mainSource, /const restartApp = React\.useCallback\(\(\) => desktopRuntime\.restartApp\(\), \[\]\);/);
 });
 
+test("Desktop update install asks before downloading and keeps fallback errors", () => {
+  assert.match(mainSource, /const installUpdate = React\.useCallback\(async \(\) => \{\n\s+if \(!updateState\.update\) return;/);
+  assert.match(mainSource, /const versionLabel = updateState\.update\.version \? `version \$\{updateState\.update\.version\}` : "the available update";/);
+  assert.match(mainSource, /Install \$\{versionLabel\} now\? Pillar Time will download and stage a signed desktop update, then ask you to restart when it is ready\./);
+  assert.match(mainSource, /if \(!ok\) return;\n\s+let downloaded = 0;/);
+  assert.match(mainSource, /message: error\.message \|\| "Update install failed\.",/);
+  assert.doesNotMatch(mainSource, /message: error\.message,\n\s+progress: "",\n\s+lastError: error\.message \|\| "Update install failed"/);
+});
+
 test("Connector picker sends ElevenLabs users to audio settings", () => {
   assert.match(mainSource, /const openAudioBriefSettings = \(\) => \{/);
   assert.match(mainSource, /document\.getElementById\("audio-briefs-settings"\)\?\.scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);

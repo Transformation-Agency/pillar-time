@@ -563,6 +563,9 @@ function useDesktopUpdates() {
 
   const installUpdate = React.useCallback(async () => {
     if (!updateState.update) return;
+    const versionLabel = updateState.update.version ? `version ${updateState.update.version}` : "the available update";
+    const ok = window.confirm(`Install ${versionLabel} now? Pillar Time will download and stage a signed desktop update, then ask you to restart when it is ready.`);
+    if (!ok) return;
     let downloaded = 0;
     setUpdateState((current) => ({
       ...current,
@@ -600,7 +603,7 @@ function useDesktopUpdates() {
       setUpdateState((current) => ({
         ...current,
         status: "error",
-        message: error.message,
+        message: error.message || "Update install failed.",
         progress: "",
         lastError: error.message || "Update install failed",
       }));
