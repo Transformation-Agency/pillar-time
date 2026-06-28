@@ -212,7 +212,7 @@ test("Modal panels expose dialog semantics", () => {
 });
 
 test("Planning removal actions ask for confirmation before hiding active items", () => {
-  assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute \}\)/);
+  assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute, workflowDisabledReason = "" \}\)/);
   assert.match(mainSource, /Remove "\$\{title\}" from Today's Three\? It will stop being protected for today, but the underlying task or source item will not be deleted\./);
   assert.match(mainSource, /const removeDailyCommitment = async \(item\) => \{\n\s+const title = item\.title \|\| "this commitment";/);
   assert.match(mainSource, /await mutate\(`\/api\/time\/commitments\/\$\{item\.id\}`, \{ \.\.\.item, status: "removed" \}, "PATCH"\);\n\s+setCommitmentMessage\(`\$\{title\} removed from Today's Three\.`\);/);
@@ -753,6 +753,20 @@ test("Today view brief action explains empty first-run state", () => {
   assert.match(mainSource, /const viewBriefDisabledReason = latestArtifact \? "" : "Generate a day plan before viewing the brief";/);
   assert.match(mainSource, /disabled=\{!!viewBriefDisabledReason\} title=\{viewBriefDisabledReason \|\| "View the latest day-plan brief"\}>View Brief<\/Button>/);
   assert.doesNotMatch(mainSource, /disabled=\{!latestArtifact\}>View Brief<\/Button>/);
+});
+
+test("Generation actions explain and guard already-running workflows", () => {
+  assert.match(mainSource, /const runInFlightRef = React\.useRef\(false\);/);
+  assert.match(mainSource, /if \(runInFlightRef\.current\) \{\n\s+requestRoute\("generating"\);\n\s+return \{ run: null, skipped: true \};\n\s+\}\n\s+runInFlightRef\.current = true;/);
+  assert.match(mainSource, /finally \{\n\s+runInFlightRef\.current = false;\n\s+\}/);
+  assert.match(mainSource, /const workflowDisabledReason = runState\.status === "running" \? "A generation run is already in progress" : "";/);
+  assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute, workflowDisabledReason = "" \}\)/);
+  assert.match(mainSource, /disabled=\{!!workflowDisabledReason\} title=\{workflowDisabledReason \|\| "Generate a day plan"\}>Generate Day Plan<\/Button>/);
+  assert.match(mainSource, /disabled=\{!!workflowDisabledReason\} title=\{workflowDisabledReason \|\| "Add context and regenerate the day plan"\}>Add Context & Regenerate<\/Button>/);
+  assert.match(mainSource, /function Briefs\(\{ state, runWorkflow, refresh, workflowDisabledReason = "" \}\)/);
+  assert.match(mainSource, /disabled=\{!!workflowDisabledReason\} title=\{workflowDisabledReason \|\| "Generate brief"\}>Generate brief<\/Button>/);
+  assert.doesNotMatch(mainSource, /<Button icon="run" kind="accent" onClick=\{runWorkflow\}>Generate Day Plan<\/Button>/);
+  assert.doesNotMatch(mainSource, /<Button icon="run" kind="accent" onClick=\{runWorkflow\}>Generate brief<\/Button>/);
 });
 
 test("Telegram pairing disabled action and polling errors explain recovery", () => {

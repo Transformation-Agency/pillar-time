@@ -1070,7 +1070,7 @@ function ProposedCalendarTiles({ artifact, approvals = [], mutate, setRoute }) {
   </section>;
 }
 
-function Today({ state, mutate, runWorkflow, setRoute }) {
+function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = "" }) {
   const time = todayTime(state);
   const [capture, setCapture] = React.useState("");
   const [contextType, setContextType] = React.useState("todo");
@@ -1188,7 +1188,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     await runWorkflow();
   };
   const viewBriefDisabledReason = latestArtifact ? "" : "Generate a day plan before viewing the brief";
-  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<div className="row tight-row"><Button icon="briefs" onClick={() => setRoute("briefs")} disabled={!!viewBriefDisabledReason} title={viewBriefDisabledReason || "View the latest day-plan brief"}>View Brief</Button><Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Plan</Button></div>}>
+  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<div className="row tight-row"><Button icon="briefs" onClick={() => setRoute("briefs")} disabled={!!viewBriefDisabledReason} title={viewBriefDisabledReason || "View the latest day-plan brief"}>View Brief</Button><Button icon="run" kind="accent" onClick={runWorkflow} disabled={!!workflowDisabledReason} title={workflowDisabledReason || "Generate a day plan"}>Generate Day Plan</Button></div>}>
     <div className={`day-plan-preflight ${missingDayPlanContext.length ? "has-gaps" : ""}`}>
       <Icon name={missingDayPlanContext.length ? "help" : "check"} />
       <span>{dayPlanPreflight}</span>
@@ -1225,7 +1225,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
           ]} />
           <TextArea label="Paste or type context" value={contextText} onChange={setContextText} rows={5} placeholder="Paste a statement, commitment list, or task notes here." />
           <label className="file-context-input"><Upload className="ico" /><span>Import text file</span><input type="file" accept=".txt,.md,.csv,.json,.text" onChange={importContextFile} /></label>
-          <div className="row tight-row"><Button icon="save" kind="primary">Save Context</Button><Button type="button" icon="run" onClick={regenerateWithContext}>Add Context & Regenerate</Button></div>
+          <div className="row tight-row"><Button icon="save" kind="primary">Save Context</Button><Button type="button" icon="run" onClick={regenerateWithContext} disabled={!!workflowDisabledReason} title={workflowDisabledReason || "Add context and regenerate the day plan"}>Add Context & Regenerate</Button></div>
         </form>
         {contextMessage && <p className={contextMessage.includes("Saved") ? "ok-text" : "warn-text"}>{contextMessage}</p>}
       </section>
@@ -2364,7 +2364,7 @@ function BriefGenerationProgress({ run }) {
   </div>;
 }
 
-function Briefs({ state, runWorkflow, refresh }) {
+function Briefs({ state, runWorkflow, refresh, workflowDisabledReason = "" }) {
   const [selectedId, setSelectedId] = React.useState(state.workflowRuns[0]?.id || "");
   const [query, setQuery] = React.useState("");
   const [audioBusy, setAudioBusy] = React.useState(false);
@@ -2438,7 +2438,7 @@ function Briefs({ state, runWorkflow, refresh }) {
     : state.tts?.status !== "ready"
       ? "Set up ElevenLabs in Settings before playing briefs aloud"
       : "";
-  return <Page title="Your briefs" desc="Review past briefings, open a full digest, or generate a fresh one." wide action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate brief</Button>}>
+  return <Page title="Your briefs" desc="Review past briefings, open a full digest, or generate a fresh one." wide action={<Button icon="run" kind="accent" onClick={runWorkflow} disabled={!!workflowDisabledReason} title={workflowDisabledReason || "Generate brief"}>Generate brief</Button>}>
     {state.workflowRuns.length ? <div className="briefs-layout">
       <aside className="panel recent-briefs">
         <h2>Recent Briefs</h2>
@@ -2470,7 +2470,7 @@ function Briefs({ state, runWorkflow, refresh }) {
         <Metric label="Avg signals" value={avgSignals} sub="per brief" />
         <Metric label="Next delivery" value={formatDeliveryTime(state.briefConfig.deliveryTime)} sub={`${state.briefConfig.deliveryFrequency} brief`} />
       </div>
-    </div> : <div className="panel"><Empty icon="briefs" title="No briefs rendered" body="Generate a fresh brief from your connected sources." action={<Button icon="run" kind="accent" onClick={runWorkflow}>Generate brief</Button>} /></div>}
+    </div> : <div className="panel"><Empty icon="briefs" title="No briefs rendered" body="Generate a fresh brief from your connected sources." action={<Button icon="run" kind="accent" onClick={runWorkflow} disabled={!!workflowDisabledReason} title={workflowDisabledReason || "Generate brief"}>Generate brief</Button>} /></div>}
   </Page>;
 }
 
@@ -4817,6 +4817,7 @@ function routeFromHash() {
 function App() {
   const [route, setRoute] = React.useState(routeFromHash());
   const [runState, setRunState] = React.useState({ status: "idle", stepIndex: 0, error: "" });
+  const runInFlightRef = React.useRef(false);
   const { state, error, mutate, refresh } = useConsoleState();
   const desktopUpdate = useDesktopUpdates();
   const requestRoute = React.useCallback((nextRoute) => {
@@ -4838,6 +4839,11 @@ function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, [requestRoute]);
   const runWorkflow = async ({ runType = "executive_day", trigger } = {}) => {
+    if (runInFlightRef.current) {
+      requestRoute("generating");
+      return { run: null, skipped: true };
+    }
+    runInFlightRef.current = true;
     const stepSource = runType === "executive_day" ? state?.runtime?.executiveWorkflowSteps : state?.runtime?.workflowSteps;
     const steps = stepSource?.length ? stepSource : [{ key: "run", name: runType === "executive_day" ? "Generating day plan" : "Generating brief" }];
     setRunState({ status: "running", stepIndex: 0, error: "", steps, runType });
@@ -4878,6 +4884,8 @@ function App() {
     } catch (runError) {
       setRunState((current) => ({ ...current, status: "error", error: runError.message }));
       throw runError;
+    } finally {
+      runInFlightRef.current = false;
     }
   };
   if (error) return <div className="boot boot-error">
@@ -4890,15 +4898,16 @@ function App() {
     <p>Loading the local backend and your local workspace data. This can take a moment after install or update.</p>
   </div>;
   if (!state.onboarding?.completed) return <Onboarding state={state} mutate={mutate} refresh={refresh} />;
+  const workflowDisabledReason = runState.status === "running" ? "A generation run is already in progress" : "";
   const screens = {
-    today: <Today state={state} mutate={mutate} runWorkflow={() => runWorkflow({ runType: "executive_day" })} setRoute={requestRoute} />,
+    today: <Today state={state} mutate={mutate} runWorkflow={() => runWorkflow({ runType: "executive_day" })} setRoute={requestRoute} workflowDisabledReason={workflowDisabledReason} />,
     planner: <Planner state={state} mutate={mutate} />,
     reminders: <Reminders state={state} mutate={mutate} />,
     reviews: <Reviews state={state} mutate={mutate} />,
     meetings: <Meetings state={state} mutate={mutate} />,
     documents: <Documents state={state} mutate={mutate} />,
     overview: <Overview state={state} setRoute={requestRoute} runWorkflow={() => runWorkflow({ runType: "executive_day" })} mutate={mutate} />,
-    briefs: <Briefs state={state} runWorkflow={() => runWorkflow({ runType: "intelligence" })} refresh={refresh} />,
+    briefs: <Briefs state={state} runWorkflow={() => runWorkflow({ runType: "intelligence" })} refresh={refresh} workflowDisabledReason={workflowDisabledReason} />,
     sources: <Sources state={state} mutate={mutate} />,
     generating: <GeneratingBrief runState={runState} />,
     briefSetup: <BriefSetup state={state} mutate={mutate} />,
