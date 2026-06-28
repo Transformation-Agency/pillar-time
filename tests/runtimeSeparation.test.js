@@ -195,7 +195,7 @@ test("High-use placeholder and table controls expose accessible labels", () => {
 });
 
 test("Source table actions expose local success and failure messages", () => {
-  assert.match(mainSource, /\["Context", \[\["briefs", "Intelligence"\], \["sources", "Sources"\], \["meetings", "Meetings"\], \["linear", "Linear"\], \["trustedContext", "Trusted Context"\], \["approvals", "Approvals"\]\]\]/);
+  assert.match(mainSource, /\["Context", \[\["briefs", "Intelligence"\], \["sources", "Sources"\], \["documents", "Documents"\], \["meetings", "Meetings"\], \["linear", "Linear"\], \["trustedContext", "Trusted Context"\], \["approvals", "Approvals"\]\]\]/);
   assert.match(mainSource, /sources: <Sources state=\{state\} mutate=\{mutate\} \/>/);
   assert.doesNotMatch(mainSource, /if \(route === "sources"\) return "briefs";/);
   assert.doesNotMatch(mainSource, /requested === "sources" \? "briefs"/);
@@ -215,6 +215,27 @@ test("Source table actions expose local success and failure messages", () => {
   assert.match(mainSource, /onClick=\{\(\) => updateSourceStatus\(s, active\)\}/);
   assert.match(mainSource, /onClick=\{\(\) => deleteSource\(s\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/sources\/\$\{s\.id\}`, \{ status: active \? "paused" : "active" \}, "PATCH"\)\}/);
+});
+
+test("Documents are reachable and expose local success and failure messages", () => {
+  assert.match(mainSource, /\["Context", \[\["briefs", "Intelligence"\], \["sources", "Sources"\], \["documents", "Documents"\], \["meetings", "Meetings"\], \["linear", "Linear"\], \["trustedContext", "Trusted Context"\], \["approvals", "Approvals"\]\]\]/);
+  assert.match(mainSource, /documents: FileText,/);
+  assert.match(mainSource, /documents: <Documents state=\{state\} mutate=\{mutate\} \/>/);
+  assert.match(mainSource, /function Documents\(\{ state, mutate \}\) \{/);
+  assert.match(mainSource, /const \[documentMessage, setDocumentMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const submit = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!form\.title\.trim\(\)\) return;\n\s+setDocumentMessage\(""\);/);
+  assert.match(mainSource, /await mutate\("\/api\/documents"/);
+  assert.match(mainSource, /tags: form\.tags\.split\(","\)\.map\(\(tag\) => tag\.trim\(\)\)\.filter\(Boolean\)/);
+  assert.match(mainSource, /setDocumentMessage\("Document created\."\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setDocumentMessage\(error\.message \|\| "Could not create document\."\);/);
+  assert.match(mainSource, /const updateDocumentStatus = async \(document\) => \{\n\s+const nextStatus = document\.status === "active" \? "archived" : "active";/);
+  assert.match(mainSource, /await mutate\(`\/api\/documents\/\$\{document\.id\}`, \{ status: nextStatus \}, "PATCH"\);/);
+  assert.match(mainSource, /setDocumentMessage\(`\$\{document\.title \|\| "Document"\} \$\{nextStatus === "active" \? "reactivated" : "archived"\}\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setDocumentMessage\(error\.message \|\| "Could not update document\."\);/);
+  assert.match(mainSource, /\{documentMessage && <p className=\{documentMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{documentMessage\}<\/p>\}/);
+  assert.match(mainSource, /onClick=\{\(\) => updateDocumentStatus\(d\)\}/);
+  assert.doesNotMatch(mainSource, /mutate\("\/api\/documents", \{ \.\.\.form, tags: form\.tags\.split\(","\)\.map\(\(t\) => t\.trim\(\)\.filter\(Boolean\) \}\)\.then/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/documents\/\$\{d\.id\}`, \{ status: d\.status === "active" \? "archived" : "active" \}, "PATCH"\)\}/);
 });
 
 test("Planner capture saves expose local success and failure messages", () => {
@@ -274,7 +295,7 @@ test("Review template toggles expose local success and failure messages", () => 
 });
 
 test("Approval status actions expose local success and failure messages", () => {
-  assert.match(mainSource, /\["Context", \[\["briefs", "Intelligence"\], \["sources", "Sources"\], \["meetings", "Meetings"\], \["linear", "Linear"\], \["trustedContext", "Trusted Context"\], \["approvals", "Approvals"\]\]\]/);
+  assert.match(mainSource, /\["Context", \[\["briefs", "Intelligence"\], \["sources", "Sources"\], \["documents", "Documents"\], \["meetings", "Meetings"\], \["linear", "Linear"\], \["trustedContext", "Trusted Context"\], \["approvals", "Approvals"\]\]\]/);
   assert.match(mainSource, /approvals: <Approvals state=\{state\} mutate=\{mutate\} \/>/);
   assert.match(mainSource, /function Approvals\(\{ state, mutate \}\) \{\n\s+const \[approvalMessage, setApprovalMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const updateApprovalStatus = async \(approval, status\) => \{\n\s+setApprovalMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/approvals\/\$\{approval\.id\}`, \{ status \}, "PATCH"\);/);

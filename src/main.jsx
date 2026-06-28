@@ -46,7 +46,7 @@ import "./styles.css";
 
 const nav = [
   ["Plan", [["today", "Today"], ["planner", "Planner"], ["reminders", "Reminders"], ["reviews", "Reviews"]]],
-  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"], ["approvals", "Approvals"]]],
+  ["Context", [["briefs", "Intelligence"], ["sources", "Sources"], ["documents", "Documents"], ["meetings", "Meetings"], ["linear", "Linear"], ["trustedContext", "Trusted Context"], ["approvals", "Approvals"]]],
   ["Configure", [["briefSetup", "Brief Setup"]]],
   ["System", [["settings", "Settings"]]],
 ];
@@ -346,6 +346,7 @@ function Icon({ name }) {
     linear: Box,
     briefs: FileText,
     sources: Database,
+    documents: FileText,
     briefSetup: Sparkles,
     lenses: Gauge,
     councils: Users,
@@ -2165,11 +2166,34 @@ function BriefSetup({ state, mutate }) {
 
 function Documents({ state, mutate }) {
   const [form, setForm] = React.useState({ title: "", type: "Note", visibility: "private", tags: "", body: "" });
-  const submit = (e) => { e.preventDefault(); mutate("/api/documents", { ...form, tags: form.tags.split(",").map((t) => t.trim()).filter(Boolean) }).then(() => setForm({ title: "", type: "Note", visibility: "private", tags: "", body: "" })); };
+  const [documentMessage, setDocumentMessage] = React.useState("");
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!form.title.trim()) return;
+    setDocumentMessage("");
+    try {
+      await mutate("/api/documents", { ...form, tags: form.tags.split(",").map((tag) => tag.trim()).filter(Boolean) });
+      setForm({ title: "", type: "Note", visibility: "private", tags: "", body: "" });
+      setDocumentMessage("Document created.");
+    } catch (error) {
+      setDocumentMessage(error.message || "Could not create document.");
+    }
+  };
+  const updateDocumentStatus = async (document) => {
+    const nextStatus = document.status === "active" ? "archived" : "active";
+    setDocumentMessage("");
+    try {
+      await mutate(`/api/documents/${document.id}`, { status: nextStatus }, "PATCH");
+      setDocumentMessage(`${document.title || "Document"} ${nextStatus === "active" ? "reactivated" : "archived"}.`);
+    } catch (error) {
+      setDocumentMessage(error.message || "Could not update document.");
+    }
+  };
   return <Page title="Documents" desc="Saved work product and doctrine corpus. Records are real SQLite documents and optional chunks." wide>
+    {documentMessage && <p className={documentMessage.includes("Could not") ? "warn-text" : "ok-text"}>{documentMessage}</p>}
     <div className="split">
       <form className="card form" onSubmit={submit}><h2>Create document</h2><Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} required /><Select label="Type" value={form.type} onChange={(type) => setForm({ ...form, type })} options={["Doctrine", "Memo", "Project", "Note", "Transcript", "Post"]} /><Select label="Visibility" value={form.visibility} onChange={(visibility) => setForm({ ...form, visibility })} options={["private", "team", "public"]} /><Field label="Tags" value={form.tags} onChange={(tags) => setForm({ ...form, tags })} placeholder="doctrine, q2" /><TextArea label="Body" value={form.body} onChange={(body) => setForm({ ...form, body })} rows={9} /><Button icon="plus" kind="primary">Create Document</Button></form>
-      <div className="card table-card"><h2>Corpus</h2>{state.documents.length ? state.documents.map((d) => <ListRow key={d.id} title={d.title} sub={`${d.type} · ${d.wordCount} words · ${d.visibility}`} right={<Button onClick={() => mutate(`/api/documents/${d.id}`, { status: d.status === "active" ? "archived" : "active" }, "PATCH")}>{d.status}</Button>} />) : <Empty icon="documents" title="No documents yet" body="Create or upload a real document before retrieval can affect workflow output." />}</div>
+      <div className="card table-card"><h2>Corpus</h2>{state.documents.length ? state.documents.map((d) => <ListRow key={d.id} title={d.title} sub={`${d.type} · ${d.wordCount} words · ${d.visibility}`} right={<Button icon={d.status === "active" ? "x" : "check"} onClick={() => updateDocumentStatus(d)}>{d.status === "active" ? "Archive" : "Reactivate"}</Button>} />) : <Empty icon="documents" title="No documents yet" body="Create or upload a real document before retrieval can affect workflow output." />}</div>
     </div>
   </Page>;
 }
@@ -4580,6 +4604,7 @@ function App() {
     reminders: <Reminders state={state} mutate={mutate} />,
     reviews: <Reviews state={state} mutate={mutate} />,
     meetings: <Meetings state={state} mutate={mutate} />,
+    documents: <Documents state={state} mutate={mutate} />,
     overview: <Overview state={state} setRoute={requestRoute} runWorkflow={() => runWorkflow({ runType: "executive_day" })} mutate={mutate} />,
     briefs: <Briefs state={state} runWorkflow={() => runWorkflow({ runType: "intelligence" })} refresh={refresh} />,
     sources: <Sources state={state} mutate={mutate} />,
