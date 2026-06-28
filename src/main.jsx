@@ -1125,9 +1125,16 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
   const importContextFile = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    setContextText((current) => [current, text].filter(Boolean).join("\n\n").trim());
-    event.target.value = "";
+    setContextMessage("");
+    try {
+      const text = await file.text();
+      setContextText((current) => [current, text].filter(Boolean).join("\n\n").trim());
+      setContextMessage(`Imported ${file.name || "text file"}.`);
+    } catch (error) {
+      setContextMessage(error.message || "Could not import text file.");
+    } finally {
+      event.target.value = "";
+    }
   };
   const saveContext = async (event) => {
     event?.preventDefault?.();

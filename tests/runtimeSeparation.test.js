@@ -100,6 +100,13 @@ test("Today context regenerate stops when context save fails", () => {
   assert.doesNotMatch(mainSource, /if \(contextText\.trim\(\)\) await saveContext\(\{ preventDefault\(\) \{\} \}\);\n\s+await runWorkflow\(\);/);
 });
 
+test("Today context file import exposes success and failure feedback", () => {
+  assert.match(mainSource, /const importContextFile = async \(event\) => \{\n\s+const file = event\.target\.files\?\.\[0\];\n\s+if \(!file\) return;\n\s+setContextMessage\(""\);\n\s+try \{/);
+  assert.match(mainSource, /const text = await file\.text\(\);\n\s+setContextText\(\(current\) => \[current, text\]\.filter\(Boolean\)\.join\("\\n\\n"\)\.trim\(\)\);\n\s+setContextMessage\(`Imported \$\{file\.name \|\| "text file"\}\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setContextMessage\(error\.message \|\| "Could not import text file\."\);\n\s+\} finally \{\n\s+event\.target\.value = "";\n\s+\}/);
+  assert.match(mainSource, /<label className="file-context-input"><Upload className="ico" \/><span>Import text file<\/span><input type="file" accept="\.txt,\.md,\.csv,\.json,\.text" onChange=\{importContextFile\} \/><\/label>/);
+});
+
 test("Linear connector cannot be falsely enabled without credentials", () => {
   assert.match(serverSource, /res\.status\(400\)\.json\(\{ error: message, state: state\(\) \}\)/);
   assert.match(serverSource, /Paste a Linear personal API key, or configure LINEAR_API_KEY before enabling Linear\./);
