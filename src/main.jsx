@@ -697,6 +697,7 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
             <Icon name={desktopUpdate?.status === "available" ? "download" : desktopUpdate?.status === "installed" ? "restart" : desktopUpdate?.status === "error" ? "x" : "check"} />
             <span>{desktopUpdate?.isDesktop ? (desktopUpdate.progress || desktopUpdate.message || updateStatus) : "Updates are available in the desktop app."}</span>
           </div>
+          <Button type="button" role="menuitem" icon="documents" onClick={() => openExternalUrl("https://github.com/Transformation-Agency/pillar-time/blob/main/docs/USER_MANUAL.md")}>Open User Manual</Button>
           {desktopUpdate?.isDesktop && <div className="help-menu-actions">
             <Button type="button" role="menuitem" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={!!updateCheckDisabledReason} title={updateCheckDisabledReason || "Check for signed desktop updates"}>{desktopUpdate?.status === "checking" ? "Checking..." : "Check for Updates"}</Button>
             {desktopUpdate.status === "available" && <Button type="button" role="menuitem" icon="download" kind="primary" onClick={desktopUpdate.installUpdate}>Install Update</Button>}
