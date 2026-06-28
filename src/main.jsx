@@ -1432,6 +1432,7 @@ function Reviews({ state, mutate }) {
   const time = todayTime(state);
   const [reviewMessage, setReviewMessage] = React.useState("");
   const toggleReview = async (review) => {
+    if (!review.enabled && !window.confirm(`Enable "${review.title || "this review"}"? Pillar Time may schedule this recurring review template.`)) return;
     setReviewMessage("");
     try {
       await mutate(`/api/time/reviews/${review.id}`, { enabled: !review.enabled }, "PATCH");
@@ -3172,6 +3173,7 @@ function Onboarding({ state, mutate, refresh }) {
     }
   };
   const toggleReview = async (review) => {
+    if (!review.enabled && !window.confirm(`Enable "${review.title || "this review"}"? Pillar Time may schedule this recurring review template.`)) return;
     setReviewMessage("");
     try {
       await mutate(`/api/time/reviews/${review.id}`, { enabled: !review.enabled }, "PATCH");

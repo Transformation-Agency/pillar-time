@@ -382,12 +382,13 @@ test("Reminder row actions expose local success and failure messages", () => {
 
 test("Review template toggles expose local success and failure messages", () => {
   assert.match(mainSource, /function Reviews\(\{ state, mutate \}\) \{\n\s+const time = todayTime\(state\);\n\s+const \[reviewMessage, setReviewMessage\] = React\.useState\(""\);/);
-  assert.match(mainSource, /const toggleReview = async \(review\) => \{\n\s+setReviewMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/reviews\/\$\{review\.id\}`, \{ enabled: !review\.enabled \}, "PATCH"\);/);
+  assert.match(mainSource, /const toggleReview = async \(review\) => \{\n\s+if \(!review\.enabled && !window\.confirm\(`Enable "\$\{review\.title \|\| "this review"\}"\? Pillar Time may schedule this recurring review template\.`\)\) return;\n\s+setReviewMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/reviews\/\$\{review\.id\}`, \{ enabled: !review\.enabled \}, "PATCH"\);/);
   assert.match(mainSource, /setReviewMessage\(`\$\{review\.title\} \$\{review\.enabled \? "disabled" : "enabled"\}\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setReviewMessage\(error\.message \|\| "Could not update review\."\);/);
   assert.match(mainSource, /\{reviewMessage && <p className=\{reviewMessage\.includes\("enabled"\) \|\| reviewMessage\.includes\("disabled"\) \? "ok-text" : "warn-text"\}>\{reviewMessage\}<\/p>\}/);
   assert.match(mainSource, /onClick=\{\(\) => toggleReview\(review\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/reviews\/\$\{review\.id\}`, \{ enabled: !review\.enabled \}, "PATCH"\)\}/);
+  assert.equal((mainSource.match(/Pillar Time may schedule this recurring review template\./g) || []).length, 2);
 });
 
 test("Approval status actions expose local success and failure messages", () => {
