@@ -4121,10 +4121,14 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const disconnectGoogleCalendar = async () => {
     if (!window.confirm("Disconnect Google Calendar? Pillar Time will stop reading your agenda and cannot create approved schedule blocks until you reconnect.")) return;
     setGoogleCalendarMessage("");
-    await mutate("/api/google-calendar/disconnect", {}, "POST");
-    setGoogleCalendarSelection(["primary"]);
-    setGoogleCalendarSelectionDirty(false);
-    setGoogleCalendarMessage("Google Calendar disconnected.");
+    try {
+      await mutate("/api/google-calendar/disconnect", {}, "POST");
+      setGoogleCalendarSelection(["primary"]);
+      setGoogleCalendarSelectionDirty(false);
+      setGoogleCalendarMessage("Google Calendar disconnected.");
+    } catch (error) {
+      setGoogleCalendarMessage(error.message || "Could not disconnect Google Calendar.");
+    }
   };
   const saveTelegram = async (e) => {
     e.preventDefault();
