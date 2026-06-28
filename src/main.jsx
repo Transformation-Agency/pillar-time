@@ -1348,6 +1348,7 @@ function Reminders({ state, mutate }) {
   const createReminder = async (event) => {
     event.preventDefault();
     if (!form.title.trim()) return;
+    if (form.enabled && !window.confirm(`Create "${form.title}" enabled immediately? Pillar Time may schedule future desktop or Telegram nudges when Master reminders are on.`)) return;
     setReminderMessage("");
     try {
       await mutate("/api/time/reminders", form);
