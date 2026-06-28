@@ -246,6 +246,10 @@ test("High-use placeholder and table controls expose accessible labels", () => {
   assert.match(mainSource, /aria-label="Search sources"/);
   assert.match(mainSource, /aria-label="Search perspective lenses"/);
   assert.match(mainSource, /aria-label=\{`State for \$\{issue\.identifier \|\| issue\.title\}`\}/);
+  assert.match(mainSource, /const changeIssueState = \(issue, stateId\) => \{\n\s+if \(!stateId \|\| stateId === issue\.state\?\.id\) return;/);
+  assert.match(mainSource, /if \(!window\.confirm\(`Move "\$\{issueLabel\}" to "\$\{stateLabel\}" in Linear\? This will update the issue in your Linear workspace\.`\)\) return;/);
+  assert.match(mainSource, /onChange=\{\(event\) => changeIssueState\(issue, event\.target\.value\)\}/);
+  assert.doesNotMatch(mainSource, /onChange=\{\(event\) => patchIssue\(issue, \{ stateId: event\.target\.value \}\)\}/);
   assert.match(mainSource, /aria-label=\{`Comment on \$\{issue\.identifier \|\| issue\.title\}`\}/);
   assert.match(mainSource, /disabled=\{!String\(commentDrafts\[issue\.id\] \|\| ""\)\.trim\(\)\}/);
   assert.match(mainSource, /title=\{!String\(commentDrafts\[issue\.id\] \|\| ""\)\.trim\(\) \? "Type a comment first" : `Add comment to \$\{issue\.identifier \|\| issue\.title\}`\}/);
