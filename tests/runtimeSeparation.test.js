@@ -302,6 +302,7 @@ test("Documents are reachable and expose local success and failure messages", ()
   assert.match(mainSource, /catch \(error\) \{\n\s+setDocumentMessage\(error\.message \|\| "Could not create document\."\);/);
   assert.match(mainSource, /disabled=\{!form\.title\.trim\(\)\} title=\{!form\.title\.trim\(\) \? "Add a document title first" : "Create document"\}/);
   assert.match(mainSource, /const updateDocumentStatus = async \(document\) => \{\n\s+const nextStatus = document\.status === "active" \? "archived" : "active";/);
+  assert.match(mainSource, /if \(nextStatus === "archived" && !window\.confirm\(`Archive "\$\{document\.title \|\| "Document"\}"\? It will stop being used as active retrieval context until you reactivate it\.`\)\) return;/);
   assert.match(mainSource, /await mutate\(`\/api\/documents\/\$\{document\.id\}`, \{ status: nextStatus \}, "PATCH"\);/);
   assert.match(mainSource, /setDocumentMessage\(`\$\{document\.title \|\| "Document"\} \$\{nextStatus === "active" \? "reactivated" : "archived"\}\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setDocumentMessage\(error\.message \|\| "Could not update document\."\);/);
@@ -309,6 +310,7 @@ test("Documents are reachable and expose local success and failure messages", ()
   assert.match(mainSource, /body="Create a document by pasting text into the form before retrieval can affect workflow output\."/);
   assert.doesNotMatch(mainSource, /Create or upload a real document before retrieval can affect workflow output\./);
   assert.match(mainSource, /onClick=\{\(\) => updateDocumentStatus\(d\)\}/);
+  assert.match(mainSource, /title=\{d\.status === "active" \? "Archive document from active retrieval context" : "Reactivate document for retrieval context"\}/);
   assert.doesNotMatch(mainSource, /mutate\("\/api\/documents", \{ \.\.\.form, tags: form\.tags\.split\(","\)\.map\(\(t\) => t\.trim\(\)\.filter\(Boolean\) \}\)\.then/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/documents\/\$\{d\.id\}`, \{ status: d\.status === "active" \? "archived" : "active" \}, "PATCH"\)\}/);
 });
