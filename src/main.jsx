@@ -2019,6 +2019,7 @@ function BriefSetup({ state, mutate }) {
   const [dragIndex, setDragIndex] = React.useState(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [saveState, setSaveState] = React.useState("saved");
+  const [saveError, setSaveError] = React.useState("");
   const [dirty, setDirty] = React.useState(false);
   React.useEffect(() => {
     if (!dirty) setForm(state.briefConfig);
@@ -2038,6 +2039,7 @@ function BriefSetup({ state, mutate }) {
   }, [dirty]);
   const markForm = (updater) => {
     setSaveState("unsaved");
+    setSaveError("");
     setDirty(true);
     setForm(updater);
   };
@@ -2087,16 +2089,21 @@ function BriefSetup({ state, mutate }) {
   const save = (event) => {
     event?.preventDefault?.();
     setSaveState("saving");
+    setSaveError("");
     mutate("/api/brief-config", form, "PATCH")
       .then(() => {
         setDirty(false);
         setSaveState("saved");
       })
-      .catch(() => setSaveState("error"));
+      .catch((error) => {
+        setSaveState("error");
+        setSaveError(error.message || "Could not save brief setup.");
+      });
   };
   if (!form) return null;
   const enabledSections = form.sections.filter((section) => section.enabled !== false);
   return <Page title="Brief setup" desc="Define the owner, voice, and section flow for every brief." wide action={<Badge tone={saveState === "error" ? "warn" : saveState === "unsaved" ? "warn" : saveState === "saved" ? "ok" : "muted"}>{saveState === "saving" ? "Saving..." : saveState === "error" ? "Save failed" : saveState === "unsaved" ? "Unsaved changes" : "Saved"}</Badge>}>
+    {saveError && <p className="warn-text">Could not save brief setup: {saveError}</p>}
     <div className="setup-layout">
       <form className="panel form setup-profile" onSubmit={save}>
         <h2>Profile</h2>

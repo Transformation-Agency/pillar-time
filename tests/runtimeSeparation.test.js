@@ -332,6 +332,16 @@ test("Brief setup section action controls are labeled and guarded", () => {
   assert.doesNotMatch(mainSource, /<Button type="button" icon="pencil" \/>/);
 });
 
+test("Brief setup save failures expose the actual error message", () => {
+  assert.match(mainSource, /const \[saveState, setSaveState\] = React\.useState\("saved"\);/);
+  assert.match(mainSource, /const \[saveError, setSaveError\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const markForm = \(updater\) => \{\n\s+setSaveState\("unsaved"\);\n\s+setSaveError\(""\);/);
+  assert.match(mainSource, /setSaveState\("saving"\);\n\s+setSaveError\(""\);\n\s+mutate\("\/api\/brief-config", form, "PATCH"\)/);
+  assert.match(mainSource, /\.catch\(\(error\) => \{\n\s+setSaveState\("error"\);\n\s+setSaveError\(error\.message \|\| "Could not save brief setup\."\);/);
+  assert.match(mainSource, /\{saveError && <p className="warn-text">Could not save brief setup: \{saveError\}<\/p>\}/);
+  assert.doesNotMatch(mainSource, /\.catch\(\(\) => setSaveState\("error"\)\)/);
+});
+
 test("TextArea forwards helper props so onboarding guidance is rendered", () => {
   assert.match(mainSource, /function TextArea\(\{ label, value, onChange, rows = 4, \.\.\.props \}\)/);
   assert.match(mainSource, /<textarea rows=\{rows\} value=\{value\} onChange=\{\(e\) => onChange\(e\.target\.value\)\} \{\.\.\.props\} \/>/);
