@@ -440,6 +440,10 @@ test("Brief setup analyzer removal explains the final-analyzer guard", () => {
 });
 
 test("Perspective lens removal confirms before changing deliberation lenses", () => {
+  assert.match(mainSource, /\["Configure", \[\["briefSetup", "Brief Setup"\], \["lenses", "Perspective Lenses"\]\]\]/);
+  assert.match(mainSource, /lenses: <Lenses state=\{state\} mutate=\{mutate\} \/>/);
+  assert.doesNotMatch(mainSource, /if \(route === "lenses"\) return "briefSetup";/);
+  assert.doesNotMatch(mainSource, /requested === "lenses" \? "briefSetup" : requested/);
   assert.match(mainSource, /const removeLens = \(index\) => \{\n\s+const lens = lenses\[index\] \|\| \{\};\n\s+const label = lens\.name \|\| "perspective lens";/);
   assert.match(mainSource, /Remove "\$\{label\}" from deliberations\? It will stop being used after you save perspective lenses\./);
   assert.match(mainSource, /title=\{`Remove \$\{lens\.name \|\| "perspective lens"\}`\} onClick=\{\(\) => removeLens\(index\)\}>Remove<\/Button>/);
