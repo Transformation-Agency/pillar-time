@@ -384,10 +384,20 @@ test("Approval status actions expose local success and failure messages", () => 
   assert.match(mainSource, /setApprovalMessage\(`\$\{approval\.title \|\| "Approval"\} \$\{status\}\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setApprovalMessage\(error\.message \|\| `Could not \$\{status\} approval\.`\);/);
   assert.match(mainSource, /\{approvalMessage && <p className=\{approvalMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{approvalMessage\}<\/p>\}/);
-  assert.match(mainSource, /onClick=\{\(\) => updateApprovalStatus\(a, "approved"\)\}/);
-  assert.match(mainSource, /onClick=\{\(\) => updateApprovalStatus\(a, "rejected"\)\}/);
+  assert.match(mainSource, /title="Approve this action for later execution" onClick=\{\(\) => updateApprovalStatus\(a, "approved"\)\}/);
+  assert.match(mainSource, /title="Reject this action without executing it" onClick=\{\(\) => updateApprovalStatus\(a, "rejected"\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/approvals\/\$\{a\.id\}`, \{ status: "approved" \}, "PATCH"\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/approvals\/\$\{a\.id\}`, \{ status: "rejected" \}, "PATCH"\)\}/);
+});
+
+test("Approvals page exposes explicit execution after approval", () => {
+  assert.match(mainSource, /const executeApproval = async \(approval\) => \{\n\s+setApprovalMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/approvals\/\$\{approval\.id\}\/execute`, \{\}, "POST"\);/);
+  assert.match(mainSource, /setApprovalMessage\(`\$\{approval\.title \|\| "Approval"\} executed\.`\);/);
+  assert.match(mainSource, /setApprovalMessage\(error\.message \|\| "Could not execute approval\."\);/);
+  assert.match(mainSource, /desc="Human review is the center of the console\. Approve first, then execute to write to Calendar or Linear\."/);
+  assert.match(mainSource, /a\.status === "approved" \? <Button icon="run" kind="primary" title="Execute this approved action now" onClick=\{\(\) => executeApproval\(a\)\}>Execute<\/Button> : null/);
+  assert.match(mainSource, /a\.status === "approved" \|\| a\.status === "executed" \? "ok"/);
+  assert.match(mainSource, /\{a\.resolutionNote && <small>\{a\.resolutionNote\}<\/small>\}/);
 });
 
 test("Delivery schedule selects expose accessible labels", () => {

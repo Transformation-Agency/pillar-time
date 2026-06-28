@@ -2320,9 +2320,18 @@ function Approvals({ state, mutate }) {
       setApprovalMessage(error.message || `Could not ${status} approval.`);
     }
   };
-  return <Page title="Approvals" desc="Human review is the center of the console. No public posting or document mutation happens automatically." wide>
+  const executeApproval = async (approval) => {
+    setApprovalMessage("");
+    try {
+      await mutate(`/api/approvals/${approval.id}/execute`, {}, "POST");
+      setApprovalMessage(`${approval.title || "Approval"} executed.`);
+    } catch (error) {
+      setApprovalMessage(error.message || "Could not execute approval.");
+    }
+  };
+  return <Page title="Approvals" desc="Human review is the center of the console. Approve first, then execute to write to Calendar or Linear." wide>
     {approvalMessage && <p className={approvalMessage.includes("Could not") ? "warn-text" : "ok-text"}>{approvalMessage}</p>}
-    <div className="card table-card">{state.approvals.length ? <table><thead><tr><th>Item</th><th>Risk</th><th>Status</th><th>Run</th><th></th></tr></thead><tbody>{state.approvals.map((a) => <tr key={a.id}><td><strong>{a.title}</strong><small>{a.kind}</small></td><td><Badge tone={a.risk === "high" ? "err" : a.risk === "medium" ? "warn" : "muted"}>{a.risk}</Badge></td><td><Badge tone={a.status === "approved" ? "ok" : a.status === "rejected" ? "err" : "warn"}>{a.status}</Badge></td><td className="mono">{a.runId || "manual"}</td><td>{a.status === "pending" && <div className="row"><Button icon="check" onClick={() => updateApprovalStatus(a, "approved")}>Approve</Button><Button icon="x" onClick={() => updateApprovalStatus(a, "rejected")}>Reject</Button></div>}</td></tr>)}</tbody></table> : <Empty icon="approvals" title="No approvals yet" body="Run the workflow or submit state-changing Telegram requests to create reviewable items." />}</div>
+    <div className="card table-card">{state.approvals.length ? <table><thead><tr><th>Item</th><th>Risk</th><th>Status</th><th>Run</th><th></th></tr></thead><tbody>{state.approvals.map((a) => <tr key={a.id}><td><strong>{a.title}</strong><small>{a.kind}</small>{a.resolutionNote && <small>{a.resolutionNote}</small>}</td><td><Badge tone={a.risk === "high" ? "err" : a.risk === "medium" ? "warn" : "muted"}>{a.risk}</Badge></td><td><Badge tone={a.status === "approved" || a.status === "executed" ? "ok" : a.status === "rejected" ? "err" : "warn"}>{a.status}</Badge></td><td className="mono">{a.runId || "manual"}</td><td>{a.status === "pending" ? <div className="row"><Button icon="check" title="Approve this action for later execution" onClick={() => updateApprovalStatus(a, "approved")}>Approve</Button><Button icon="x" title="Reject this action without executing it" onClick={() => updateApprovalStatus(a, "rejected")}>Reject</Button></div> : a.status === "approved" ? <Button icon="run" kind="primary" title="Execute this approved action now" onClick={() => executeApproval(a)}>Execute</Button> : null}</td></tr>)}</tbody></table> : <Empty icon="approvals" title="No approvals yet" body="Run the workflow or submit state-changing Telegram requests to create reviewable items." />}</div>
   </Page>;
 }
 
