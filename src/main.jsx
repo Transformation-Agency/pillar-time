@@ -198,6 +198,12 @@ function sourceLocator(type, config) {
   return config.feedUrl || config.url || config.query || config.username || "";
 }
 
+function sourceCredentialStatus(type) {
+  if (type === "X" || type === "Calendar") return "missing";
+  if (type === "Reddit" || type === "YouTube" || type === "Podcast") return "optional";
+  return "not required";
+}
+
 function sourcePrerequisites(source, state) {
   const notes = [];
   if (source.type === "Calendar" && state.connectors?.googleCalendar?.status !== "ready") {
@@ -1645,7 +1651,23 @@ function TrustedContext({ state, mutate }) {
 }
 
 function Sources({ state, mutate }) {
-  const [form, setForm] = React.useState({ name: "", type: "RSS", config: defaultConfig("RSS") });
+  const emptySourceForm = { name: "", type: "RSS", config: defaultConfig("RSS") };
+  const sourceFormFor = (source) => {
+    const config = { ...defaultConfig(source.type), ...(source.config || {}) };
+    return {
+      id: source.id,
+      name: source.name || "",
+      type: source.type || "RSS",
+      config,
+      cadence: source.cadence || "Daily",
+      status: source.status || "active",
+      approvalStatus: source.approvalStatus || "approved",
+      credentialsStatus: source.credentialsStatus || sourceCredentialStatus(source.type || "Web"),
+      note: source.note || "",
+    };
+  };
+  const [form, setForm] = React.useState(emptySourceForm);
+  const [sourceFormBaseline, setSourceFormBaseline] = React.useState(emptySourceForm);
   const [query, setQuery] = React.useState("");
   const [adding, setAdding] = React.useState(false);
   const [editingSource, setEditingSource] = React.useState(null);
@@ -1671,30 +1693,30 @@ function Sources({ state, mutate }) {
   const updateType = (type) => setForm({ ...form, type, config: defaultConfig(type) });
   const updateConfig = (key, value) => setForm({ ...form, config: { ...form.config, mode, [key]: value } });
   const resetSourceForm = () => {
-    setForm({ name: "", type: "RSS", config: defaultConfig("RSS") });
+    setForm(emptySourceForm);
+    setSourceFormBaseline(emptySourceForm);
     setAdding(false);
     setEditingSource(null);
     setSpotifyResolve({ loading: false, message: "", tone: "muted" });
   };
+  const closeSourceForm = () => {
+    if (JSON.stringify(form) !== JSON.stringify(sourceFormBaseline)) {
+      const ok = window.confirm("Discard unsaved source changes? Source name, type, and locator edits will not be saved.");
+      if (!ok) return;
+    }
+    resetSourceForm();
+  };
   const openAddSource = () => {
-    setForm({ name: "", type: "RSS", config: defaultConfig("RSS") });
+    setForm(emptySourceForm);
+    setSourceFormBaseline(emptySourceForm);
     setEditingSource(null);
     setAdding(true);
     setSpotifyResolve({ loading: false, message: "", tone: "muted" });
   };
   const openEditSource = (source) => {
-    const config = { ...defaultConfig(source.type), ...(source.config || {}) };
-    setForm({
-      id: source.id,
-      name: source.name || "",
-      type: source.type || "RSS",
-      config,
-      cadence: source.cadence || "Daily",
-      status: source.status || "active",
-      approvalStatus: source.approvalStatus || "approved",
-      credentialsStatus: source.credentialsStatus || sourceCredentialStatus(source.type || "Web"),
-      note: source.note || "",
-    });
+    const nextForm = sourceFormFor(source);
+    setForm(nextForm);
+    setSourceFormBaseline(nextForm);
     setEditingSource(source);
     setAdding(true);
     setSpotifyResolve({ loading: false, message: "", tone: "muted" });
@@ -1702,7 +1724,9 @@ function Sources({ state, mutate }) {
   React.useEffect(() => {
     const pending = sessionStorage.getItem("pendingSourceType");
     if (!pending || !sourceDefinitions[pending]) return;
-    setForm({ name: "", type: pending, config: defaultConfig(pending) });
+    const nextForm = { name: "", type: pending, config: defaultConfig(pending) };
+    setForm(nextForm);
+    setSourceFormBaseline(nextForm);
     setAdding(true);
     sessionStorage.removeItem("pendingSourceType");
   }, []);
@@ -1836,9 +1860,9 @@ function Sources({ state, mutate }) {
       </section>
       <div className="source-tip"><Icon name="settings" /><strong>Tip:</strong><span>Sources are checked on your schedule. Adjust cadence and recency in brief settings.</span><Button icon="briefSetup" onClick={() => { location.hash = "briefSetup"; }}>Brief settings</Button></div>
     </div>
-    {adding && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) resetSourceForm(); }}>
+    {adding && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeSourceForm(); }}>
       <form className="modal-card source-modal form" role="dialog" aria-modal="true" aria-label={editingSource ? "Edit source" : "Add source"} onSubmit={submit}>
-        <div className="modal-head"><div><h2>{editingSource ? "Edit source" : "Add source"}</h2><p>{editingSource ? "Update the source details your brief should monitor." : "Select a source type, then add the locator your brief should monitor."}</p></div><button type="button" aria-label="Close source editor" onClick={resetSourceForm}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2>{editingSource ? "Edit source" : "Add source"}</h2><p>{editingSource ? "Update the source details your brief should monitor." : "Select a source type, then add the locator your brief should monitor."}</p></div><button type="button" aria-label="Close source editor" onClick={closeSourceForm}><Icon name="x" /></button></div>
         <div className="source-type-label">Source type</div>
         <div className="source-type-grid">
           {sourceTypeChoices.map(([type, label]) => <button type="button" key={label} className={`source-type-tile ${form.type === type ? "selected" : ""}`} onClick={() => updateType(type)}>
@@ -1868,7 +1892,7 @@ function Sources({ state, mutate }) {
           </div>}
           {form.type === "Podcast" && <label className="check" title={podcastTranscriptionDisabledReason || "Transcribe new podcast episodes for briefs"}><input type="checkbox" checked={form.config.transcribeNewEpisodes !== false && transcriptionAvailable} disabled={!!podcastTranscriptionDisabledReason} onChange={(event) => updateConfig("transcribeNewEpisodes", event.target.checked)} /> Transcribe new episodes for briefs</label>}
         </div>
-        <div className="modal-actions"><Button type="button" onClick={resetSourceForm}>Cancel</Button><Button icon={editingSource ? "save" : "plus"} kind="primary">{editingSource ? "Save source" : "Add source"}</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeSourceForm}>Cancel</Button><Button icon={editingSource ? "save" : "plus"} kind="primary">{editingSource ? "Save source" : "Add source"}</Button></div>
       </form>
     </div>}
   </Page>;
