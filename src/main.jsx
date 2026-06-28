@@ -2932,6 +2932,29 @@ function Onboarding({ state, mutate, refresh }) {
   const timezones = timezoneOptions(timezone);
   const googleCalendarConnected = state.connectors?.googleCalendar?.status === "ready";
   const linearConnected = state.connectors?.linear?.status === "ready";
+  const briefPromptTooShort = briefPrompt.trim().length < 20;
+  const generateBriefSetupDisabledReason = draftingBriefSetup
+    ? "Brief setup draft is already being generated"
+    : briefPromptTooShort
+      ? "Describe your brief request in at least 20 characters"
+      : "";
+  const applyBriefSetupDisabledReason = draftingBriefSetup
+    ? "Wait for the draft to finish"
+    : !(briefDraft?.sections || []).length
+      ? "Generate a brief setup draft first"
+      : "";
+  const suggestSourcesDisabledReason = suggestingSources
+    ? "Source suggestions are already being gathered"
+    : briefPromptTooShort
+      ? "Describe your brief request in at least 20 characters"
+      : "";
+  const addSelectedSourcesDisabledReason = savingSources
+    ? "Sources are being added"
+    : suggestingSources
+      ? "Wait for source suggestions to finish"
+      : !suggestions.length
+        ? "Generate source suggestions first"
+        : "";
   const go = async (next) => {
     const normalized = normalizeOnboardingStep(next);
     setStep(normalized);
@@ -3610,7 +3633,7 @@ function Onboarding({ state, mutate, refresh }) {
         <h1>Optional: describe your intelligence brief.</h1>
         <p>Use normal language. Mention topics, people, companies, source types, tone, and anything you want avoided. Skip this if you only want the local planner for now.</p>
         <TextArea label="Intelligence brief request" value={briefPrompt} onChange={setBriefPrompt} rows={9} />
-        <div className="row"><Button onClick={() => go("model")}>Back</Button><Button onClick={() => go("linear")}>Skip intelligence setup</Button><Button icon="run" kind="primary" onClick={generateBriefSetupDraft} disabled={briefPrompt.trim().length < 20 || draftingBriefSetup}>{draftingBriefSetup ? "Drafting..." : "Generate brief setup"}</Button></div>
+        <div className="row"><Button onClick={() => go("model")}>Back</Button><Button onClick={() => go("linear")}>Skip intelligence setup</Button><Button icon="run" kind="primary" onClick={generateBriefSetupDraft} disabled={!!generateBriefSetupDisabledReason} title={generateBriefSetupDisabledReason || "Generate brief setup"}>{draftingBriefSetup ? "Drafting..." : "Generate brief setup"}</Button></div>
         {briefDraftMessage && <p className={briefDraftMessage.includes("Drafted") || briefDraftMessage.includes("saved") ? "ok-text" : "warn-text"}>{briefDraftMessage}</p>}
       </section>}
       {step === "setup" && <section className="onboarding-panel onboarding-panel-wide">
@@ -3629,7 +3652,7 @@ function Onboarding({ state, mutate, refresh }) {
             </div>)}
           </div>
         </div>}
-        <div className="row"><Button onClick={() => go("intent")}>Back</Button><Button icon="run" onClick={generateBriefSetupDraft} disabled={draftingBriefSetup}>Regenerate</Button><Button icon="save" kind="primary" onClick={applyBriefSetupDraft} disabled={draftingBriefSetup || !(briefDraft?.sections || []).length}>Apply and continue</Button></div>
+        <div className="row"><Button onClick={() => go("intent")}>Back</Button><Button icon="run" onClick={generateBriefSetupDraft} disabled={draftingBriefSetup} title={draftingBriefSetup ? "Brief setup draft is already being generated" : "Regenerate brief setup"}>Regenerate</Button><Button icon="save" kind="primary" onClick={applyBriefSetupDraft} disabled={!!applyBriefSetupDisabledReason} title={applyBriefSetupDisabledReason || "Apply brief setup and continue"}>Apply and continue</Button></div>
         {briefDraftMessage && <p className={briefDraftMessage.includes("Drafted") || briefDraftMessage.includes("saved") ? "ok-text" : "warn-text"}>{briefDraftMessage}</p>}
       </section>}
       {step === "linear" && <section className="onboarding-panel onboarding-panel-wide">
@@ -3683,7 +3706,7 @@ function Onboarding({ state, mutate, refresh }) {
           </label>;
         })}</div>
         {!suggestingSources && !suggestions.length && <Empty icon="sources" title="No suggestions yet" body="Generate source suggestions from your brief request." action={<Button icon="run" kind="primary" onClick={suggestSources}>Generate suggestions</Button>} />}
-        <div className="row"><Button onClick={() => go("intent")}>Back</Button><Button onClick={() => go("calendar")}>Skip sources</Button><Button icon="run" onClick={suggestSources} disabled={suggestingSources || briefPrompt.trim().length < 20}>{suggestingSources ? "Gathering..." : "Generate"}</Button><Button icon="plus" kind="primary" disabled={savingSources || suggestingSources || !suggestions.length} onClick={addSelectedSources}>{savingSources ? "Adding..." : "Add selected"}</Button></div>
+        <div className="row"><Button onClick={() => go("intent")}>Back</Button><Button onClick={() => go("calendar")}>Skip sources</Button><Button icon="run" onClick={suggestSources} disabled={!!suggestSourcesDisabledReason} title={suggestSourcesDisabledReason || "Generate source suggestions"}>{suggestingSources ? "Gathering..." : "Generate"}</Button><Button icon="plus" kind="primary" disabled={!!addSelectedSourcesDisabledReason} title={addSelectedSourcesDisabledReason || "Add selected sources"} onClick={addSelectedSources}>{savingSources ? "Adding..." : "Add selected"}</Button></div>
         {sourceMessage && <p className={sourceMessage.includes("added") || sourceMessage.includes("Review") || sourceMessage.includes("Found") ? "ok-text" : "warn-text"}>{sourceMessage}</p>}
       </section>}
       {step === "access" && <section className="onboarding-panel onboarding-panel-wide">

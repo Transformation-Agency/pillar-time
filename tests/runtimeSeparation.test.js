@@ -116,6 +116,17 @@ test("Onboarding explains setup context and avoids stale recovery copy", () => {
   assert.doesNotMatch(mainSource, /change it later from the home screen/);
 });
 
+test("Onboarding brief setup disabled actions explain the next step", () => {
+  assert.match(mainSource, /const briefPromptTooShort = briefPrompt\.trim\(\)\.length < 20;/);
+  assert.match(mainSource, /const generateBriefSetupDisabledReason = draftingBriefSetup\n\s+\? "Brief setup draft is already being generated"\n\s+: briefPromptTooShort\n\s+\? "Describe your brief request in at least 20 characters"\n\s+: "";/);
+  assert.match(mainSource, /const applyBriefSetupDisabledReason = draftingBriefSetup\n\s+\? "Wait for the draft to finish"\n\s+: !\(briefDraft\?\.sections \|\| \[\]\)\.length\n\s+\? "Generate a brief setup draft first"\n\s+: "";/);
+  assert.match(mainSource, /const suggestSourcesDisabledReason = suggestingSources\n\s+\? "Source suggestions are already being gathered"\n\s+: briefPromptTooShort\n\s+\? "Describe your brief request in at least 20 characters"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!generateBriefSetupDisabledReason\} title=\{generateBriefSetupDisabledReason \|\| "Generate brief setup"\}/);
+  assert.match(mainSource, /disabled=\{!!applyBriefSetupDisabledReason\} title=\{applyBriefSetupDisabledReason \|\| "Apply brief setup and continue"\}/);
+  assert.match(mainSource, /disabled=\{!!suggestSourcesDisabledReason\} title=\{suggestSourcesDisabledReason \|\| "Generate source suggestions"\}/);
+  assert.match(mainSource, /disabled=\{!!addSelectedSourcesDisabledReason\} title=\{addSelectedSourcesDisabledReason \|\| "Add selected sources"\}/);
+});
+
 test("First-run controls avoid misleading defaults and internal labels", () => {
   assert.match(mainSource, /const defaultOpenAiModel = "gpt-4\.1"/);
   assert.doesNotMatch(mainSource, /gpt-5\.4-mini/);
