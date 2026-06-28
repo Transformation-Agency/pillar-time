@@ -1175,7 +1175,8 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
     }
     await runWorkflow();
   };
-  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<div className="row tight-row"><Button icon="briefs" onClick={() => setRoute("briefs")} disabled={!latestArtifact}>View Brief</Button><Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Plan</Button></div>}>
+  const viewBriefDisabledReason = latestArtifact ? "" : "Generate a day plan before viewing the brief";
+  return <Page title="Today" desc="A local command center for commitments, time pressure, reminders, calendar prep, and the next honest use of the day." wide action={<div className="row tight-row"><Button icon="briefs" onClick={() => setRoute("briefs")} disabled={!!viewBriefDisabledReason} title={viewBriefDisabledReason || "View the latest day-plan brief"}>View Brief</Button><Button icon="run" kind="accent" onClick={runWorkflow}>Generate Day Plan</Button></div>}>
     <div className={`day-plan-preflight ${missingDayPlanContext.length ? "has-gaps" : ""}`}>
       <Icon name={missingDayPlanContext.length ? "help" : "check"} />
       <span>{dayPlanPreflight}</span>
