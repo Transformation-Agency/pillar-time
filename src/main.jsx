@@ -1888,7 +1888,7 @@ function Lenses({ state, mutate }) {
     wide
   >
     <section className="panel perspective-panel">
-      <div className="builder-head"><div><h2>Deliberation lenses</h2><p>These do not shape normal brief generation. They run when you click Deliberate Brief.</p></div><div className="builder-actions"><label className="mini-search"><Icon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search lenses..." /></label><Button icon="save" kind="primary" onClick={save}>Save lenses</Button></div></div>
+      <div className="builder-head"><div><h2>Deliberation lenses</h2><p>These do not shape normal brief generation. They run when you click Deliberate Brief.</p></div><div className="builder-actions"><label className="mini-search"><Icon name="search" /><input aria-label="Search perspective lenses" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search lenses..." /></label><Button icon="save" kind="primary" onClick={save}>Save lenses</Button></div></div>
       <div className="analyzer-list">
         {filtered.map((lens) => {
           const index = lenses.findIndex((item) => item.id === lens.id);
