@@ -1542,7 +1542,7 @@ function Meetings({ state, mutate }) {
 function TrustedContext({ state, mutate }) {
   const context = state.trustedContext || {};
   const health = context.health || {};
-  const [factForm, setFactForm] = React.useState({
+  const defaultTrustedFactForm = {
     resourceType: "identity.profile",
     fieldKey: "preferredName",
     value: "",
@@ -1550,7 +1550,9 @@ function TrustedContext({ state, mutate }) {
     visibility: "assistant",
     trustLevel: "verified_canonical_profile",
     verificationStatus: "verified",
-  });
+  };
+  const [factForm, setFactForm] = React.useState(defaultTrustedFactForm);
+  const [factFormBaseline, setFactFormBaseline] = React.useState(defaultTrustedFactForm);
   const [previewRequest, setPreviewRequest] = React.useState({
     mode: "speaking_to_subject",
     partition: "professional",
@@ -1560,6 +1562,12 @@ function TrustedContext({ state, mutate }) {
   const [preview, setPreview] = React.useState(context.envelopePreview);
   const [message, setMessage] = React.useState("");
   React.useEffect(() => setPreview(context.envelopePreview), [context.envelopePreview]);
+  React.useEffect(() => {
+    window.__pillarTimeUnsavedTrustedContextFact = JSON.stringify(factForm) !== JSON.stringify(factFormBaseline);
+    return () => {
+      window.__pillarTimeUnsavedTrustedContextFact = false;
+    };
+  }, [factForm, factFormBaseline]);
   const saveFact = async (event) => {
     event.preventDefault();
     const requiredMissing = !factForm.resourceType.trim() || !factForm.fieldKey.trim() || !String(factForm.value || "").trim();
@@ -1570,7 +1578,10 @@ function TrustedContext({ state, mutate }) {
     setMessage("");
     try {
       await mutate("/api/trusted-context/facts", factForm, "POST");
-      setFactForm((current) => ({ ...current, value: "" }));
+      const nextForm = { ...factForm, value: "" };
+      setFactForm(nextForm);
+      setFactFormBaseline(nextForm);
+      window.__pillarTimeUnsavedTrustedContextFact = false;
       setMessage("Fact saved.");
     } catch (error) {
       setMessage(error.message || "Could not save profile fact.");
@@ -4994,6 +5005,14 @@ function App() {
         return;
       }
       window.__pillarTimeUnsavedReminderDraft = false;
+    }
+    if (route === "trustedContext" && next !== "trustedContext" && window.__pillarTimeUnsavedTrustedContextFact) {
+      const leave = window.confirm("Discard unsaved trusted-context fact? Resource type, field key, value, and trust settings will not be saved.");
+      if (!leave) {
+        location.hash = "trustedContext";
+        return;
+      }
+      window.__pillarTimeUnsavedTrustedContextFact = false;
     }
     setRoute(next);
   }, [route]);

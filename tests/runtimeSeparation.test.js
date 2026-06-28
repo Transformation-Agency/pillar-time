@@ -347,8 +347,13 @@ test("Documents are reachable and expose local success and failure messages", ()
 
 test("Trusted Context actions expose required-field and proposal feedback", () => {
   assert.match(mainSource, /function TrustedContext\(\{ state, mutate \}\) \{/);
+  assert.match(mainSource, /const defaultTrustedFactForm = \{\n\s+resourceType: "identity\.profile",\n\s+fieldKey: "preferredName",/);
+  assert.match(mainSource, /const \[factFormBaseline, setFactFormBaseline\] = React\.useState\(defaultTrustedFactForm\);/);
+  assert.match(mainSource, /window\.__pillarTimeUnsavedTrustedContextFact = JSON\.stringify\(factForm\) !== JSON\.stringify\(factFormBaseline\);/);
+  assert.match(mainSource, /if \(route === "trustedContext" && next !== "trustedContext" && window\.__pillarTimeUnsavedTrustedContextFact\) \{\n\s+const leave = window\.confirm\("Discard unsaved trusted-context fact\? Resource type, field key, value, and trust settings will not be saved\."\);/);
   assert.match(mainSource, /const requiredMissing = !factForm\.resourceType\.trim\(\) \|\| !factForm\.fieldKey\.trim\(\) \|\| !String\(factForm\.value \|\| ""\)\.trim\(\);/);
   assert.match(mainSource, /setMessage\("Add a resource type, field key, and value before saving\."\);\n\s+return;/);
+  assert.match(mainSource, /const nextForm = \{ \.\.\.factForm, value: "" \};\n\s+setFactForm\(nextForm\);\n\s+setFactFormBaseline\(nextForm\);\n\s+window\.__pillarTimeUnsavedTrustedContextFact = false;/);
   assert.match(mainSource, /setMessage\(error\.message \|\| "Could not save profile fact\."\);/);
   assert.match(mainSource, /setMessage\(error\.message \|\| "Could not refresh envelope\."\);/);
   assert.match(mainSource, /const updateProposal = async \(proposal, status\) => \{\n\s+const label = proposal\.fieldKey \|\| proposal\.resourceType \|\| "this memory proposal";\n\s+const confirmation = status === "approved"\n\s+\? `Approve "\$\{label\}" as trusted context\? Pillar Time may use it in future planning and coaching\.`\n\s+: `Reject "\$\{label\}"\? It will not be used as trusted context unless a new proposal is created\.`;\n\s+if \(!window\.confirm\(confirmation\)\) return;\n\s+setMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/trusted-context\/proposals\/\$\{proposal\.id\}`, \{ status \}, "PATCH"\);\n\s+setMessage\(`Proposal \$\{status\}\.`\);/);
