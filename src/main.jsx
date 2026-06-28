@@ -4364,6 +4364,9 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     ? "Connect Linear before opening issues"
     : "";
   const googleCalendarConnected = state.connectors?.googleCalendar?.status === "ready";
+  const settingsGoogleCalendarTestDisabledReason = !googleCalendarConnected
+    ? "Connect Google Calendar before testing"
+    : "";
   const googleCalendarCanWrite = !!state.connectors?.googleCalendar?.canWrite;
   const googleCalendarNeedsWriteReconnect = googleCalendarConnected && !googleCalendarCanWrite;
   const telegramConnected = state.telegram?.enabled && state.telegram?.chatId && state.telegram?.botToken;
@@ -4770,7 +4773,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           </label>) : <p className="hint">Refresh calendars to load your available Google calendars.</p>}
         </div>}
         {googleCalendarMessage && <p className={googleCalendarMessage.includes("ready") || googleCalendarMessage.includes("opened") || googleCalendarMessage.includes("disconnected") ? "ok-text" : "warn-text"}>{googleCalendarMessage}</p>}
-        <div className="modal-actions"><Button type="button" onClick={closeGoogleCalendarModal}>Cancel</Button>{googleCalendarConnected && <Button type="button" icon="run" onClick={refreshGoogleCalendars}>Refresh calendars</Button>}{googleCalendarConnected && <Button type="button" icon="save" onClick={saveGoogleCalendarSelection}>Save calendars</Button>}<Button type="button" icon="run" onClick={testGoogleCalendar}>Test</Button>{googleCalendarConnected && <Button type="button" icon="trash" onClick={disconnectGoogleCalendar}>Disconnect</Button>}<Button icon="save" kind="primary">{googleCalendarNeedsWriteReconnect ? "Reconnect for Calendar Writes" : googleCalendarConnected ? "Reconnect Google" : "Connect Google"}</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeGoogleCalendarModal}>Cancel</Button>{googleCalendarConnected && <Button type="button" icon="run" onClick={refreshGoogleCalendars}>Refresh calendars</Button>}{googleCalendarConnected && <Button type="button" icon="save" onClick={saveGoogleCalendarSelection}>Save calendars</Button>}<Button type="button" icon="run" onClick={testGoogleCalendar} disabled={!!settingsGoogleCalendarTestDisabledReason} title={settingsGoogleCalendarTestDisabledReason || "Test Google Calendar"}>Test</Button>{googleCalendarConnected && <Button type="button" icon="trash" onClick={disconnectGoogleCalendar}>Disconnect</Button>}<Button icon="save" kind="primary">{googleCalendarNeedsWriteReconnect ? "Reconnect for Calendar Writes" : googleCalendarConnected ? "Reconnect Google" : "Connect Google"}</Button></div>
       </form>
     </div>}
   </Page>;

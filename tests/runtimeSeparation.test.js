@@ -544,6 +544,11 @@ test("Google Calendar setup actions have fallback failure messages", () => {
   assert.doesNotMatch(mainSource, /setGoogleCalendarMessage\(error\.message\);\n\s+await refresh\(\);/);
 });
 
+test("Google Calendar setup test action explains missing connection", () => {
+  assert.match(mainSource, /const settingsGoogleCalendarTestDisabledReason = !googleCalendarConnected\n\s+\? "Connect Google Calendar before testing"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!settingsGoogleCalendarTestDisabledReason\} title=\{settingsGoogleCalendarTestDisabledReason \|\| "Test Google Calendar"\}>Test<\/Button>/);
+});
+
 test("Linear setup warns before discarding unsaved connector edits", () => {
   assert.match(mainSource, /const closeLinearModal = \(\) => \{/);
   assert.match(mainSource, /const hasUnsavedLinearChanges = !!linearConnector\.apiKey \|\| linearConnector\.enabled !== savedEnabled;/);
