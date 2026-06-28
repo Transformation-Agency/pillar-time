@@ -494,6 +494,7 @@ test("Help update menu exposes expanded state and keyboard dismissal", () => {
   assert.match(mainSource, /<Button type="button" role="menuitem" icon="run" onClick=\{\(\) => desktopUpdate\.checkForUpdates\(\)\}/);
   assert.match(mainSource, /<Button type="button" role="menuitem" icon="download" kind="primary" onClick=\{desktopUpdate\.installUpdate\}>Install Update<\/Button>/);
   assert.match(mainSource, /<Button type="button" role="menuitem" icon="restart" kind="primary" onClick=\{desktopUpdate\.restartApp\}>Restart to Update<\/Button>/);
+  assert.match(mainSource, /<Button type="button" role="menuitem" icon="documents" onClick=\{\(\) => openExternalUrl\("https:\/\/github\.com\/Transformation-Agency\/pillar-time\/blob\/main\/docs\/USER_MANUAL\.md"\)\}>Open User Manual<\/Button>/);
   assert.match(mainSource, /<Button type="button" role="menuitem" icon="settings" onClick=\{\(\) => \{ setHelpOpen\(false\); setRoute\("settings"\); \}\}>Open Update Settings<\/Button>/);
 });
 
