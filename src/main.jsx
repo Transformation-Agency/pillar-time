@@ -2955,6 +2955,17 @@ function Onboarding({ state, mutate, refresh }) {
       : !suggestions.length
         ? "Generate source suggestions first"
         : "";
+  const perspectivePromptTooShort = perspectivePrompt.trim().length < 8;
+  const generatePerspectivesDisabledReason = generatingPerspectives
+    ? "Perspective lenses are already being generated"
+    : perspectivePromptTooShort
+      ? "Describe the perspectives you want in at least 8 characters"
+      : "";
+  const savePerspectivesDisabledReason = generatingPerspectives
+    ? "Wait for perspective generation to finish"
+    : !perspectiveDrafts.length
+      ? "Generate or add perspective lenses first"
+      : "";
   const go = async (next) => {
     const normalized = normalizeOnboardingStep(next);
     setStep(normalized);
@@ -3674,7 +3685,7 @@ function Onboarding({ state, mutate, refresh }) {
           <Button type="button" icon="mic" onClick={listenForPerspectivePrompt} disabled={!speechSupported && !listening}>{listening ? "Stop" : "Speak"}</Button>
         </div>
         {!speechSupported && <p className="hint">Voice input is not available in this WebView, but typed input works normally.</p>}
-        <div className="row"><Button onClick={() => go("setup")}>Back</Button><Button icon="run" onClick={generatePerspectives} disabled={generatingPerspectives || perspectivePrompt.trim().length < 8}>{generatingPerspectives ? "Generating..." : "Generate lenses"}</Button><Button onClick={() => suggestSources()}>Skip</Button><Button icon="save" kind="primary" onClick={() => savePerspectives("sources")} disabled={!perspectiveDrafts.length}>Save and continue</Button></div>
+        <div className="row"><Button onClick={() => go("setup")}>Back</Button><Button icon="run" onClick={generatePerspectives} disabled={!!generatePerspectivesDisabledReason} title={generatePerspectivesDisabledReason || "Generate perspective lenses"}>{generatingPerspectives ? "Generating..." : "Generate lenses"}</Button><Button onClick={() => suggestSources()}>Skip</Button><Button icon="save" kind="primary" onClick={() => savePerspectives("sources")} disabled={!!savePerspectivesDisabledReason} title={savePerspectivesDisabledReason || "Save perspective lenses and continue"}>Save and continue</Button></div>
         <div className="analyzer-list">
           {perspectiveDrafts.map((lens, index) => <div className={`analyzer-card ${lens.enabled === false ? "disabled" : ""}`} key={lens.id || index}>
             <label className="switch"><input type="checkbox" checked={lens.enabled !== false} onChange={(event) => updatePerspectiveDraft(index, { enabled: event.target.checked })} /><span /></label>

@@ -580,3 +580,11 @@ test("External setup links surface a copyable fallback when the browser cannot o
   assert.match(mainSource, /Copy this URL and paste it into your browser: \{externalLinkNotice\}/);
   assert.match(mainSource, /<Button type="button" icon="x" onClick=\{\(\) => setExternalLinkNotice\(""\)\}>Dismiss<\/Button>/);
 });
+
+test("Onboarding perspective disabled actions explain the next step", () => {
+  assert.match(mainSource, /const perspectivePromptTooShort = perspectivePrompt\.trim\(\)\.length < 8;/);
+  assert.match(mainSource, /const generatePerspectivesDisabledReason = generatingPerspectives\n\s+\? "Perspective lenses are already being generated"\n\s+: perspectivePromptTooShort\n\s+\? "Describe the perspectives you want in at least 8 characters"\n\s+: "";/);
+  assert.match(mainSource, /const savePerspectivesDisabledReason = generatingPerspectives\n\s+\? "Wait for perspective generation to finish"\n\s+: !perspectiveDrafts\.length\n\s+\? "Generate or add perspective lenses first"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!generatePerspectivesDisabledReason\} title=\{generatePerspectivesDisabledReason \|\| "Generate perspective lenses"\}/);
+  assert.match(mainSource, /disabled=\{!!savePerspectivesDisabledReason\} title=\{savePerspectivesDisabledReason \|\| "Save perspective lenses and continue"\}/);
+});
