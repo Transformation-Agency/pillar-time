@@ -1100,6 +1100,12 @@ function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = 
   const dayPlanPreflight = missingDayPlanContext.length
     ? `Generate works with available local context. Missing connectors will be reported: ${missingDayPlanContext.join(", ")}.`
     : "Generate will use Calendar, Linear, model synthesis, and local context.";
+  React.useEffect(() => {
+    window.__pillarTimeUnsavedTodayInput = !!capture.trim() || !!contextText.trim();
+    return () => {
+      window.__pillarTimeUnsavedTodayInput = false;
+    };
+  }, [capture, contextText]);
   const addTask = async (event) => {
     event.preventDefault();
     if (!capture.trim()) return;
@@ -4976,6 +4982,14 @@ function App() {
   const desktopUpdate = useDesktopUpdates();
   const requestRoute = React.useCallback((nextRoute) => {
     const next = nextRoute || "overview";
+    if (route === "today" && next !== "today" && window.__pillarTimeUnsavedTodayInput) {
+      const leave = window.confirm("Discard unsaved Today input? Quick-capture text or context intake text will not be saved.");
+      if (!leave) {
+        location.hash = "today";
+        return;
+      }
+      window.__pillarTimeUnsavedTodayInput = false;
+    }
     if (route === "briefSetup" && next !== "briefSetup" && window.__pillarBriefUnsavedBriefSetup) {
       const leave = window.confirm("You have unsaved brief setup changes. Leave without saving?");
       if (!leave) {

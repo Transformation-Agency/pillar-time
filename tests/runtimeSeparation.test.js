@@ -100,6 +100,12 @@ test("Today context regenerate stops when context save fails", () => {
   assert.doesNotMatch(mainSource, /if \(contextText\.trim\(\)\) await saveContext\(\{ preventDefault\(\) \{\} \}\);\n\s+await runWorkflow\(\);/);
 });
 
+test("Today warns before discarding unsaved quick capture or context intake", () => {
+  assert.match(mainSource, /window\.__pillarTimeUnsavedTodayInput = !!capture\.trim\(\) \|\| !!contextText\.trim\(\);/);
+  assert.match(mainSource, /if \(route === "today" && next !== "today" && window\.__pillarTimeUnsavedTodayInput\) \{\n\s+const leave = window\.confirm\("Discard unsaved Today input\? Quick-capture text or context intake text will not be saved\."\);/);
+  assert.match(mainSource, /if \(!leave\) \{\n\s+location\.hash = "today";\n\s+return;\n\s+\}\n\s+window\.__pillarTimeUnsavedTodayInput = false;/);
+});
+
 test("Today context file import exposes success and failure feedback", () => {
   assert.match(mainSource, /const importContextFile = async \(event\) => \{\n\s+const file = event\.target\.files\?\.\[0\];\n\s+if \(!file\) return;\n\s+setContextMessage\(""\);\n\s+try \{/);
   assert.match(mainSource, /const text = await file\.text\(\);\n\s+setContextText\(\(current\) => \[current, text\]\.filter\(Boolean\)\.join\("\\n\\n"\)\.trim\(\)\);\n\s+setContextMessage\(`Imported \$\{file\.name \|\| "text file"\}\.`\);/);

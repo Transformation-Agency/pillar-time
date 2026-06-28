@@ -10,6 +10,7 @@ You do not need to be a programmer. You do not need to know special productivity
 
 ## Table Of Contents
 
+0. Read this first
 1. What Pillar Time is
 2. The big idea
 3. How Pillar Time reduces mental clutter
@@ -30,6 +31,39 @@ You do not need to be a programmer. You do not need to know special productivity
 18. Troubleshooting
 19. Privacy and safety
 20. What good use feels like
+
+## 0. Read This First
+
+If you only remember one thing, remember this:
+
+**Pillar Time is here to help you stop using your brain as a storage closet.**
+
+Your brain should not have to remember every task, meeting, promise, worry, and follow-up.
+
+Pillar Time gives those things a place to live.
+
+Then it helps you decide:
+
+- what matters today;
+- what can wait;
+- what needs time on the calendar;
+- what needs approval;
+- what you might be avoiding;
+- what the next honest step is.
+
+The fastest way to use the app is:
+
+1. Open **Today**.
+2. Type or paste anything important that is in your head.
+3. Click **Generate Day Plan**.
+4. Read **Today's Three**.
+5. Look at the proposed calendar blocks.
+6. Fix missing context if needed.
+7. Approve only the actions that look right.
+
+You do not need a perfect setup.
+
+You need a clear next step.
 
 ## 1. What Pillar Time Is
 
@@ -357,6 +391,36 @@ Today should show:
 - reminders;
 - approval items;
 - a place to add missing context.
+
+Think of Today as the front desk for your day.
+
+If something is bothering you, put it here.
+
+If you are unsure what matters, generate a plan here.
+
+If the plan is wrong, correct it here.
+
+### What The Main Buttons Mean
+
+**Generate Day Plan** means:
+
+> Look at my current context and build the best plan for today.
+
+**Add Context & Regenerate** means:
+
+> I need to tell you one more thing before you plan again.
+
+**View Brief** means:
+
+> Show me the longer explanation behind the plan.
+
+**Approve Calendar** means:
+
+> I approve these proposed calendar blocks. Add them to my calendar.
+
+Do not click **Approve Calendar** if the schedule is wrong.
+
+Fix the context first.
 
 ### Generate Day Plan
 
@@ -812,6 +876,22 @@ Quick Capture is not for perfect writing.
 
 It is for getting the thought out of your head.
 
+### How To Use These Together
+
+Use **Quick Capture** for fast loose thoughts.
+
+Use **Running To-Do** for a longer task list.
+
+Use **Standing Commitments** for promises that keep mattering.
+
+Use **Calendar** for real time.
+
+Use **Linear** for project work.
+
+Use **Trusted Context** for facts the app should remember when planning.
+
+The app works best when each kind of information has the right home.
+
 ## 11. Trusted Context
 
 Trusted Context is information the app should rely on.
@@ -1255,6 +1335,22 @@ Then use:
 - Trusted Context.
 
 Start simple.
+
+### I Do Not Know Where To Put Something
+
+Use this simple rule:
+
+- If it is a loose thought, use **Quick Capture**.
+- If it is a task, use **Running To-Do** or **Planner**.
+- If it is a promise that keeps mattering, use **Standing Commitments**.
+- If it is a fact about you, your work, or your preferences, use **Trusted Context**.
+- If it is tied to a meeting, use **Meetings**.
+- If it needs a future nudge, use **Reminders**.
+- If it needs real time, put it on the calendar or let Pillar Time propose a block.
+
+When in doubt, put it in Quick Capture first.
+
+You can clean it up later.
 
 ### The Proposed Plan Feels Wrong
 
