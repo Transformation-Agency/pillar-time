@@ -2966,6 +2966,12 @@ function Onboarding({ state, mutate, refresh }) {
     : !perspectiveDrafts.length
       ? "Generate or add perspective lenses first"
       : "";
+  const validateModelDisabledReason = detecting
+    ? "Model validation is already running"
+    : "";
+  const saveModelDisabledReason = !model.model.trim()
+    ? "Enter or detect a model name before saving"
+    : "";
   const go = async (next) => {
     const normalized = normalizeOnboardingStep(next);
     setStep(normalized);
@@ -3119,7 +3125,7 @@ function Onboarding({ state, mutate, refresh }) {
         await go("intent");
       }
     } catch (error) {
-      setModelMessage(error.message);
+      setModelMessage(error.message || "Could not save model settings.");
     }
   };
   const updateDraftSection = (index, patch) => {
@@ -3636,7 +3642,7 @@ function Onboarding({ state, mutate, refresh }) {
           </div>
           <Field label="API key" type="password" value={model.apiKey} onChange={(apiKey) => setModel({ ...model, apiKey })} placeholder={(state.model.providerCredentials?.[model.provider]?.apiKeySaved || (state.model.provider === model.provider && state.model.apiKeySaved)) ? "Saved. Paste a new key to replace it." : "Paste provider API key"} />
           {modelOptionsProvider === model.provider && modelOptions.length ? <Select label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} options={modelOptions.includes(model.model) || !model.model ? modelOptions : [model.model, ...modelOptions]} /> : <Field label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} placeholder="Detect models or enter one manually" />}
-          <div className="row"><Button type="button" onClick={() => go("intent")}>Skip AI for now</Button><Button type="button" icon="search" onClick={detectModels} disabled={detecting}>{detecting ? "Checking..." : "Validate key"}</Button><Button icon="save" kind="primary" disabled={!model.model}>Save model</Button></div>
+          <div className="row"><Button type="button" onClick={() => go("intent")}>Skip AI for now</Button><Button type="button" icon="search" onClick={detectModels} disabled={!!validateModelDisabledReason} title={validateModelDisabledReason || "Validate model API key"}>{detecting ? "Checking..." : "Validate key"}</Button><Button icon="save" kind="primary" disabled={!!saveModelDisabledReason} title={saveModelDisabledReason || "Save model settings"}>Save model</Button></div>
           {modelMessage && <p className={modelMessage.includes("saved") || modelMessage.includes("works") ? "ok-text" : "warn-text"}>{modelMessage}</p>}
         </form>
       </section>}
