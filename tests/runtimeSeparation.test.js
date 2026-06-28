@@ -623,3 +623,22 @@ test("Telegram pairing disabled action and polling errors explain recovery", () 
   assert.match(mainSource, /disabled=\{!!pairingDisabledReason\} title=\{pairingDisabledReason \|\| "Create Telegram pairing link"\}/);
   assert.doesNotMatch(mainSource, /disabled=\{busy \|\| !botToken\}>\{busy \? "Checking\.\.\." : "Create pairing link"\}/);
 });
+
+test("Local dependency setup controls explain busy states and fallback errors", () => {
+  assert.match(mainSource, /const onboardingFfmpegDisabledReason = ffmpegBusy\n\s+\? "FFmpeg setup is already running"\n\s+: "";/);
+  assert.match(mainSource, /const onboardingSttDisabledReason = sttBusy\n\s+\? "Speech-to-text setup is already running"\n\s+: "";/);
+  assert.match(mainSource, /const settingsFfmpegDisabledReason = ffmpegBusy\n\s+\? "FFmpeg setup is already running"\n\s+: "";/);
+  assert.match(mainSource, /const settingsSttDisabledReason = sttBusy\n\s+\? "Speech-to-text setup is already running"\n\s+: "";/);
+  assert.match(mainSource, /setFfmpegMessage\(error\.message \|\| "Could not check FFmpeg\."\);/);
+  assert.match(mainSource, /setFfmpegMessage\(error\.message \|\| "Could not install FFmpeg\."\);/);
+  assert.match(mainSource, /setSttMessage\(error\.message \|\| "Could not check local Whisper\."\);/);
+  assert.match(mainSource, /setSttMessage\(error\.message \|\| "Could not download Whisper model\."\);/);
+  assert.match(mainSource, /setSettingsSttMessage\(error\.message \|\| "Could not check local Whisper\."\);/);
+  assert.match(mainSource, /setSettingsSttMessage\(error\.message \|\| "Could not download Whisper model\."\);/);
+  assert.match(mainSource, /disabled=\{!!onboardingFfmpegDisabledReason\} title=\{onboardingFfmpegDisabledReason \|\| "Re-check FFmpeg"\}/);
+  assert.match(mainSource, /disabled=\{!!onboardingSttDisabledReason\} title=\{onboardingSttDisabledReason \|\| "Check local Whisper"\}/);
+  assert.match(mainSource, /disabled=\{!!settingsFfmpegDisabledReason\} title=\{settingsFfmpegDisabledReason \|\| "Install FFmpeg"\}/);
+  assert.match(mainSource, /disabled=\{!!settingsSttDisabledReason\} title=\{settingsSttDisabledReason \|\| "Download Whisper model"\}/);
+  assert.doesNotMatch(mainSource, /disabled=\{ffmpegBusy\}>\{ffmpegBusy \? "Checking\.\.\." : "Re-check"\}/);
+  assert.doesNotMatch(mainSource, /disabled=\{sttBusy\}>\{sttBusy \? "Downloading\.\.\." : "Download model"\}/);
+});

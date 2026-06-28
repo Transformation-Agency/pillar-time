@@ -2973,6 +2973,12 @@ function Onboarding({ state, mutate, refresh }) {
       : !suggestions.length
         ? "Generate source suggestions first"
         : "";
+  const onboardingFfmpegDisabledReason = ffmpegBusy
+    ? "FFmpeg setup is already running"
+    : "";
+  const onboardingSttDisabledReason = sttBusy
+    ? "Speech-to-text setup is already running"
+    : "";
   const perspectivePromptTooShort = perspectivePrompt.trim().length < 8;
   const generatePerspectivesDisabledReason = generatingPerspectives
     ? "Perspective lenses are already being generated"
@@ -3424,7 +3430,7 @@ function Onboarding({ state, mutate, refresh }) {
       setFfmpegStatus(result.ffmpeg);
       await refresh();
     } catch (error) {
-      setFfmpegMessage(error.message);
+      setFfmpegMessage(error.message || "Could not check FFmpeg.");
     } finally {
       setFfmpegBusy(false);
     }
@@ -3440,7 +3446,7 @@ function Onboarding({ state, mutate, refresh }) {
       setFfmpegMessage(result.message || "FFmpeg install started. Re-check when it finishes.");
       await refresh();
     } catch (error) {
-      setFfmpegMessage(error.message);
+      setFfmpegMessage(error.message || "Could not install FFmpeg.");
       await checkFfmpeg();
     } finally {
       setFfmpegBusy(false);
@@ -3454,7 +3460,7 @@ function Onboarding({ state, mutate, refresh }) {
       setSttStatus(result.stt);
       await refresh();
     } catch (error) {
-      setSttMessage(error.message);
+      setSttMessage(error.message || "Could not check local Whisper.");
     } finally {
       setSttBusy(false);
     }
@@ -3470,7 +3476,7 @@ function Onboarding({ state, mutate, refresh }) {
       setSttMessage(result.message || "Whisper model downloaded.");
       await refresh();
     } catch (error) {
-      setSttMessage(error.message);
+      setSttMessage(error.message || "Could not download Whisper model.");
       await checkStt();
     } finally {
       setSttBusy(false);
@@ -3774,16 +3780,16 @@ function Onboarding({ state, mutate, refresh }) {
             <div className="setup-link-row">
               <Button type="button" icon="external" onClick={() => openExternalUrl(setupLinks.ffmpeg.keyUrl)}>Homebrew</Button>
               <Button type="button" icon="external" onClick={() => openExternalUrl(setupLinks.ffmpeg.docsUrl)}>FFmpeg formula</Button>
-              <Button type="button" icon="run" onClick={checkFfmpeg} disabled={ffmpegBusy}>{ffmpegBusy ? "Checking..." : "Re-check"}</Button>
-              {!ffmpegStatus?.available && ffmpegStatus?.installable && <Button type="button" icon="download" kind="primary" onClick={installFfmpeg} disabled={ffmpegBusy}>{ffmpegBusy ? "Installing..." : "Install FFmpeg"}</Button>}
+              <Button type="button" icon="run" onClick={checkFfmpeg} disabled={!!onboardingFfmpegDisabledReason} title={onboardingFfmpegDisabledReason || "Re-check FFmpeg"}>{ffmpegBusy ? "Checking..." : "Re-check"}</Button>
+              {!ffmpegStatus?.available && ffmpegStatus?.installable && <Button type="button" icon="download" kind="primary" onClick={installFfmpeg} disabled={!!onboardingFfmpegDisabledReason} title={onboardingFfmpegDisabledReason || "Install FFmpeg"}>{ffmpegBusy ? "Installing..." : "Install FFmpeg"}</Button>}
             </div>
             <p className={ffmpegStatus?.available ? "ok-text" : "warn-text"}>{ffmpegMessage || ffmpegStatus?.message || "FFmpeg has not been checked yet."}</p>
           </div>}
           {pendingPrereqKeys.includes("transcriptionModel") && <div className="setup-subcard">
             <div><strong>Set up speech-to-text</strong><span>Use local Whisper STT when bundled/configured, or add an OpenAI/custom transcription endpoint. You can also skip podcast transcription sources.</span></div>
             <div className="setup-link-row">
-              <Button type="button" icon="run" onClick={checkStt} disabled={sttBusy}>{sttBusy ? "Checking..." : "Check local Whisper"}</Button>
-              {sttStatus?.binaryAvailable && !sttStatus?.modelAvailable && <Button type="button" icon="download" kind="primary" onClick={installSttModel} disabled={sttBusy}>{sttBusy ? "Downloading..." : "Download Whisper model"}</Button>}
+              <Button type="button" icon="run" onClick={checkStt} disabled={!!onboardingSttDisabledReason} title={onboardingSttDisabledReason || "Check local Whisper"}>{sttBusy ? "Checking..." : "Check local Whisper"}</Button>
+              {sttStatus?.binaryAvailable && !sttStatus?.modelAvailable && <Button type="button" icon="download" kind="primary" onClick={installSttModel} disabled={!!onboardingSttDisabledReason} title={onboardingSttDisabledReason || "Download Whisper model"}>{sttBusy ? "Downloading..." : "Download Whisper model"}</Button>}
               <Button type="button" icon="external" onClick={() => openExternalUrl(modelProviderRows[0].keyUrl)}>OpenAI keys</Button>
               <Button type="button" icon="external" onClick={() => openExternalUrl(modelProviderRows[0].docsUrl)}>OpenAI help</Button>
               <Button type="button" onClick={async () => { setReturnAfterModel("access"); setModel({ enabled: true, provider: "openai", model: defaultOpenAiModel, apiKey: "", baseUrl: "" }); await go("model"); }}>Set up OpenAI</Button>
@@ -3956,6 +3962,12 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const [sttMessage, setSettingsSttMessage] = React.useState("");
   const [healthBusy, setHealthBusy] = React.useState(false);
   const [healthMessage, setHealthMessage] = React.useState("");
+  const settingsFfmpegDisabledReason = ffmpegBusy
+    ? "FFmpeg setup is already running"
+    : "";
+  const settingsSttDisabledReason = sttBusy
+    ? "Speech-to-text setup is already running"
+    : "";
   const [settingsMessage, setSettingsMessage] = React.useState("");
   React.useEffect(() => {
     if (editingProvider) return;
@@ -4324,7 +4336,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       const result = await api("/api/runtime/ffmpeg");
       setFfmpegStatus(result.ffmpeg);
     } catch (error) {
-      setFfmpegMessage(error.message);
+      setFfmpegMessage(error.message || "Could not check FFmpeg.");
     } finally {
       setFfmpegBusy(false);
     }
@@ -4339,7 +4351,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       setFfmpegStatus(result.ffmpeg);
       setFfmpegMessage(result.message || "FFmpeg installed successfully.");
     } catch (error) {
-      setFfmpegMessage(error.message);
+      setFfmpegMessage(error.message || "Could not install FFmpeg.");
       await checkFfmpeg();
     } finally {
       setFfmpegBusy(false);
@@ -4352,7 +4364,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       const result = await api("/api/runtime/stt");
       setSettingsSttStatus(result.stt);
     } catch (error) {
-      setSettingsSttMessage(error.message);
+      setSettingsSttMessage(error.message || "Could not check local Whisper.");
     } finally {
       setSettingsSttBusy(false);
     }
@@ -4368,7 +4380,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       setSettingsSttMessage(result.message || "Whisper model downloaded.");
       await refresh();
     } catch (error) {
-      setSettingsSttMessage(error.message);
+      setSettingsSttMessage(error.message || "Could not download Whisper model.");
       await checkStt();
     } finally {
       setSettingsSttBusy(false);
@@ -4505,8 +4517,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <Badge tone={sttStatus?.available ? "ok" : "warn"}>{sttStatus?.available ? "Ready" : "Unavailable"}</Badge>
           <span>{sttStatus?.modelName || "tiny.en"}</span>
           <div className="row tight-row">
-            <Button type="button" icon="run" onClick={checkStt} disabled={sttBusy}>{sttBusy ? "Checking..." : "Re-check"}</Button>
-            {sttStatus?.binaryAvailable && !sttStatus?.modelAvailable && <Button type="button" icon="download" kind="primary" onClick={installSttModel} disabled={sttBusy}>{sttBusy ? "Downloading..." : "Download model"}</Button>}
+            <Button type="button" icon="run" onClick={checkStt} disabled={!!settingsSttDisabledReason} title={settingsSttDisabledReason || "Re-check local Whisper"}>{sttBusy ? "Checking..." : "Re-check"}</Button>
+            {sttStatus?.binaryAvailable && !sttStatus?.modelAvailable && <Button type="button" icon="download" kind="primary" onClick={installSttModel} disabled={!!settingsSttDisabledReason} title={settingsSttDisabledReason || "Download Whisper model"}>{sttBusy ? "Downloading..." : "Download model"}</Button>}
           </div>
         </div>
         <div className={`notice ${sttStatus?.available ? "" : "notice-warn"}`}>
@@ -4520,8 +4532,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <Badge tone={ffmpegStatus?.available ? "ok" : "warn"}>{ffmpegStatus?.available ? "Installed" : "Unavailable"}</Badge>
           <span>{ffmpegStatus?.path || "Not found"}</span>
           <div className="row tight-row">
-            <Button type="button" icon="run" onClick={checkFfmpeg} disabled={ffmpegBusy}>{ffmpegBusy ? "Checking..." : "Re-check"}</Button>
-            {!ffmpegStatus?.available && ffmpegStatus?.installable && <Button type="button" icon="download" kind="primary" onClick={installFfmpeg} disabled={ffmpegBusy}>{ffmpegBusy ? "Installing..." : "Install FFmpeg"}</Button>}
+            <Button type="button" icon="run" onClick={checkFfmpeg} disabled={!!settingsFfmpegDisabledReason} title={settingsFfmpegDisabledReason || "Re-check FFmpeg"}>{ffmpegBusy ? "Checking..." : "Re-check"}</Button>
+            {!ffmpegStatus?.available && ffmpegStatus?.installable && <Button type="button" icon="download" kind="primary" onClick={installFfmpeg} disabled={!!settingsFfmpegDisabledReason} title={settingsFfmpegDisabledReason || "Install FFmpeg"}>{ffmpegBusy ? "Installing..." : "Install FFmpeg"}</Button>}
           </div>
         </div>
         <div className={`notice ${ffmpegStatus?.available ? "" : "notice-warn"}`}>
