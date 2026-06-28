@@ -1737,6 +1737,7 @@ function Sources({ state, mutate }) {
     }
   };
   const updateSourceStatus = async (source, active) => {
+    if (active && !window.confirm(`Pause "${source.name || "this source"}"? It will be skipped in future runs until you resume it.`)) return;
     setSourceMessage("");
     try {
       await mutate(`/api/sources/${source.id}`, { status: active ? "paused" : "active" }, "PATCH");
@@ -1809,7 +1810,7 @@ function Sources({ state, mutate }) {
         return <tr key={s.id}>
           <td><div className="source-name-cell"><BrandLogo name={s.type} /><div><strong>{s.name}</strong><small title={displayLocator}>{displayLocator}</small></div></div></td>
           <td>{s.type === "Newsletter" ? "Journal / Library" : s.type}</td>
-          <td><button type="button" className={`source-toggle ${active ? "active" : "paused"}`} onClick={() => updateSourceStatus(s, active)} aria-pressed={active}><span></span>{active ? "Active" : "Paused"}</button></td>
+          <td><button type="button" className={`source-toggle ${active ? "active" : "paused"}`} onClick={() => updateSourceStatus(s, active)} aria-pressed={active} title={active ? "Pause this source for future runs" : "Resume this source for future runs"}><span></span>{active ? "Active" : "Paused"}</button></td>
           <td><Badge tone={["configured", "not required"].includes(credential) ? "ok" : credential === "optional" ? "muted" : "warn"}>{credential}</Badge></td>
           <td><div className="source-actions"><button type="button" onClick={() => openEditSource(s)}><Icon name="pencil" />Edit</button><button className="danger" type="button" onClick={() => deleteSource(s)}><Icon name="trash" />Delete</button></div></td>
         </tr>;

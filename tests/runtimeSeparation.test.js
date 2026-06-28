@@ -269,13 +269,14 @@ test("Source table actions expose local success and failure messages", () => {
   assert.match(mainSource, /setSourceMessage\(`\$\{name\} \$\{action\}\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setSourceMessage\(error\.message \|\| "Could not save source\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setTranscribeMessage\(error\.message \|\| "Could not transcribe podcast episode\."\);/);
-  assert.match(mainSource, /const updateSourceStatus = async \(source, active\) => \{\n\s+setSourceMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/sources\/\$\{source\.id\}`, \{ status: active \? "paused" : "active" \}, "PATCH"\);/);
+  assert.match(mainSource, /const updateSourceStatus = async \(source, active\) => \{\n\s+if \(active && !window\.confirm\(`Pause "\$\{source\.name \|\| "this source"\}"\? It will be skipped in future runs until you resume it\.`\)\) return;\n\s+setSourceMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/sources\/\$\{source\.id\}`, \{ status: active \? "paused" : "active" \}, "PATCH"\);/);
   assert.match(mainSource, /setSourceMessage\(`\$\{source\.name \|\| "Source"\} \$\{active \? "paused" : "activated"\}\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setSourceMessage\(error\.message \|\| "Could not update source\."\);/);
   assert.match(mainSource, /const deleteSource = async \(source\) => \{\n\s+if \(!window\.confirm\(`Delete source "\$\{source\.name\}"\? This removes it from future runs\.`\)\) return;/);
   assert.match(mainSource, /await mutate\(`\/api\/sources\/\$\{source\.id\}`, \{\}, "DELETE"\);\n\s+setSourceMessage\(`\$\{source\.name \|\| "Source"\} deleted\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setSourceMessage\(error\.message \|\| "Could not delete source\."\);/);
   assert.match(mainSource, /\{sourceMessage && <p className=\{sourceMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{sourceMessage\}<\/p>\}/);
+  assert.match(mainSource, /title=\{active \? "Pause this source for future runs" : "Resume this source for future runs"\}/);
   assert.match(mainSource, /onClick=\{\(\) => updateSourceStatus\(s, active\)\}/);
   assert.match(mainSource, /onClick=\{\(\) => deleteSource\(s\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/sources\/\$\{s\.id\}`, \{ status: active \? "paused" : "active" \}, "PATCH"\)\}/);
