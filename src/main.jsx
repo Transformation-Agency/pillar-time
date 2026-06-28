@@ -1950,6 +1950,12 @@ function Lenses({ state, mutate }) {
   React.useEffect(() => {
     if (!dirty) setLenses(state.briefConfig?.perspectiveLenses || []);
   }, [state.briefConfig?.perspectiveLenses, dirty]);
+  React.useEffect(() => {
+    window.__pillarTimeUnsavedPerspectiveLenses = dirty;
+    return () => {
+      window.__pillarTimeUnsavedPerspectiveLenses = false;
+    };
+  }, [dirty]);
   const editLenses = (updater) => {
     setDirty(true);
     setMessage("Unsaved changes.");
@@ -5033,6 +5039,14 @@ function App() {
         return;
       }
       window.__pillarTimeUnsavedLinearDraft = false;
+    }
+    if (route === "lenses" && next !== "lenses" && window.__pillarTimeUnsavedPerspectiveLenses) {
+      const leave = window.confirm("Discard unsaved perspective lens changes? Lens names, roles, descriptions, and instructions will not be saved.");
+      if (!leave) {
+        location.hash = "lenses";
+        return;
+      }
+      window.__pillarTimeUnsavedPerspectiveLenses = false;
     }
     setRoute(next);
   }, [route]);
