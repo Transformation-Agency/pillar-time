@@ -1167,7 +1167,7 @@ function Today({ state, mutate, runWorkflow, setRoute }) {
         {activeCommitments.length ? activeCommitments.map((item) => <ListRow key={item.id} title={item.title} sub={item.notes || item.status} right={<div className="row tight-row"><Button icon="check" onClick={() => completeDailyCommitment(item)}>Done</Button><Button icon="x" onClick={() => removeDailyCommitment(item)}>Remove</Button></div>} />) : <Empty icon="check" title="No commitments selected" body="Accept up to three high-leverage suggestions or add one from Planner." />}
         <form className="quick-capture" onSubmit={addTask}>
           <input aria-label="Quick capture task or obligation" value={capture} onChange={(event) => setCapture(event.target.value)} placeholder="Quick capture a task or obligation" />
-          <Button icon="plus" kind="primary">Capture</Button>
+          <Button icon="plus" kind="primary" disabled={!capture.trim()} title={!capture.trim() ? "Type a task or obligation first" : "Capture task or obligation"}>Capture</Button>
         </form>
         {captureMessage && <p className={captureMessage.includes("Could not") ? "warn-text" : "ok-text"}>{captureMessage}</p>}
       </section>
@@ -1259,7 +1259,7 @@ function Planner({ state, mutate }) {
           <TextArea label="Notes" value={task.notes || ""} rows={3} onChange={(notes) => setTask({ ...task, notes })} />
           <Select label="Leverage" value={task.leverageCategory} onChange={(leverageCategory) => setTask({ ...task, leverageCategory })} options={["unblock", "launchRevenue", "leadership", "deadline", "healthFamilyRecovery", "deepWork", "admin"]} />
           <div className="row"><Field label="Estimate minutes" value={String(task.estimateMinutes)} onChange={(estimateMinutes) => setTask({ ...task, estimateMinutes })} /><Select label="Priority" value={task.priority} onChange={(priority) => setTask({ ...task, priority })} options={["low", "normal", "high"]} /></div>
-          <Button icon="plus" kind="primary">Add Task</Button>
+          <Button icon="plus" kind="primary" disabled={!task.title.trim()} title={!task.title.trim() ? "Add a task title first" : "Add task"}>Add Task</Button>
         </form>
       </section>
       <section className="panel">
@@ -1273,7 +1273,7 @@ function Planner({ state, mutate }) {
         <input aria-label="Important date title" value={importantDate.title} onChange={(event) => setImportantDate({ ...importantDate, title: event.target.value })} placeholder="Important date" />
         <input aria-label="Important date start date" type="date" value={importantDate.startDate} onChange={(event) => setImportantDate({ ...importantDate, startDate: event.target.value, endDate: importantDate.endDate || event.target.value })} />
         <input aria-label="Important date end date" type="date" value={importantDate.endDate} onChange={(event) => setImportantDate({ ...importantDate, endDate: event.target.value })} />
-        <Button icon="plus" kind="primary">Add</Button>
+        <Button icon="plus" kind="primary" disabled={!importantDate.title.trim() || !importantDate.startDate} title={!importantDate.title.trim() || !importantDate.startDate ? "Add a title and start date first" : "Add important date"}>Add</Button>
       </form>
       {(time.importantDates || []).map((item) => <ListRow key={item.id} title={item.title} sub={[item.startDate === item.endDate ? item.startDate : `${item.startDate} to ${item.endDate}`, item.category].filter(Boolean).join(" · ")} right={<Badge>{item.enabled ? "active" : "off"}</Badge>} />)}
     </section>
@@ -1364,7 +1364,7 @@ function Reminders({ state, mutate }) {
             <Field label="Local time" value={form.localTime} onChange={(localTime) => setForm({ ...form, localTime })} />
           </>}
           <label className="check"><input type="checkbox" checked={!!form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} /> Enable immediately</label>
-          <Button icon="plus" kind="primary">Create Reminder</Button>
+          <Button icon="plus" kind="primary" disabled={!form.title.trim()} title={!form.title.trim() ? "Add a reminder title first" : "Create reminder"}>Create Reminder</Button>
         </form>
       </section>
       <section className="panel">
@@ -1425,7 +1425,7 @@ function Meetings({ state, mutate }) {
           <Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} />
           <Field label="Start time" value={form.startsAt} onChange={(startsAt) => setForm({ ...form, startsAt })} />
           <TextArea label="Notes" value={form.notes} rows={5} onChange={(notes) => setForm({ ...form, notes })} />
-          <Button icon="plus" kind="primary">Save Meeting</Button>
+          <Button icon="plus" kind="primary" disabled={!form.title.trim()} title={!form.title.trim() ? "Add a meeting title first" : "Save meeting"}>Save Meeting</Button>
         </form>
       </section>
       <section className="panel">
@@ -2210,7 +2210,7 @@ function Documents({ state, mutate }) {
   return <Page title="Documents" desc="Saved work product and doctrine corpus. Records are real SQLite documents and optional chunks." wide>
     {documentMessage && <p className={documentMessage.includes("Could not") ? "warn-text" : "ok-text"}>{documentMessage}</p>}
     <div className="split">
-      <form className="card form" onSubmit={submit}><h2>Create document</h2><Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} required /><Select label="Type" value={form.type} onChange={(type) => setForm({ ...form, type })} options={["Doctrine", "Memo", "Project", "Note", "Transcript", "Post"]} /><Select label="Visibility" value={form.visibility} onChange={(visibility) => setForm({ ...form, visibility })} options={["private", "team", "public"]} /><Field label="Tags" value={form.tags} onChange={(tags) => setForm({ ...form, tags })} placeholder="doctrine, q2" /><TextArea label="Body" value={form.body} onChange={(body) => setForm({ ...form, body })} rows={9} /><Button icon="plus" kind="primary">Create Document</Button></form>
+      <form className="card form" onSubmit={submit}><h2>Create document</h2><Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} required /><Select label="Type" value={form.type} onChange={(type) => setForm({ ...form, type })} options={["Doctrine", "Memo", "Project", "Note", "Transcript", "Post"]} /><Select label="Visibility" value={form.visibility} onChange={(visibility) => setForm({ ...form, visibility })} options={["private", "team", "public"]} /><Field label="Tags" value={form.tags} onChange={(tags) => setForm({ ...form, tags })} placeholder="doctrine, q2" /><TextArea label="Body" value={form.body} onChange={(body) => setForm({ ...form, body })} rows={9} /><Button icon="plus" kind="primary" disabled={!form.title.trim()} title={!form.title.trim() ? "Add a document title first" : "Create document"}>Create Document</Button></form>
       <div className="card table-card"><h2>Corpus</h2>{state.documents.length ? state.documents.map((d) => <ListRow key={d.id} title={d.title} sub={`${d.type} · ${d.wordCount} words · ${d.visibility}`} right={<Button icon={d.status === "active" ? "x" : "check"} onClick={() => updateDocumentStatus(d)}>{d.status === "active" ? "Archive" : "Reactivate"}</Button>} />) : <Empty icon="documents" title="No documents yet" body="Create or upload a real document before retrieval can affect workflow output." />}</div>
     </div>
   </Page>;

@@ -184,9 +184,14 @@ test("Planning removal actions ask for confirmation before hiding active items",
 
 test("High-use placeholder and table controls expose accessible labels", () => {
   assert.match(mainSource, /aria-label="Quick capture task or obligation"/);
+  assert.match(mainSource, /disabled=\{!capture\.trim\(\)\} title=\{!capture\.trim\(\) \? "Type a task or obligation first" : "Capture task or obligation"\}/);
   assert.match(mainSource, /aria-label="Important date title"/);
   assert.match(mainSource, /aria-label="Important date start date"/);
   assert.match(mainSource, /aria-label="Important date end date"/);
+  assert.match(mainSource, /disabled=\{!importantDate\.title\.trim\(\) \|\| !importantDate\.startDate\} title=\{!importantDate\.title\.trim\(\) \|\| !importantDate\.startDate \? "Add a title and start date first" : "Add important date"\}/);
+  assert.match(mainSource, /disabled=\{!task\.title\.trim\(\)\} title=\{!task\.title\.trim\(\) \? "Add a task title first" : "Add task"\}/);
+  assert.match(mainSource, /disabled=\{!form\.title\.trim\(\)\} title=\{!form\.title\.trim\(\) \? "Add a reminder title first" : "Create reminder"\}/);
+  assert.match(mainSource, /disabled=\{!form\.title\.trim\(\)\} title=\{!form\.title\.trim\(\) \? "Add a meeting title first" : "Save meeting"\}/);
   assert.match(mainSource, /aria-label="Search sources"/);
   assert.match(mainSource, /aria-label=\{`State for \$\{issue\.identifier \|\| issue\.title\}`\}/);
   assert.match(mainSource, /aria-label=\{`Comment on \$\{issue\.identifier \|\| issue\.title\}`\}/);
@@ -230,6 +235,7 @@ test("Documents are reachable and expose local success and failure messages", ()
   assert.match(mainSource, /tags: form\.tags\.split\(","\)\.map\(\(tag\) => tag\.trim\(\)\)\.filter\(Boolean\)/);
   assert.match(mainSource, /setDocumentMessage\("Document created\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setDocumentMessage\(error\.message \|\| "Could not create document\."\);/);
+  assert.match(mainSource, /disabled=\{!form\.title\.trim\(\)\} title=\{!form\.title\.trim\(\) \? "Add a document title first" : "Create document"\}/);
   assert.match(mainSource, /const updateDocumentStatus = async \(document\) => \{\n\s+const nextStatus = document\.status === "active" \? "archived" : "active";/);
   assert.match(mainSource, /await mutate\(`\/api\/documents\/\$\{document\.id\}`, \{ status: nextStatus \}, "PATCH"\);/);
   assert.match(mainSource, /setDocumentMessage\(`\$\{document\.title \|\| "Document"\} \$\{nextStatus === "active" \? "reactivated" : "archived"\}\.`\);/);
