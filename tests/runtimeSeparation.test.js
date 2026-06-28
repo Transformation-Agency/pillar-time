@@ -773,6 +773,8 @@ test("Initial boot loading state explains local startup", () => {
 
 test("Onboarding exit actions surface failures instead of failing silently", () => {
   assert.match(mainSource, /const \[onboardingActionMessage, setOnboardingActionMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const hasUnsavedOnboardingInput = !!starterCommitment\.trim\(\)\n\s+\|\| !!model\.apiKey\.trim\(\)\n\s+\|\| !!linearConnector\.apiKey\.trim\(\)\n\s+\|\| !!xConnector\.apiKey\.trim\(\)\n\s+\|\| !!perspectivePrompt\.trim\(\)/);
+  assert.match(mainSource, /if \(hasUnsavedOnboardingInput\) \{\n\s+const leave = window\.confirm\("Leave onboarding with unsaved setup input\? Typed profile notes, commitments, prompts, or connector keys will not be saved\."\);/);
   assert.match(mainSource, /setOnboardingActionMessage\(error\.message \|\| "Could not finish onboarding\. Try again or finish later\."\);/);
   assert.match(mainSource, /setOnboardingActionMessage\(error\.message \|\| "Could not leave onboarding yet\. Check the local backend and try again\."\);/);
   assert.match(mainSource, /\{onboardingActionMessage && <p className="warn-text onboarding-action-message">\{onboardingActionMessage\}<\/p>\}/);
