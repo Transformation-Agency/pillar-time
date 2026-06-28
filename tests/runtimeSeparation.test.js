@@ -390,9 +390,13 @@ test("Reminder and meeting captures expose local success and failure messages", 
   assert.match(mainSource, /\{reminderMessage && <p className=\{reminderMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{reminderMessage\}<\/p>\}/);
   assert.match(mainSource, /onChange=\{\(event\) => savePrefs\(\{ \[key\]: event\.target\.checked \}, label\)\}/);
   assert.match(mainSource, /onChange=\{\(event\) => savePrefs\(\{ channels: \{ \.\.\.\(prefs\.channels \|\| \{\}\), \[key\]: event\.target\.checked \} \}, key\.replace\(/);
+  assert.match(mainSource, /const emptyMeetingForm = \{ title: "", startsAt: "", notes: "" \};/);
+  assert.match(mainSource, /const \[formBaseline, setFormBaseline\] = React\.useState\(emptyMeetingForm\);/);
+  assert.match(mainSource, /window\.__pillarTimeUnsavedMeetingDraft = JSON\.stringify\(form\) !== JSON\.stringify\(formBaseline\);/);
+  assert.match(mainSource, /if \(route === "meetings" && next !== "meetings" && window\.__pillarTimeUnsavedMeetingDraft\) \{\n\s+const leave = window\.confirm\("Discard unsaved meeting notes\? Title, start time, and notes will not be saved\."\);/);
   assert.match(mainSource, /const \[meetingMessage, setMeetingMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const createMeeting = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!form\.title\.trim\(\)\) return;\n\s+setMeetingMessage\(""\);/);
-  assert.match(mainSource, /await mutate\("\/api\/time\/meetings", form\);\n\s+setForm\(\{ title: "", startsAt: "", notes: "" \}\);\n\s+setMeetingMessage\("Meeting saved\."\);/);
+  assert.match(mainSource, /await mutate\("\/api\/time\/meetings", form\);\n\s+setForm\(emptyMeetingForm\);\n\s+setFormBaseline\(emptyMeetingForm\);\n\s+window\.__pillarTimeUnsavedMeetingDraft = false;\n\s+setMeetingMessage\("Meeting saved\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setMeetingMessage\(error\.message \|\| "Could not save meeting\."\);/);
   assert.match(mainSource, /\{meetingMessage && <p className=\{meetingMessage\.includes\("saved"\) \? "ok-text" : "warn-text"\}>\{meetingMessage\}<\/p>\}/);
   assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/reminders", form\)\.then\(\(\) => setForm\(emptyReminderForm\)\)/);
