@@ -615,3 +615,11 @@ test("Today view brief action explains empty first-run state", () => {
   assert.match(mainSource, /disabled=\{!!viewBriefDisabledReason\} title=\{viewBriefDisabledReason \|\| "View the latest day-plan brief"\}>View Brief<\/Button>/);
   assert.doesNotMatch(mainSource, /disabled=\{!latestArtifact\}>View Brief<\/Button>/);
 });
+
+test("Telegram pairing disabled action and polling errors explain recovery", () => {
+  assert.match(mainSource, /setMessage\(error\.message \|\| "Could not check Telegram pairing status\."\);/);
+  assert.match(mainSource, /const pairingDisabledReason = busy\n\s+\? "Telegram pairing is already checking"\n\s+: !botToken\.trim\(\)\n\s+\? "Paste a BotFather API token before creating a pairing link"\n\s+: "";/);
+  assert.match(mainSource, /setMessage\(error\.message \|\| "Could not create Telegram pairing link\."\);/);
+  assert.match(mainSource, /disabled=\{!!pairingDisabledReason\} title=\{pairingDisabledReason \|\| "Create Telegram pairing link"\}/);
+  assert.doesNotMatch(mainSource, /disabled=\{busy \|\| !botToken\}>\{busy \? "Checking\.\.\." : "Create pairing link"\}/);
+});

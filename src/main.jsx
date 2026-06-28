@@ -2605,11 +2605,16 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
         if (["failed", "expired"].includes(result.session?.status)) setMessage(result.session.error || "Pairing stopped. Start a new code.");
       } catch (error) {
         if (error.payload?.session) setSession(error.payload.session);
-        setMessage(error.message);
+        setMessage(error.message || "Could not check Telegram pairing status.");
       }
     }, 2500);
     return () => clearInterval(timer);
   }, [session?.id, session?.status, refresh, onPaired]);
+  const pairingDisabledReason = busy
+    ? "Telegram pairing is already checking"
+    : !botToken.trim()
+      ? "Paste a BotFather API token before creating a pairing link"
+      : "";
   const startPairing = async (event) => {
     event?.preventDefault();
     setBusy(true);
@@ -2622,7 +2627,7 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
       setMessage("Pairing code is live. In Telegram, chat with your bot, send /start, then reply with the code shown here.");
       await refresh();
     } catch (error) {
-      setMessage(error.message);
+      setMessage(error.message || "Could not create Telegram pairing link.");
     } finally {
       setBusy(false);
     }
@@ -2640,7 +2645,7 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
     </div>
     <form className="pair-token-row" onSubmit={startPairing}>
       <Field label="BotFather API token" type="password" value={botToken} onChange={setBotToken} placeholder={state.telegram.botToken ? "Saved. Paste a new token to replace it." : "123456:ABC..."} />
-      <Button icon="telegram" kind="primary" disabled={busy || !botToken}>{busy ? "Checking..." : "Create pairing link"}</Button>
+      <Button icon="telegram" kind="primary" disabled={!!pairingDisabledReason} title={pairingDisabledReason || "Create Telegram pairing link"}>{busy ? "Checking..." : "Create pairing link"}</Button>
     </form>
     {(session || paired) && <div className={`pair-status ${paired ? "paired" : session?.status || "waiting"}`}>
       <div className="pair-status-head">
