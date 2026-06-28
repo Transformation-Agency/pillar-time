@@ -378,8 +378,11 @@ test("Reminder row actions expose local success and failure messages", () => {
   assert.match(mainSource, /const updateReminder = async \(reminder, patch, successMessage\) => \{\n\s+setReminderMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/reminders\/\$\{reminder\.id\}`, patch, "PATCH"\);/);
   assert.match(mainSource, /setReminderMessage\(successMessage\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setReminderMessage\(error\.message \|\| "Could not update reminder\."\);/);
-  assert.match(mainSource, /onClick=\{\(\) => updateReminder\(reminder, \{ enabled: !reminder\.enabled \}, `\$\{reminder\.title\} \$\{reminder\.enabled \? "disabled" : "enabled"\}\.`\)\}/);
+  assert.match(mainSource, /const toggleReminder = \(reminder\) => \{\n\s+const nextEnabled = !reminder\.enabled;\n\s+if \(nextEnabled && !window\.confirm\(`Enable "\$\{reminder\.title \|\| "this reminder"\}"\? Pillar Time may schedule future desktop or Telegram nudges when Master reminders are on\.`\)\) return;/);
+  assert.match(mainSource, /updateReminder\(reminder, \{ enabled: nextEnabled \}, `\$\{reminder\.title\} \$\{reminder\.enabled \? "disabled" : "enabled"\}\.`\);/);
+  assert.match(mainSource, /onClick=\{\(\) => toggleReminder\(reminder\)\}/);
   assert.match(mainSource, /onClick=\{\(\) => updateReminder\(reminder, \{ pausedUntil: new Date\(Date\.now\(\) \+ 86400000\)\.toISOString\(\) \}, `\$\{reminder\.title\} paused until tomorrow\.`\)\}/);
+  assert.doesNotMatch(mainSource, /onClick=\{\(\) => updateReminder\(reminder, \{ enabled: !reminder\.enabled \}, `\$\{reminder\.title\} \$\{reminder\.enabled \? "disabled" : "enabled"\}\.`\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/reminders\/\$\{reminder\.id\}`, \{ enabled: !reminder\.enabled \}, "PATCH"\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/reminders\/\$\{reminder\.id\}`, \{ pausedUntil: new Date\(Date\.now\(\) \+ 86400000\)\.toISOString\(\) \}, "PATCH"\)\}/);
 });
