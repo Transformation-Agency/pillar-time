@@ -596,3 +596,10 @@ test("Onboarding model setup disabled actions and save failures explain recovery
   assert.match(mainSource, /disabled=\{!!validateModelDisabledReason\} title=\{validateModelDisabledReason \|\| "Validate model API key"\}/);
   assert.match(mainSource, /disabled=\{!!saveModelDisabledReason\} title=\{saveModelDisabledReason \|\| "Save model settings"\}/);
 });
+
+test("Brief reader audio disabled actions explain setup and busy states", () => {
+  assert.match(mainSource, /const briefAudioDisabledReason = audioBusy\n\s+\? "Audio generation is already running"\n\s+: state\.tts\?\.status !== "ready"\n\s+\? "Set up ElevenLabs in Settings before playing briefs aloud"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!briefAudioDisabledReason\} title=\{briefAudioDisabledReason \|\| "Generate or play brief audio"\}/);
+  assert.match(mainSource, /disabled=\{!!briefAudioDisabledReason\} title=\{briefAudioDisabledReason \|\| "Restart brief audio"\}/);
+  assert.doesNotMatch(mainSource, /disabled=\{audioBusy \|\| state\.tts\?\.status !== "ready"\}>/);
+});
