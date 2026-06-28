@@ -10,6 +10,7 @@ SAAS_SPEC.md
 *_PLAN.md
 src-tauri/target/
 src-tauri/resources/backend/
+src-tauri/resources/lib/
 src-tauri/resources/whisper/
 src-tauri/binaries/jack-daily-brief-backend-*
 src-tauri/binaries/pillar-brief-backend-*
