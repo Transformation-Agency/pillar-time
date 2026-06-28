@@ -3196,8 +3196,13 @@ function Onboarding({ state, mutate, refresh }) {
     : "";
   const go = async (next) => {
     const normalized = normalizeOnboardingStep(next);
+    setOnboardingActionMessage("");
     setStep(normalized);
-    await mutate("/api/onboarding", { currentStep: normalized, briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: briefDraft }, "PATCH");
+    try {
+      await mutate("/api/onboarding", { currentStep: normalized, briefPrompt, sourceSuggestions: suggestions, briefConfigDraft: briefDraft }, "PATCH");
+    } catch (error) {
+      setOnboardingActionMessage(error.message || "Could not save onboarding progress. You can keep going, but reload may return to the previous step.");
+    }
   };
   React.useEffect(() => {
     setFfmpegStatus(state.runtime?.ffmpeg || null);
