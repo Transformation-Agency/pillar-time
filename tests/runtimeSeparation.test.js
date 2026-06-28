@@ -6,6 +6,8 @@ const serverSource = fs.readFileSync(new URL("../server/index.js", import.meta.u
 const tauriSource = fs.readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
 const envExample = fs.readFileSync(new URL("../.env.example", import.meta.url), "utf8");
 const mainSource = fs.readFileSync(new URL("../src/main.jsx", import.meta.url), "utf8");
+const tauriConfig = fs.readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8");
+const sidecarPrepareSource = fs.readFileSync(new URL("../scripts/prepare-tauri-sidecar.mjs", import.meta.url), "utf8");
 
 test("Pillar Time runtime uses a dedicated backend port", () => {
   assert.match(serverSource, /process\.env\.PORT \|\| 42818/);
@@ -26,6 +28,20 @@ test("Pillar Time does not inherit shared Pillar app runtime variables", () => {
     assert.doesNotMatch(source, /(?<!PILLAR_TIME_)REDDIT_CLIENT_ID/);
     assert.doesNotMatch(source, /(?<!PILLAR_TIME_)REDDIT_CLIENT_SECRET/);
   }
+});
+
+test("Packaged desktop backend bundles the Node runtime library", () => {
+  assert.match(tauriConfig, /"resources\/lib"/);
+  assert.match(sidecarPrepareSource, /const runtimeLibResourcesDir = path\.join\(resourcesDir, "lib"\);/);
+  assert.match(sidecarPrepareSource, /function copyNodeRuntimeLibraries\(nodeBinary\)/);
+  assert.match(sidecarPrepareSource, /linkedLibraries\(nodeBinary\)/);
+  assert.match(sidecarPrepareSource, /path\.basename\(libraryRef\)\.startsWith\("libnode"\)/);
+  assert.match(sidecarPrepareSource, /PILLAR_TIME_NODE_LIB_DIR/);
+  assert.match(sidecarPrepareSource, /copyBundleAsset\(src, dest\)/);
+  assert.match(sidecarPrepareSource, /function clearMacMetadata\(filePath\)/);
+  assert.match(sidecarPrepareSource, /execFileSync\("xattr", \["-cr", filePath\]/);
+  assert.match(sidecarPrepareSource, /addDevRpath\(binaryPath, "@executable_path\/\.\.\/Resources\/resources\/lib"\)/);
+  assert.match(sidecarPrepareSource, /copyNodeRuntimeLibraries\(nodeBinary\);\n\s+addNodeRuntimeRpaths\(filePath\);\n\s+adHocSign\(filePath\);/);
 });
 
 test("Today generation defaults to executive day planning instead of intelligence", () => {

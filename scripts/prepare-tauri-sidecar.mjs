@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "..");
 const tauriDir = path.join(root, "src-tauri");
 const resourcesDir = path.join(tauriDir, "resources");
 const backendDir = path.join(resourcesDir, "backend");
+const runtimeLibResourcesDir = path.join(resourcesDir, "lib");
 const whisperResourcesDir = path.join(resourcesDir, "whisper");
 const whisperVendorDir = process.env.PILLAR_TIME_WHISPER_VENDOR_DIR || path.join(root, "vendor", "whisper");
 const binariesDir = path.join(tauriDir, "binaries");
@@ -36,12 +37,28 @@ function copyBundleAsset(src, dest) {
     try {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       execFileSync("ditto", ["--noextattr", "--norsrc", src, dest], { stdio: "ignore" });
+      clearMacMetadata(dest);
       return;
     } catch {
       // Fall back to the normal copy path if ditto is unavailable or refuses the asset.
     }
   }
   copy(src, dest);
+  clearMacMetadata(dest);
+}
+
+function clearMacMetadata(filePath) {
+  if (process.platform !== "darwin" || !fs.existsSync(filePath)) return;
+  try {
+    execFileSync("xattr", ["-cr", filePath], { stdio: "ignore" });
+  } catch {
+    // Best effort: copied Homebrew artifacts can carry local xattrs that confuse signing.
+  }
+  try {
+    execFileSync("xattr", ["-d", "com.apple.provenance", filePath], { stdio: "ignore" });
+  } catch {
+    // This attribute is not always present or removable on every macOS version.
+  }
 }
 
 function packagePath(packageName, nodeModulesDir = path.join(root, "node_modules")) {
@@ -92,6 +109,65 @@ function copyNodeSidecar(filePath) {
   const nodeBinary = process.env.PILLAR_TIME_NODE_SIDECAR_PATH || process.execPath;
   fs.copyFileSync(nodeBinary, filePath);
   fs.chmodSync(filePath, 0o755);
+  copyNodeRuntimeLibraries(nodeBinary);
+  addNodeRuntimeRpaths(filePath);
+  adHocSign(filePath);
+}
+
+function linkedLibraries(binaryPath) {
+  if (process.platform !== "darwin" || !fs.existsSync(binaryPath)) return [];
+  try {
+    return execFileSync("otool", ["-L", binaryPath], { encoding: "utf8" })
+      .split("\n")
+      .slice(1)
+      .map((line) => line.trim().split(/\s+/)[0])
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function nodeRuntimeSearchDirs(nodeBinary) {
+  const dirs = [
+    process.env.PILLAR_TIME_NODE_LIB_DIR,
+    path.dirname(nodeBinary),
+    path.resolve(path.dirname(nodeBinary), "..", "lib"),
+    "/opt/homebrew/lib",
+    "/usr/local/lib",
+  ].filter(Boolean);
+  const realNodeBinary = fs.existsSync(nodeBinary) ? fs.realpathSync(nodeBinary) : nodeBinary;
+  dirs.push(path.dirname(realNodeBinary), path.resolve(path.dirname(realNodeBinary), "..", "lib"));
+  return [...new Set(dirs)];
+}
+
+function resolveRuntimeLibrary(libraryRef, nodeBinary) {
+  if (!path.basename(libraryRef).startsWith("libnode") || !libraryRef.endsWith(".dylib")) return null;
+  if (path.isAbsolute(libraryRef) && fs.existsSync(libraryRef)) return libraryRef;
+  const libraryName = path.basename(libraryRef);
+  for (const dir of nodeRuntimeSearchDirs(nodeBinary)) {
+    const candidate = path.join(dir, libraryName);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  throw new Error(`Could not locate ${libraryName} required by ${nodeBinary}. Set PILLAR_TIME_NODE_LIB_DIR to the directory containing it.`);
+}
+
+function copyNodeRuntimeLibraries(nodeBinary) {
+  if (process.platform !== "darwin") return;
+  fs.mkdirSync(runtimeLibResourcesDir, { recursive: true });
+  for (const libraryRef of linkedLibraries(nodeBinary)) {
+    const src = resolveRuntimeLibrary(libraryRef, nodeBinary);
+    if (!src) continue;
+    const dest = path.join(runtimeLibResourcesDir, path.basename(src));
+    copyBundleAsset(src, dest);
+    fs.chmodSync(dest, 0o755);
+    adHocSign(dest);
+  }
+}
+
+function addNodeRuntimeRpaths(binaryPath) {
+  addDevRpath(binaryPath, "@executable_path/../Resources/resources/lib");
+  addDevRpath(binaryPath, "/opt/homebrew/lib");
+  addDevRpath(binaryPath, "/usr/local/lib");
 }
 
 function normalizeWhisperArtifacts(dir) {
@@ -118,7 +194,8 @@ function normalizeWhisperArtifacts(dir) {
 }
 
 function addDevRpath(binaryPath, rpath) {
-  if (process.platform !== "darwin" || !fs.existsSync(binaryPath) || !fs.existsSync(rpath)) return;
+  if (process.platform !== "darwin" || !fs.existsSync(binaryPath)) return;
+  if (!rpath.startsWith("@") && !fs.existsSync(rpath)) return;
   try {
     const output = execFileSync("otool", ["-l", binaryPath], { encoding: "utf8" });
     if (output.includes(`path ${rpath} `)) return;
@@ -138,8 +215,10 @@ function adHocSign(binaryPath) {
 }
 
 rmrf(backendDir);
+rmrf(runtimeLibResourcesDir);
 rmrf(whisperResourcesDir);
 fs.mkdirSync(backendDir, { recursive: true });
+fs.mkdirSync(runtimeLibResourcesDir, { recursive: true });
 fs.mkdirSync(whisperResourcesDir, { recursive: true });
 fs.mkdirSync(binariesDir, { recursive: true });
 
@@ -202,6 +281,7 @@ console.log(`Prepared Tauri Node sidecar resources for ${hostTriple}${fs.existsS
 const debugResourcesDir = path.join(tauriDir, "target", "debug", "resources");
 if (fs.existsSync(debugResourcesDir)) {
   copyBundleAsset(backendDir, path.join(debugResourcesDir, "backend"));
+  copyBundleAsset(runtimeLibResourcesDir, path.join(debugResourcesDir, "lib"));
   if (fs.existsSync(whisperResourcesDir)) {
     copyBundleAsset(whisperResourcesDir, path.join(debugResourcesDir, "whisper"));
   }
