@@ -1539,6 +1539,11 @@ function TrustedContext({ state, mutate }) {
     }
   };
   const updateProposal = async (proposal, status) => {
+    const label = proposal.fieldKey || proposal.resourceType || "this memory proposal";
+    const confirmation = status === "approved"
+      ? `Approve "${label}" as trusted context? Pillar Time may use it in future planning and coaching.`
+      : `Reject "${label}"? It will not be used as trusted context unless a new proposal is created.`;
+    if (!window.confirm(confirmation)) return;
     setMessage("");
     try {
       await mutate(`/api/trusted-context/proposals/${proposal.id}`, { status }, "PATCH");
@@ -1606,7 +1611,7 @@ function TrustedContext({ state, mutate }) {
           key={proposal.id}
           title={`${proposal.fieldKey}: ${proposal.proposedValue}`}
           sub={`${proposal.resourceType} · ${proposal.source} · confidence ${Math.round((proposal.confidence || 0) * 100)}%`}
-          right={<div className="row tight-row"><Badge tone={proposal.status === "approved" ? "ok" : proposal.status === "rejected" ? "warn" : "muted"}>{proposal.status}</Badge>{proposal.status === "proposed" && <><Button icon="check" onClick={() => updateProposal(proposal, "approved")}>Approve</Button><Button icon="x" onClick={() => updateProposal(proposal, "rejected")}>Reject</Button></>}</div>}
+          right={<div className="row tight-row"><Badge tone={proposal.status === "approved" ? "ok" : proposal.status === "rejected" ? "warn" : "muted"}>{proposal.status}</Badge>{proposal.status === "proposed" && <><Button icon="check" title="Approve this proposal as trusted context" onClick={() => updateProposal(proposal, "approved")}>Approve</Button><Button icon="x" title="Reject this proposal without using it" onClick={() => updateProposal(proposal, "rejected")}>Reject</Button></>}</div>}
         />)}</div> : <Empty icon="trustedContext" title="No proposals" body="Learned observations will wait here until you approve them." />}
       </section>
     </div>
