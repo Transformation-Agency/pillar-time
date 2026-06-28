@@ -4376,6 +4376,11 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const settingsXSaveDisabledReason = !xConnector.apiKey && !state.connectors?.x?.apiKeySaved
     ? "Paste an X bearer token before saving"
     : "";
+  const settingsTelegramSaveDisabledReason = !String(telegramForm.botToken || "").trim()
+    ? "Paste a Telegram bot token before saving"
+    : !String(telegramForm.chatId || "").trim()
+      ? "Add a Telegram chat ID before saving"
+      : "";
   const openProvider = (provider) => {
     setModel({ enabled: true, provider, model: provider === state.model.provider ? state.model.model || defaultModelForProvider(provider) : defaultModelForProvider(provider), apiKey: "", baseUrl: provider === state.model.provider ? state.model.baseUrl || "" : "" });
     setModelOptions([]);
@@ -4675,7 +4680,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         <Field label="Chat ID" value={telegramForm.chatId} onChange={(chatId) => setTelegramForm({ ...telegramForm, chatId })} placeholder="-1001234567890 or 123456789" />
         <Field label="Allowed users" value={telegramForm.allowedUsers} onChange={(allowedUsers) => setTelegramForm({ ...telegramForm, allowedUsers })} placeholder="username, teammate, 123456789" />
         {telegramSetupMessage && <p className="warn-text">{telegramSetupMessage}</p>}
-        <div className="modal-actions"><Button type="button" onClick={closeTelegramModal}>Cancel</Button><Button icon="save" kind="primary">Save Telegram</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeTelegramModal}>Cancel</Button><Button icon="save" kind="primary" disabled={!!settingsTelegramSaveDisabledReason} title={settingsTelegramSaveDisabledReason || "Save Telegram settings"}>Save Telegram</Button></div>
       </form>
     </div>}
     {xModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeXModal(); }}>
