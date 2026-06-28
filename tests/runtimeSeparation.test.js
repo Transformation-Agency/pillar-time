@@ -233,6 +233,7 @@ test("Source table actions expose local success and failure messages", () => {
   assert.match(mainSource, /await mutate\(endpoint, payload, method\);\n\s+const action = editingSource \? "updated" : "added";/);
   assert.match(mainSource, /setSourceMessage\(`\$\{name\} \$\{action\}\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setSourceMessage\(error\.message \|\| "Could not save source\."\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setTranscribeMessage\(error\.message \|\| "Could not transcribe podcast episode\."\);/);
   assert.match(mainSource, /const updateSourceStatus = async \(source, active\) => \{\n\s+setSourceMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/sources\/\$\{source\.id\}`, \{ status: active \? "paused" : "active" \}, "PATCH"\);/);
   assert.match(mainSource, /setSourceMessage\(`\$\{source\.name \|\| "Source"\} \$\{active \? "paused" : "activated"\}\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setSourceMessage\(error\.message \|\| "Could not update source\."\);/);
