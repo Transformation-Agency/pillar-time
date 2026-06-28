@@ -2783,7 +2783,7 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
       const result = await fetchVoices();
       setMessage(result.voices.length ? `Detected ${result.voices.length} voice${result.voices.length === 1 ? "" : "s"}.` : "No voices returned for this account.");
     } catch (error) {
-      setMessage(error.message);
+      setMessage(error.message || "Could not detect ElevenLabs voices.");
     } finally {
       setBusy(false);
     }
@@ -2814,7 +2814,7 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
       setMessage("ElevenLabs audio saved.");
       onSaved?.();
     } catch (error) {
-      setMessage(error.message);
+      setMessage(error.message || "Could not save audio settings.");
     } finally {
       setBusy(false);
     }
@@ -2837,7 +2837,7 @@ function ElevenLabsSetup({ state, mutate, refresh, compact = false, onSkip, onSa
       setMessage("Preview generated.");
       await refresh?.();
     } catch (error) {
-      setMessage(error.message);
+      setMessage(error.message || "Could not play audio preview.");
     } finally {
       setBusy(false);
     }

@@ -424,6 +424,12 @@ test("Audio setup disabled buttons explain the required next step", () => {
   assert.match(mainSource, /disabled=\{!!saveAudioDisabledReason\} title=\{saveAudioDisabledReason \|\| "Save audio settings"\}/);
 });
 
+test("Audio setup failures have fallback recovery messages", () => {
+  assert.match(mainSource, /setMessage\(error\.message \|\| "Could not detect ElevenLabs voices\."\);/);
+  assert.match(mainSource, /setMessage\(error\.message \|\| "Could not play audio preview\."\);/);
+  assert.match(mainSource, /setMessage\(error\.message \|\| "Could not save audio settings\."\);/);
+});
+
 test("Connector picker exposes source management instead of stale hidden-source copy", () => {
   assert.match(mainSource, /<button type="button" onClick=\{\(\) => \{ setConnectorModal\(false\); location\.hash = "sources"; \}\}><Icon name="sources" \/><strong>Manage sources<\/strong><span>Add, pause, resume, or delete monitored feeds and searches\.<\/span><\/button>/);
   assert.match(mainSource, /Source management is available from Context &gt; Sources\./);
