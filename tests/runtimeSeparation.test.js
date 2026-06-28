@@ -494,6 +494,14 @@ test("Settings credential save failures stay visible in the setup modal", () => 
   assert.doesNotMatch(mainSource, /mutate\("\/api\/telegram", \{ \.\.\.telegramForm, enabled: true, allowedUsers:[\s\S]*?\.then\(\(\) => setTelegramModal\(false\)\)/);
 });
 
+test("Telegram command tool exposes success and failure feedback", () => {
+  assert.match(mainSource, /const runCmd = async \(\) => \{\n\s+setTelegramMessage\(""\);\n\s+setResult\(""\);\n\s+try \{\n\s+const r = await mutate\("\/api\/telegram\/commands", \{ command: cmd \}\);\n\s+setResult\(r\.result\);\n\s+setTelegramMessage\(`\$\{cmd\} command completed\.`\);/);
+  assert.match(mainSource, /catch \(error\) \{\n\s+setTelegramMessage\(error\.message \|\| "Could not run Telegram command\."\);/);
+  assert.match(mainSource, /setTelegramMessage\(error\.message \|\| "Could not save Telegram settings\."\);/);
+  assert.match(mainSource, /setTelegramMessage\(error\.message \|\| "Could not send Telegram test\."\);/);
+  assert.doesNotMatch(mainSource, /const runCmd = async \(\) => \{ const r = await mutate\("\/api\/telegram\/commands", \{ command: cmd \}\); setResult\(r\.result\); \};/);
+});
+
 test("Backend connection errors offer retry and clear after recovery", () => {
   assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
   assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);

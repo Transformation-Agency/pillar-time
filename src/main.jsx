@@ -3769,7 +3769,7 @@ function Telegram({ state, mutate, refresh }) {
       await mutate("/api/telegram", { ...form, allowedUsers: form.allowedUsers.split(",").map((u) => u.trim()).filter(Boolean) }, "PATCH");
       setTelegramMessage("Telegram settings saved.");
     } catch (error) {
-      setTelegramMessage(error.message);
+      setTelegramMessage(error.message || "Could not save Telegram settings.");
     }
   };
   const testTelegram = async () => {
@@ -3778,10 +3778,20 @@ function Telegram({ state, mutate, refresh }) {
       const response = await mutate("/api/telegram/test", {});
       setTelegramMessage(`Test message sent${response.botUsername ? ` via @${response.botUsername}` : ""}.`);
     } catch (error) {
-      setTelegramMessage(error.message);
+      setTelegramMessage(error.message || "Could not send Telegram test.");
     }
   };
-  const runCmd = async () => { const r = await mutate("/api/telegram/commands", { command: cmd }); setResult(r.result); };
+  const runCmd = async () => {
+    setTelegramMessage("");
+    setResult("");
+    try {
+      const r = await mutate("/api/telegram/commands", { command: cmd });
+      setResult(r.result);
+      setTelegramMessage(`${cmd} command completed.`);
+    } catch (error) {
+      setTelegramMessage(error.message || "Could not run Telegram command.");
+    }
+  };
   return <Page title="Telegram" desc="Pair Telegram with a bot link, or use Advanced for manual chat IDs." wide>
     <div className="split">
       <div className="card form"><h2>Easy pairing</h2><TelegramPairingFlow state={state} refresh={refresh} /></div>
