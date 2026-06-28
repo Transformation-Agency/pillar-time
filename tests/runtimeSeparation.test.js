@@ -578,6 +578,8 @@ test("Google Calendar setup actions have fallback failure messages", () => {
 
 test("Google Calendar setup test action explains missing connection", () => {
   assert.match(mainSource, /const settingsGoogleCalendarTestDisabledReason = !googleCalendarConnected\n\s+\? "Connect Google Calendar before testing"\n\s+: "";/);
+  assert.match(mainSource, /const settingsGoogleCalendarSaveDisabledReason = !googleCalendarSelectionDirty\n\s+\? "Change selected calendars before saving"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!!settingsGoogleCalendarSaveDisabledReason\} title=\{settingsGoogleCalendarSaveDisabledReason \|\| "Save selected calendars"\}>Save calendars<\/Button>/);
   assert.match(mainSource, /disabled=\{!!settingsGoogleCalendarTestDisabledReason\} title=\{settingsGoogleCalendarTestDisabledReason \|\| "Test Google Calendar"\}>Test<\/Button>/);
 });
 
