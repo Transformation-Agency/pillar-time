@@ -535,3 +535,13 @@ test("Telegram delivery timeouts are treated as pending acknowledgement, not fai
   assert.match(mainSource, /Telegram delivery acknowledgement timed out/);
   assert.doesNotMatch(serverSource, /promiseWithTimeout\(deliverBriefToTelegram\(\{ runId, artifact \}\), 45000, "Telegram delivery timed out after 45 seconds"\)/);
 });
+
+test("External setup links surface a copyable fallback when the browser cannot open", () => {
+  assert.match(mainSource, /window\.dispatchEvent\(new CustomEvent\("pillar-time:external-link-fallback"/);
+  assert.match(mainSource, /const popup = window\.open\(target \|\| url, "_blank", "noopener,noreferrer"\);/);
+  assert.match(mainSource, /if \(!popup\) showFallback\(\);/);
+  assert.match(mainSource, /const \[externalLinkNotice, setExternalLinkNotice\] = React\.useState\(""\);/);
+  assert.match(mainSource, /window\.addEventListener\("pillar-time:external-link-fallback", onExternalLinkFallback\);/);
+  assert.match(mainSource, /Copy this URL and paste it into your browser: \{externalLinkNotice\}/);
+  assert.match(mainSource, /<Button type="button" icon="x" onClick=\{\(\) => setExternalLinkNotice\(""\)\}>Dismiss<\/Button>/);
+});
