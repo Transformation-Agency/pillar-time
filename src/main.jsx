@@ -1287,7 +1287,15 @@ function Reminders({ state, mutate }) {
   const emptyReminderForm = { title: "", body: "", type: "regular", scheduleType: "daily", localTime: "09:00", enabled: false, channels: { desktopText: true, telegramText: false }, sporadic: { windowStart: "10:00", windowEnd: "16:00", count: 2, minGapMinutes: 120 } };
   const [form, setForm] = React.useState(emptyReminderForm);
   const [reminderMessage, setReminderMessage] = React.useState("");
-  const savePrefs = (patch) => mutate("/api/time/preferences", { ...prefs, ...patch }, "PATCH");
+  const savePrefs = async (patch, label) => {
+    setReminderMessage("");
+    try {
+      await mutate("/api/time/preferences", { ...prefs, ...patch }, "PATCH");
+      setReminderMessage(`${label} saved.`);
+    } catch (error) {
+      setReminderMessage(error.message || "Could not update reminder settings.");
+    }
+  };
   const createReminder = async (event) => {
     event.preventDefault();
     if (!form.title.trim()) return;
@@ -1327,6 +1335,7 @@ function Reminders({ state, mutate }) {
       <Metric label="Sporadic" value={prefs.sporadicRemindersEnabled ? "On" : "Off"} sub="deterministic random windows" />
       <Metric label="Delivery" value={prefs.channels?.telegramText ? "Telegram" : "Desktop"} sub="configured channel" />
     </div>
+    {reminderMessage && <p className={reminderMessage.includes("Could not") ? "warn-text" : "ok-text"}>{reminderMessage}</p>}
     <section className="panel">
       <PanelTitle icon="settings" title="Reminder Controls" sub="Everything stays disabled unless the master switch and individual reminder are on." />
       {!masterRemindersOn && <div className="notice notice-warn">
@@ -1338,14 +1347,13 @@ function Reminders({ state, mutate }) {
           ["reminderMasterEnabled", "Master reminders"],
           ["regularRemindersEnabled", "Regular reminders"],
           ["sporadicRemindersEnabled", "Sporadic reminders"],
-        ].map(([key, label]) => <label className="switch-row" key={key}><span>{label}</span><label className="switch"><input type="checkbox" checked={!!prefs[key]} onChange={(event) => savePrefs({ [key]: event.target.checked })} /><span /></label></label>)}
-        {["desktopText", "desktopAudio", "telegramText", "telegramAudio"].map((key) => <label className={`switch-row ${!masterRemindersOn ? "is-gated" : ""}`} key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!prefs.channels?.[key]} onChange={(event) => savePrefs({ channels: { ...(prefs.channels || {}), [key]: event.target.checked } })} /><span /></label></label>)}
+        ].map(([key, label]) => <label className="switch-row" key={key}><span>{label}</span><label className="switch"><input type="checkbox" checked={!!prefs[key]} onChange={(event) => savePrefs({ [key]: event.target.checked }, label)} /><span /></label></label>)}
+        {["desktopText", "desktopAudio", "telegramText", "telegramAudio"].map((key) => <label className={`switch-row ${!masterRemindersOn ? "is-gated" : ""}`} key={key}><span>{key.replace(/([A-Z])/g, " $1")}</span><label className="switch"><input type="checkbox" checked={!!prefs.channels?.[key]} onChange={(event) => savePrefs({ channels: { ...(prefs.channels || {}), [key]: event.target.checked } }, key.replace(/([A-Z])/g, " $1"))} /><span /></label></label>)}
       </div>
     </section>
     <div className="split time-section">
       <section className="panel">
         <PanelTitle icon="plus" title="Create Reminder" sub="The new reminder is off unless you enable it." />
-        {reminderMessage && <p className={reminderMessage.includes("Could not") ? "warn-text" : "ok-text"}>{reminderMessage}</p>}
         <form className="form" onSubmit={createReminder}>
           <Field label="Title" value={form.title} onChange={(title) => setForm({ ...form, title })} />
           <TextArea label="Body" value={form.body} rows={3} onChange={(body) => setForm({ ...form, body })} />
