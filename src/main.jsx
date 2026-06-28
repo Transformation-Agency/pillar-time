@@ -1256,16 +1256,28 @@ function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = 
 
 function Planner({ state, mutate }) {
   const time = todayTime(state);
-  const [task, setTask] = React.useState({ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" });
-  const [importantDate, setImportantDate] = React.useState({ title: "", startDate: "", endDate: "" });
+  const emptyTaskForm = { title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" };
+  const emptyImportantDateForm = { title: "", startDate: "", endDate: "" };
+  const [task, setTask] = React.useState(emptyTaskForm);
+  const [taskBaseline, setTaskBaseline] = React.useState(emptyTaskForm);
+  const [importantDate, setImportantDate] = React.useState(emptyImportantDateForm);
+  const [importantDateBaseline, setImportantDateBaseline] = React.useState(emptyImportantDateForm);
   const [plannerMessage, setPlannerMessage] = React.useState("");
+  React.useEffect(() => {
+    window.__pillarTimeUnsavedPlannerDraft = JSON.stringify(task) !== JSON.stringify(taskBaseline) || JSON.stringify(importantDate) !== JSON.stringify(importantDateBaseline);
+    return () => {
+      window.__pillarTimeUnsavedPlannerDraft = false;
+    };
+  }, [task, taskBaseline, importantDate, importantDateBaseline]);
   const createTask = async (event) => {
     event.preventDefault();
     if (!task.title.trim()) return;
     setPlannerMessage("");
     try {
       await mutate("/api/time/tasks", task);
-      setTask({ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" });
+      setTask(emptyTaskForm);
+      setTaskBaseline(emptyTaskForm);
+      window.__pillarTimeUnsavedPlannerDraft = false;
       setPlannerMessage("Task added.");
     } catch (error) {
       setPlannerMessage(error.message || "Could not add task.");
@@ -1297,7 +1309,9 @@ function Planner({ state, mutate }) {
     setPlannerMessage("");
     try {
       await mutate("/api/time/important-dates", importantDate);
-      setImportantDate({ title: "", startDate: "", endDate: "" });
+      setImportantDate(emptyImportantDateForm);
+      setImportantDateBaseline(emptyImportantDateForm);
+      window.__pillarTimeUnsavedPlannerDraft = false;
       setPlannerMessage("Important date added.");
     } catch (error) {
       setPlannerMessage(error.message || "Could not add important date.");
@@ -4955,6 +4969,14 @@ function App() {
         return;
       }
       window.__pillarTimeUnsavedMeetingDraft = false;
+    }
+    if (route === "planner" && next !== "planner" && window.__pillarTimeUnsavedPlannerDraft) {
+      const leave = window.confirm("Discard unsaved planner draft? Task details or important-date edits will not be saved.");
+      if (!leave) {
+        location.hash = "planner";
+        return;
+      }
+      window.__pillarTimeUnsavedPlannerDraft = false;
     }
     setRoute(next);
   }, [route]);

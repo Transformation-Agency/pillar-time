@@ -360,12 +360,18 @@ test("Trusted Context actions expose required-field and proposal feedback", () =
 });
 
 test("Planner capture saves expose local success and failure messages", () => {
+  assert.match(mainSource, /const emptyTaskForm = \{ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" \};/);
+  assert.match(mainSource, /const emptyImportantDateForm = \{ title: "", startDate: "", endDate: "" \};/);
+  assert.match(mainSource, /const \[taskBaseline, setTaskBaseline\] = React\.useState\(emptyTaskForm\);/);
+  assert.match(mainSource, /const \[importantDateBaseline, setImportantDateBaseline\] = React\.useState\(emptyImportantDateForm\);/);
+  assert.match(mainSource, /window\.__pillarTimeUnsavedPlannerDraft = JSON\.stringify\(task\) !== JSON\.stringify\(taskBaseline\) \|\| JSON\.stringify\(importantDate\) !== JSON\.stringify\(importantDateBaseline\);/);
+  assert.match(mainSource, /if \(route === "planner" && next !== "planner" && window\.__pillarTimeUnsavedPlannerDraft\) \{\n\s+const leave = window\.confirm\("Discard unsaved planner draft\? Task details or important-date edits will not be saved\."\);/);
   assert.match(mainSource, /const \[plannerMessage, setPlannerMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /const createTask = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!task\.title\.trim\(\)\) return;\n\s+setPlannerMessage\(""\);/);
-  assert.match(mainSource, /await mutate\("\/api\/time\/tasks", task\);\n\s+setTask\(\{ title: "", leverageCategory: "deepWork", estimateMinutes: 30, priority: "normal" \}\);\n\s+setPlannerMessage\("Task added\."\);/);
+  assert.match(mainSource, /await mutate\("\/api\/time\/tasks", task\);\n\s+setTask\(emptyTaskForm\);\n\s+setTaskBaseline\(emptyTaskForm\);\n\s+window\.__pillarTimeUnsavedPlannerDraft = false;\n\s+setPlannerMessage\("Task added\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setPlannerMessage\(error\.message \|\| "Could not add task\."\);/);
   assert.match(mainSource, /const createDate = async \(event\) => \{\n\s+event\.preventDefault\(\);\n\s+if \(!importantDate\.title\.trim\(\) \|\| !importantDate\.startDate\) return;\n\s+setPlannerMessage\(""\);/);
-  assert.match(mainSource, /await mutate\("\/api\/time\/important-dates", importantDate\);\n\s+setImportantDate\(\{ title: "", startDate: "", endDate: "" \}\);\n\s+setPlannerMessage\("Important date added\."\);/);
+  assert.match(mainSource, /await mutate\("\/api\/time\/important-dates", importantDate\);\n\s+setImportantDate\(emptyImportantDateForm\);\n\s+setImportantDateBaseline\(emptyImportantDateForm\);\n\s+window\.__pillarTimeUnsavedPlannerDraft = false;\n\s+setPlannerMessage\("Important date added\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setPlannerMessage\(error\.message \|\| "Could not add important date\."\);/);
   assert.match(mainSource, /\{plannerMessage && <p className=\{plannerMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{plannerMessage\}<\/p>\}/);
   assert.doesNotMatch(mainSource, /mutate\("\/api\/time\/tasks", task\)\.then\(\(\) => setTask/);
