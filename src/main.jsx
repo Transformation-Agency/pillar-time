@@ -2900,6 +2900,11 @@ function Onboarding({ state, mutate, refresh }) {
   const firstNameReady = !isDefaultOwnerName(firstName.trim() || savedOwnerName);
   const reviewReadiness = { ...readiness, ownerNameReady: firstNameReady };
   const canComplete = reviewReadiness.ownerNameReady && reviewReadiness.scheduleSet;
+  const finishOnboardingDisabledReason = !reviewReadiness.ownerNameReady
+    ? "Add your first name before finishing onboarding"
+    : !reviewReadiness.scheduleSet
+      ? "Choose a delivery schedule before finishing onboarding"
+      : "";
   const firstIncomplete = () => {
     if (!reviewReadiness.ownerNameReady) return "welcome";
     if (!reviewReadiness.scheduleSet) return "schedule";
@@ -3856,7 +3861,7 @@ function Onboarding({ state, mutate, refresh }) {
         <div className="readiness-list">
           {[["Executive profile", reviewReadiness.ownerNameReady, false], ["Schedule set", reviewReadiness.scheduleSet, false], ["Today seeded", (state.time?.commitments || []).length > 0, true], ["Reminder defaults", !!state.time?.preferences?.reminderMasterEnabled, true], ["Planning reviews", (state.time?.reviews || []).some((review) => review.enabled), true], ["Model connected", reviewReadiness.modelReady, true], ["Brief prompt saved", reviewReadiness.briefPromptSaved, true], ["Linear connected", linearConnected, true], ["Google Calendar", googleCalendarConnected, true], ["Telegram paired", reviewReadiness.telegramReady, true]].map(([label, ok, optional]) => <div key={label}><Icon name={ok ? "check" : optional ? "volume" : "x"} /><span>{label}</span><Badge tone={ok ? "ok" : optional ? "muted" : "warn"}>{ok ? "Done" : optional ? "Optional" : "Needs setup"}</Badge></div>)}
         </div>
-        <div className="row">{!canComplete && <Button onClick={() => go(firstIncomplete())}>Fix required step</Button>}<Button onClick={skipOnboarding}>Finish later</Button><Button icon="check" kind="accent" disabled={!canComplete} onClick={complete}>Finish onboarding</Button></div>
+        <div className="row">{!canComplete && <Button onClick={() => go(firstIncomplete())}>Fix required step</Button>}<Button onClick={skipOnboarding}>Finish later</Button><Button icon="check" kind="accent" disabled={!canComplete} title={finishOnboardingDisabledReason || "Finish onboarding"} onClick={complete}>Finish onboarding</Button></div>
       </section>}
     </main>
   </div>;

@@ -116,6 +116,11 @@ test("Onboarding explains setup context and avoids stale recovery copy", () => {
   assert.doesNotMatch(mainSource, /change it later from the home screen/);
 });
 
+test("Onboarding finish action explains required missing steps", () => {
+  assert.match(mainSource, /const finishOnboardingDisabledReason = !reviewReadiness\.ownerNameReady\n\s+\? "Add your first name before finishing onboarding"\n\s+: !reviewReadiness\.scheduleSet\n\s+\? "Choose a delivery schedule before finishing onboarding"\n\s+: "";/);
+  assert.match(mainSource, /disabled=\{!canComplete\} title=\{finishOnboardingDisabledReason \|\| "Finish onboarding"\}/);
+});
+
 test("Onboarding brief setup disabled actions explain the next step", () => {
   assert.match(mainSource, /const briefPromptTooShort = briefPrompt\.trim\(\)\.length < 20;/);
   assert.match(mainSource, /const generateBriefSetupDisabledReason = draftingBriefSetup\n\s+\? "Brief setup draft is already being generated"\n\s+: briefPromptTooShort\n\s+\? "Describe your brief request in at least 20 characters"\n\s+: "";/);
