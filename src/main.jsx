@@ -2931,6 +2931,9 @@ function Onboarding({ state, mutate, refresh }) {
   };
   const [nameMessage, setNameMessage] = React.useState("");
   const [savingFirstName, setSavingFirstName] = React.useState(false);
+  const profileSaveDisabledReason = savingFirstName
+    ? "Profile is already being saved"
+    : "";
   const [operatingManual, setOperatingManual] = React.useState(state.time?.preferences?.operatingManual || "");
   const [starterCommitment, setStarterCommitment] = React.useState("");
   const [starterMessage, setStarterMessage] = React.useState("");
@@ -3620,7 +3623,7 @@ function Onboarding({ state, mutate, refresh }) {
         <form className="form onboarding-form" onSubmit={async (event) => { event.preventDefault(); if (await saveFirstName()) await go("profile"); }}>
           <Field label="Your first name" value={firstName} onChange={(value) => { setFirstName(value); if (nameMessage) setNameMessage(""); }} placeholder="First name" required />
           {nameMessage && <p className="warn-text">{nameMessage}</p>}
-          <Button icon="run" kind="accent" disabled={savingFirstName}>{savingFirstName ? "Saving..." : "Start Pillar Time"}</Button>
+          <Button icon="run" kind="accent" disabled={!!profileSaveDisabledReason} title={profileSaveDisabledReason || "Start Pillar Time"}>{savingFirstName ? "Saving..." : "Start Pillar Time"}</Button>
         </form>
         <div className="onboarding-cards">
           <div><Icon name="today" /><strong>Today</strong><span>Choose commitments and protect the day.</span></div>
@@ -3641,7 +3644,7 @@ function Onboarding({ state, mutate, refresh }) {
             <span>This build is for one local user. Executive Workspace Mode, assistants, shared approvals, and policy-controlled external action execution are architecture commitments, not enabled in this DMG.</span>
           </div>
           {nameMessage && <p className="warn-text">{nameMessage}</p>}
-          <div className="row"><Button type="button" onClick={() => go("welcome")}>Back</Button><Button icon="save" kind="primary" disabled={savingFirstName}>{savingFirstName ? "Saving..." : "Save profile"}</Button></div>
+          <div className="row"><Button type="button" onClick={() => go("welcome")}>Back</Button><Button icon="save" kind="primary" disabled={!!profileSaveDisabledReason} title={profileSaveDisabledReason || "Save profile"}>{savingFirstName ? "Saving..." : "Save profile"}</Button></div>
         </form>
       </section>}
       {step === "today" && <section className="onboarding-panel onboarding-panel-wide">
