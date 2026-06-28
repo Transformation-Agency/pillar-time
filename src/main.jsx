@@ -3751,7 +3751,19 @@ function Onboarding({ state, mutate, refresh }) {
       setOnboardingActionMessage(error.message || "Could not finish onboarding. Try again or finish later.");
     }
   };
+  const hasUnsavedOnboardingInput = !!starterCommitment.trim()
+    || !!model.apiKey.trim()
+    || !!linearConnector.apiKey.trim()
+    || !!xConnector.apiKey.trim()
+    || !!perspectivePrompt.trim()
+    || (!!firstName.trim() && firstName.trim() !== savedOwnerName)
+    || operatingManual.trim() !== String(state.time?.preferences?.operatingManual || "").trim()
+    || (!!briefPrompt.trim() && briefPrompt !== (state.onboarding.briefPrompt || ""));
   const skipOnboarding = async () => {
+    if (hasUnsavedOnboardingInput) {
+      const leave = window.confirm("Leave onboarding with unsaved setup input? Typed profile notes, commitments, prompts, or connector keys will not be saved.");
+      if (!leave) return;
+    }
     setOnboardingActionMessage("");
     try {
       await mutate("/api/onboarding/skip", {});
