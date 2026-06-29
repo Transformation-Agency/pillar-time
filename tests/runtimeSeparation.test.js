@@ -642,10 +642,11 @@ test("TextArea forwards helper props so onboarding guidance is rendered", () => 
 });
 
 test("Help update menu exposes expanded state and keyboard dismissal", () => {
-  assert.match(mainSource, /if \(event\.key === "Escape"\) setHelpOpen\(false\);/);
+  assert.match(mainSource, /const helpButtonRef = React\.useRef\(null\);/);
+  assert.match(mainSource, /if \(event\.key !== "Escape"\) return;\n\s+event\.preventDefault\(\);\n\s+setHelpOpen\(false\);\n\s+helpButtonRef\.current\?\.focus\(\);/);
   assert.match(mainSource, /window\.addEventListener\("keydown", onKeyDown\)/);
   assert.match(mainSource, /window\.removeEventListener\("keydown", onKeyDown\)/);
-  assert.match(mainSource, /aria-haspopup="menu" aria-expanded=\{helpOpen\} aria-controls="help-update-menu"/);
+  assert.match(mainSource, /ref=\{helpButtonRef\} className=\{`help-menu-button \$\{helpOpen \? "active" : ""\}`\} aria-haspopup="menu" aria-expanded=\{helpOpen\} aria-controls="help-update-menu"/);
   assert.match(mainSource, /id="help-update-menu" className="help-menu" role="menu" aria-label="Help and update actions"/);
   assert.match(mainSource, /const updateCheckDisabledReason = desktopUpdate\?\.status === "installing"\n\s+\? "Update installation is already running"\n\s+: updateBusy\n\s+\? "Update check is already running"\n\s+: "";/);
   assert.match(mainSource, /disabled=\{!!updateCheckDisabledReason\} title=\{updateCheckDisabledReason \|\| "Check for signed desktop updates"\}/);
