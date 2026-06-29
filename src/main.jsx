@@ -1780,6 +1780,18 @@ function Sources({ state, mutate }) {
     }
     resetSourceForm();
   };
+  React.useEffect(() => {
+    if (!adding) return;
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeSourceForm();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [adding, form, sourceFormBaseline]);
   const openAddSource = () => {
     setForm(emptySourceForm);
     setSourceFormBaseline(emptySourceForm);
@@ -2264,6 +2276,18 @@ function BriefSetup({ state, mutate }) {
       window.__pillarBriefUnsavedBriefSetup = false;
     };
   }, [dirty]);
+  React.useEffect(() => {
+    if (!previewOpen) return;
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setPreviewOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [previewOpen]);
   const markForm = (updater) => {
     setSaveState("unsaved");
     setSaveError("");
