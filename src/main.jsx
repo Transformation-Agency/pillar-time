@@ -645,6 +645,7 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
   const [externalLinkNotice, setExternalLinkNotice] = React.useState("");
   const [externalLinkCopyMessage, setExternalLinkCopyMessage] = React.useState("");
   const helpRef = React.useRef(null);
+  const helpButtonRef = React.useRef(null);
   const counts = {};
   const updateVisible = desktopUpdate?.isDesktop && ["available", "installed"].includes(desktopUpdate.status);
   const updateBusy = ["checking", "checking-silent", "installing"].includes(desktopUpdate?.status);
@@ -668,7 +669,10 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
       if (!helpRef.current?.contains(event.target)) setHelpOpen(false);
     };
     const onKeyDown = (event) => {
-      if (event.key === "Escape") setHelpOpen(false);
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setHelpOpen(false);
+      helpButtonRef.current?.focus();
     };
     window.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
@@ -704,7 +708,7 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
           </button>)}
       </nav>
       <div className="header-actions" ref={helpRef}>
-        <button type="button" className={`help-menu-button ${helpOpen ? "active" : ""}`} aria-haspopup="menu" aria-expanded={helpOpen} aria-controls="help-update-menu" onClick={() => setHelpOpen((current) => !current)}>
+        <button type="button" ref={helpButtonRef} className={`help-menu-button ${helpOpen ? "active" : ""}`} aria-haspopup="menu" aria-expanded={helpOpen} aria-controls="help-update-menu" onClick={() => setHelpOpen((current) => !current)}>
           <Icon name="help" /><span>Help</span><ChevronDown className="ico tiny" aria-hidden="true" />
         </button>
         {helpOpen && <div id="help-update-menu" className="help-menu" role="menu" aria-label="Help and update actions">
