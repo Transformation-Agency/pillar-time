@@ -858,9 +858,15 @@ test("External setup links surface a copyable fallback when the browser cannot o
   assert.match(mainSource, /const popup = window\.open\(target \|\| url, "_blank", "noopener,noreferrer"\);/);
   assert.match(mainSource, /if \(!popup\) showFallback\(\);/);
   assert.match(mainSource, /const \[externalLinkNotice, setExternalLinkNotice\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const \[externalLinkCopyMessage, setExternalLinkCopyMessage\] = React\.useState\(""\);/);
   assert.match(mainSource, /window\.addEventListener\("pillar-time:external-link-fallback", onExternalLinkFallback\);/);
+  assert.match(mainSource, /const copyExternalLinkNotice = async \(\) => \{/);
+  assert.match(mainSource, /await navigator\.clipboard\.writeText\(externalLinkNotice\);/);
+  assert.match(mainSource, /setExternalLinkCopyMessage\("URL copied\."\);/);
+  assert.match(mainSource, /Could not copy automatically\. Select the URL text and copy it manually\./);
   assert.match(mainSource, /Copy this URL and paste it into your browser: \{externalLinkNotice\}/);
-  assert.match(mainSource, /<Button type="button" icon="x" onClick=\{\(\) => setExternalLinkNotice\(""\)\}>Dismiss<\/Button>/);
+  assert.match(mainSource, />Copy URL<\/Button>/);
+  assert.match(mainSource, /setExternalLinkNotice\(""\); setExternalLinkCopyMessage\(""\);/);
 });
 
 test("Onboarding perspective disabled actions explain the next step", () => {

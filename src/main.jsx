@@ -643,6 +643,7 @@ function useDesktopUpdates() {
 function Shell({ route, setRoute, state, desktopUpdate, children }) {
   const [helpOpen, setHelpOpen] = React.useState(false);
   const [externalLinkNotice, setExternalLinkNotice] = React.useState("");
+  const [externalLinkCopyMessage, setExternalLinkCopyMessage] = React.useState("");
   const helpRef = React.useRef(null);
   const counts = {};
   const updateVisible = desktopUpdate?.isDesktop && ["available", "installed"].includes(desktopUpdate.status);
@@ -679,10 +680,19 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
   React.useEffect(() => {
     const onExternalLinkFallback = (event) => {
       setExternalLinkNotice(event.detail?.url || "The link could not be opened automatically.");
+      setExternalLinkCopyMessage("");
     };
     window.addEventListener("pillar-time:external-link-fallback", onExternalLinkFallback);
     return () => window.removeEventListener("pillar-time:external-link-fallback", onExternalLinkFallback);
   }, []);
+  const copyExternalLinkNotice = async () => {
+    try {
+      await navigator.clipboard.writeText(externalLinkNotice);
+      setExternalLinkCopyMessage("URL copied.");
+    } catch {
+      setExternalLinkCopyMessage("Could not copy automatically. Select the URL text and copy it manually.");
+    }
+  };
   return <div className="app">
     <header className="app-header">
       <button className="brand" onClick={() => setRoute("today")}>
@@ -725,9 +735,10 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
         </div>
       </div>}
       {externalLinkNotice && <div className="desktop-update-banner external-link-fallback">
-        <div><strong>Could not open the link automatically</strong><span>Copy this URL and paste it into your browser: {externalLinkNotice}</span></div>
+        <div><strong>Could not open the link automatically</strong><span>Copy this URL and paste it into your browser: {externalLinkNotice}</span>{externalLinkCopyMessage && <span>{externalLinkCopyMessage}</span>}</div>
         <div className="row tight-row">
-          <Button type="button" icon="x" onClick={() => setExternalLinkNotice("")}>Dismiss</Button>
+          <Button type="button" icon="documents" onClick={copyExternalLinkNotice}>Copy URL</Button>
+          <Button type="button" icon="x" onClick={() => { setExternalLinkNotice(""); setExternalLinkCopyMessage(""); }}>Dismiss</Button>
         </div>
       </div>}
       <section className="scroll">{children}</section>
