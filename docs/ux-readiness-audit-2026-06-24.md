@@ -1,18 +1,21 @@
 # Pillar Time UX Readiness Audit - 2026-06-24
 
+Latest update: 2026-06-29.
+
 ## Verdict
 
 RELEASE READY WITH WARNINGS for the default executive-day UX flow.
 
 The clean-profile web runtime now completes the core first-run path without active news sources, without a model connector, and without Linear credentials. The product now behaves like an executive day-planning app by default: Today generates an `executive_day` artifact, uses deterministic fallback when the model is unavailable, surfaces context intake for the user's identity statement, standing commitments, and running to-do list, and keeps optional intelligence separate.
 
-The remaining warnings are release-scope warnings, not confirmed app-stopping UX blockers: installed DMG launch, notarized packaging, real OAuth write-scope reconnect, and full keyboard/screen-reader verification still need a final packaged-app pass.
+The remaining warnings are release-scope warnings, not confirmed app-stopping UX blockers: installed DMG launch, notarized packaging, real OAuth write-scope reconnect, and full keyboard/screen-reader verification still need a final packaged-app pass. Source-level keyboard recovery has improved since the original audit: Help, Settings connector modals, the source editor, and the brief live preview now all support Escape dismissal with regression coverage.
 
 ## Audit Context
 
 - Repository: `Transformation-Agency/pillar-time`
 - Checkout: `/Users/paul/Documents/Codex/2026-06-18/there-is-a-currently-running-version/work/pillar-time-repo`
-- HEAD during audit: `8e8fcef`
+- HEAD during original audit: `8e8fcef`
+- Latest source-audit update: `45e41ff`
 - Runtime tested: `http://127.0.0.1:44021`
 - Test data directory: `/tmp/pillar-time-ux-goal`
 - Method: code inspection, clean-profile production server smoke, Chrome walkthrough, API non-happy-path probes, focused tests, full tests, production web build.
@@ -27,8 +30,13 @@ The remaining warnings are release-scope warnings, not confirmed app-stopping UX
 - Completed executive artifact included deterministic brief text and Telegram delivery warning instead of a stopped workflow.
 - Chrome walkthrough reached onboarding, skipped to Today, generated a day plan, and returned to the Today screen.
 - `node --check server/index.js` passed.
-- `node --test tests/timeEngine.test.js tests/runtimeSeparation.test.js` passed: 15 tests, 15 passed.
-- `npm test` passed: 31 tests, 30 passed, 1 opt-in Linear live smoke skipped.
+- `node --test tests/timeEngine.test.js tests/runtimeSeparation.test.js` passed during the original audit: 15 tests, 15 passed.
+- 2026-06-29: `node --test tests/runtimeSeparation.test.js` passed after Settings modal Escape coverage: 83 tests, 83 passed.
+- 2026-06-29: `npm test` passed after Settings modal Escape coverage: 106 tests, 105 passed, 1 opt-in Linear live smoke skipped.
+- 2026-06-29: clean detached worktree `npm run build` passed for the Settings modal Escape branch.
+- 2026-06-29: `node --test tests/runtimeSeparation.test.js` passed after source/live-preview Escape coverage: 84 tests, 84 passed.
+- 2026-06-29: `npm test` passed after source/live-preview Escape coverage: 107 tests, 106 passed, 1 opt-in Linear live smoke skipped.
+- 2026-06-29: clean detached worktree `npm ci --include=dev && npm run build` passed for the source/live-preview Escape branch.
 - `npm run build` passed and produced the Vite `dist/` bundle.
 - `git diff --check` passed.
 
@@ -47,6 +55,9 @@ The remaining warnings are release-scope warnings, not confirmed app-stopping UX
 - Calendar and default copy were recentered from "daily intelligence brief" to "executive operating system" language where it affects the default flow.
 - Nav buttons now carry explicit `aria-label` and `title` attributes so compressed desktop layouts remain identifiable.
 - Executive workflow copy now says `Deliver optional Telegram plan` instead of `brief`.
+- Settings connector modals now support Escape dismissal while preserving unsaved credential and calendar-selection guards.
+- The source add/edit modal now supports Escape dismissal through the same unsaved-source guard used by Cancel, close, and backdrop clicks.
+- The brief setup live preview now supports Escape dismissal.
 
 ## Findings
 
@@ -110,6 +121,14 @@ Status: mitigated locally.
 
 The walkthrough showed the nav is usable, but some labels can compress at desktop widths with many tabs. Buttons now include explicit labels/titles. The app should still get a packaged-window screenshot pass at the default Tauri width.
 
+### P2 - Modal keyboard recovery needs predictable Escape behavior
+
+Status: source-level mitigated and covered by tests.
+
+The original audit called out missing rendered keyboard coverage for modal recovery. Since then, the Help menu, Settings connector modals, the source editor, and the brief live preview have source-level Escape handlers. Credential-heavy Settings modals and the source editor route Escape through the same guarded close handlers used by Cancel, close buttons, and backdrop clicks, so pasted keys, calendar selections, and source locators still ask before being discarded.
+
+Residual risk: this still needs a rendered packaged-app keyboard pass to confirm focus order, native confirmation behavior, and screen-reader announcements in the Tauri WebView.
+
 ### P2 - Intelligence wording still exists in optional intelligence areas
 
 Status: acceptable by design.
@@ -129,8 +148,9 @@ The web runtime, backend checks, and production web build passed. This audit did
 3. Use a mixed calendar account with primary, shared, subscribed, all-day, declined, and overlapping events; verify only real hard commitments block scheduling.
 4. Add identity statement, standing commitments, and a running to-do file; regenerate and verify the new context changes the day plan.
 5. Run the packaged app at default, 1024px, 1280px, and 1440px widths; verify header/nav, proposed calendar tiles, and context intake do not overlap.
-6. Run a keyboard-only pass through onboarding, Today context intake, Generate Day Plan, Approve Calendar, and Settings connectors.
+6. Run a keyboard-only pass through onboarding, Today context intake, Generate Day Plan, Approve Calendar, Settings connectors, source add/edit, and Brief Setup live preview.
 7. Run one intelligence workflow explicitly and verify it remains separate from Today's latest executive-day timeline.
+8. Rebuild the installed `/Applications/Pillar Time.app` after the latest keyboard-recovery PRs before treating the installed local app as current.
 
 ## Final Assessment
 
