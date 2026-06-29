@@ -4222,6 +4222,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   const [sttMessage, setSettingsSttMessage] = React.useState("");
   const [healthBusy, setHealthBusy] = React.useState(false);
   const [healthMessage, setHealthMessage] = React.useState("");
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const [exportMessage, setExportMessage] = React.useState("");
   const settingsFfmpegDisabledReason = ffmpegBusy
     ? "FFmpeg setup is already running"
     : "";
@@ -4697,6 +4699,32 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       setHealthBusy(false);
     }
   };
+  const exportLocalData = async () => {
+    const ok = window.confirm("Export local Pillar Time data now? The JSON file can include private profile facts, commitments, tasks, documents, approvals, and audit history. Keep it somewhere private.");
+    if (!ok) return;
+    setExportBusy(true);
+    setExportMessage("");
+    try {
+      const result = await api("/api/export/local-data", { method: "POST", body: JSON.stringify({}) });
+      const payload = result.export || {};
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      const date = String(payload.exportedAt || new Date().toISOString()).slice(0, 10);
+      anchor.href = url;
+      anchor.download = `pillar-time-local-data-${date}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setExportMessage("Local data export created. Keep the downloaded JSON private.");
+      await refresh();
+    } catch (error) {
+      setExportMessage(error.message || "Could not export local data.");
+    } finally {
+      setExportBusy(false);
+    }
+  };
   const reopenOnboarding = async () => {
     const ok = window.confirm("Reopen first-run onboarding? Pillar Time will return to the welcome flow, but your saved settings, connectors, and local data stay in place.");
     if (!ok) return;
@@ -4866,6 +4894,19 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           {healthMessage && <span>{healthMessage}</span>}
         </div>
         <Button type="button" icon="run" onClick={runSettingsHealthCheck} disabled={!!settingsHealthCheckDisabledReason} title={settingsHealthCheckDisabledReason || "Run local health check"}>{healthBusy ? "Checking..." : "Run health check"}</Button>
+      </section>
+
+      <section className="panel connector-card">
+        <div className="connector-head">
+          <div className="connector-title"><span className="connector-icon blue"><Icon name="download" /></span><div><h2>Local Data Export</h2><p>Download a private JSON snapshot for recovery, support, or migration.</p></div></div>
+          <Badge tone="warn">Private</Badge>
+        </div>
+        <div className="notice notice-warn">
+          <strong>Exports can contain personal planning context</strong>
+          <span>The file can include profile facts, standing commitments, tasks, documents, approvals, and audit history. Connector API keys are not included, but you should still store the file privately.</span>
+          {exportMessage && <span>{exportMessage}</span>}
+        </div>
+        <Button type="button" icon="download" kind="primary" onClick={exportLocalData} disabled={exportBusy} title={exportBusy ? "Local data export is already running" : "Export local Pillar Time data as JSON"}>{exportBusy ? "Exporting..." : "Export local data"}</Button>
       </section>
 
       <section className="panel audit-settings">

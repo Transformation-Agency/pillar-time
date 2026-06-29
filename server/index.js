@@ -97,6 +97,15 @@ backupDatabaseBeforePillarTimeMigration();
 const db = new DatabaseSync(dbPath);
 db.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
 
+function appVersion() {
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    return String(packageJson.version || "");
+  } catch {
+    return "";
+  }
+}
+
 function migrate() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS sources (
@@ -4577,6 +4586,26 @@ function state() {
   const todayKey = localDateKey(new Date(), prefs.timezone);
   return { sources: sources(), lenses: lenses(), councils: councils(), documents: documents(), workflowRuns: workflowRuns(), approvals: approvals(), auditLogs: audits(), telegram: telegramSettings(), model: modelSettings(), tts: ttsSettings(), connectors: connectorSettings(), briefConfig: briefConfig(), onboarding: onboardingState(), trustedContext: trustedContextState(), time: { preferences: prefs, todayKey, suggestions: timeSuggestions(), commitments: dailyCommitments(todayKey), tasks: timeTasks(), reminders: reminders(), reviews: reviewTemplates(), importantDates: importantDates(), meetings: meetingRecords(), scheduler: schedulerHealth() }, runtime: { mode: appMode, isDesktop, dataDir, workflowSteps: workflowPlan(), executiveWorkflowSteps: workflowPlan(briefConfig(), "executive_day") } };
 }
+
+function localDataExport(exportId) {
+  return {
+    schema: "pillar-time.local-data-export.v1",
+    exportId,
+    exportedAt: now(),
+    app: {
+      name: "Pillar Time",
+      version: appVersion(),
+      mode: appMode,
+      dataDir,
+    },
+    contents: {
+      description: "Sanitized local app state for recovery, support, or migration. Raw connector secrets are not included.",
+      includesPrivatePlanningContext: true,
+      keepPrivate: true,
+    },
+    state: state(),
+  };
+}
 function briefConfig() {
   const r = get("SELECT * FROM brief_config WHERE id = 1");
   return {
@@ -6827,6 +6856,12 @@ app.get("/api/state", async (req, res) => {
     audit("telegram.poll_failed", "telegram_settings", "1", error.message || "Telegram polling failed", {}, "system");
   }
   res.json(state());
+});
+
+app.post("/api/export/local-data", (req, res) => {
+  const exportId = id("export");
+  audit("local_data.exported", "local_data_export", exportId, "Local data export created by operator", { schema: "pillar-time.local-data-export.v1" }, "operator");
+  res.json({ export: localDataExport(exportId), state: state() });
 });
 
 app.get("/api/notifications/latest-brief", (req, res) => {
