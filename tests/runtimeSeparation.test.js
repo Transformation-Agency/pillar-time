@@ -232,6 +232,22 @@ test("First-run controls avoid misleading defaults and internal labels", () => {
   assert.doesNotMatch(mainSource, /Run onboarding/);
 });
 
+test("Settings exposes a private local data export with confirmation", () => {
+  assert.match(serverSource, /function localDataExport\(exportId\)/);
+  assert.match(serverSource, /schema: "pillar-time\.local-data-export\.v1"/);
+  assert.match(serverSource, /Raw connector secrets are not included/);
+  assert.match(serverSource, /app\.post\("\/api\/export\/local-data"/);
+  assert.match(serverSource, /audit\("local_data\.exported"/);
+  assert.match(mainSource, /const exportLocalData = async \(\) => \{/);
+  assert.match(mainSource, /Export local Pillar Time data now\?/);
+  assert.match(mainSource, /private profile facts, commitments, tasks, documents, approvals, and audit history/);
+  assert.match(mainSource, /anchor\.download = `pillar-time-local-data-\$\{date\}\.json`;/);
+  assert.match(mainSource, /Local Data Export/);
+  assert.match(mainSource, /Exports can contain personal planning context/);
+  assert.match(mainSource, /Connector API keys are not included/);
+  assert.match(mainSource, /disabled=\{exportBusy\} title=\{exportBusy \? "Local data export is already running" : "Export local Pillar Time data as JSON"\}/);
+});
+
 test("Modal close buttons have accessible labels", () => {
   assert.match(mainSource, /aria-label="Close source editor"/);
   assert.match(mainSource, /aria-label="Close connector picker"/);
