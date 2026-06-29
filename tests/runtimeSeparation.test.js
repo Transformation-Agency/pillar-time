@@ -670,6 +670,8 @@ test("Desktop update install asks before downloading and keeps fallback errors",
   assert.match(mainSource, /Install \$\{versionLabel\} now\? Pillar Time will download and stage a signed desktop update, then ask you to restart when it is ready\./);
   assert.match(mainSource, /if \(!ok\) return;\n\s+let downloaded = 0;/);
   assert.match(mainSource, /message: error\.message \|\| "Update install failed\.",/);
+  assert.match(mainSource, /desktopUpdate\.status === "available" && <Button type="button" icon="download" kind="primary" onClick=\{desktopUpdate\.installUpdate\} title="Install the signed desktop update">Install<\/Button>/);
+  assert.match(mainSource, /desktopUpdate\.status === "installed" && <Button type="button" icon="restart" kind="primary" onClick=\{desktopUpdate\.restartApp\} title="Restart Pillar Time to finish updating">Restart<\/Button>/);
   assert.doesNotMatch(mainSource, /message: error\.message,\n\s+progress: "",\n\s+lastError: error\.message \|\| "Update install failed"/);
 });
 
