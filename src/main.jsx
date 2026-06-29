@@ -1955,7 +1955,7 @@ function Sources({ state, mutate }) {
             <BrandLogo name={type} /><span>{label}</span>
           </button>)}
         </div>
-        <Field name="source-display-name" label="Display name" value={form.name} onChange={(name) => setForm({ ...form, name })} placeholder="E.g., Reuters World News" required />
+        <Field name="source-display-name" label="Display name" value={form.name} onChange={(name) => setForm({ ...form, name })} placeholder="E.g., Reuters World News" required autoFocus />
         <div className="source-config open">
           <div className="source-config-title"><BrandLogo name={form.type} />Source details</div>
           <div className="notice"><strong>Credential posture</strong><span>{definition.credential}</span></div>
@@ -2432,7 +2432,7 @@ function BriefSetup({ state, mutate }) {
     </div>
     {previewOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreviewOpen(false); }}>
       <div className="modal-card live-preview-modal" role="dialog" aria-modal="true" aria-label="Live preview">
-        <div className="modal-head"><div><h2>Live preview</h2><p>This is how your brief will flow.</p></div><button type="button" aria-label="Close live preview" onClick={() => setPreviewOpen(false)}><Icon name="x" /></button></div>
+        <div className="modal-head"><div><h2>Live preview</h2><p>This is how your brief will flow.</p></div><button type="button" aria-label="Close live preview" onClick={() => setPreviewOpen(false)} autoFocus><Icon name="x" /></button></div>
         <div className="preview-card">{enabledSections.slice(0, 8).map((section, index) => <div className="preview-section" key={section.key}>
           <b>{index + 1}</b><div><strong>{section.label}</strong><p>{section.instruction || "Section guidance appears here."}</p><small>Standard brief section</small><span /><span /></div>
         </div>)}</div>
@@ -4971,7 +4971,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
       <div className="modal-card connector-modal" role="dialog" aria-modal="true" aria-label="Add connector">
         <div className="modal-head"><div><h2>Add connector</h2><p>Choose the connector you want to configure.</p></div><button type="button" aria-label="Close connector picker" onClick={() => setConnectorModal(false)}><Icon name="x" /></button></div>
         <div className="connector-picker-grid">
-          <button type="button" onClick={() => openProvider("openai")}><BrandLogo name="openai" /><strong>OpenAI</strong><span>Add or switch to OpenAI models.</span></button>
+          <button type="button" onClick={() => openProvider("openai")} autoFocus><BrandLogo name="openai" /><strong>OpenAI</strong><span>Add or switch to OpenAI models.</span></button>
           <button type="button" onClick={() => openProvider("anthropic")}><BrandLogo name="anthropic" /><strong>Anthropic</strong><span>Add or switch to Claude models.</span></button>
           <button type="button" onClick={() => openProvider("openrouter")}><BrandLogo name="openrouter" /><strong>OpenRouter</strong><span>Add routed model access.</span></button>
           <button type="button" onClick={() => openProvider("gemini")}><BrandLogo name="gemini" /><strong>Gemini</strong><span>Add or switch to Google Gemini models.</span></button>
@@ -4990,7 +4990,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     {editingProvider && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeModelProviderSetup(); }}>
       <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Model provider setup" onSubmit={saveModel}>
         <div className="modal-head"><div><h2>{providerRows.find((row) => row.provider === editingProvider)?.name || "Model provider"}</h2><p>Paste a provider key, choose a model, and save it as the active model provider.</p></div><button type="button" aria-label="Close model provider setup" onClick={closeModelProviderSetup}><Icon name="x" /></button></div>
-        <Field label="API key" type="password" value={model.apiKey} onChange={(apiKey) => setModel({ ...model, apiKey })} placeholder={(state.model.providerCredentials?.[editingProvider]?.apiKeySaved || (state.model.provider === editingProvider && state.model.apiKeySaved)) ? "Saved. Paste a new key to replace it." : "Paste provider API key"} />
+        <Field label="API key" type="password" value={model.apiKey} onChange={(apiKey) => setModel({ ...model, apiKey })} placeholder={(state.model.providerCredentials?.[editingProvider]?.apiKeySaved || (state.model.provider === editingProvider && state.model.apiKeySaved)) ? "Saved. Paste a new key to replace it." : "Paste provider API key"} autoFocus />
         {visibleModelOptions.length ? <Select label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} options={visibleModelOptions.includes(model.model) || !model.model ? visibleModelOptions : [model.model, ...visibleModelOptions]} /> : <Field label="Model" value={model.model} onChange={(value) => setModel({ ...model, model: value })} placeholder={detecting ? "Detecting models..." : "Enter a model or paste key for auto-detect"} />}
         {detectError && <p className="warn-text">{detectError}</p>}
         <div className="modal-actions"><Button type="button" onClick={closeModelProviderSetup}>Cancel</Button><Button type="button" icon="search" onClick={detectModels} disabled={!!settingsModelDetectDisabledReason} title={settingsModelDetectDisabledReason || "Detect provider models"}>{detecting ? "Detecting..." : "Detect models"}</Button><Button icon="save" kind="primary" disabled={!!settingsModelSaveDisabledReason} title={settingsModelSaveDisabledReason || "Save model provider"}>Save provider</Button></div>
@@ -4999,7 +4999,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     {telegramModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeTelegramModal(); }}>
       <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Telegram delivery setup" onSubmit={saveTelegram}>
         <div className="modal-head"><div><h2>Telegram delivery</h2><p>Configure bot delivery and command access.</p></div><button type="button" aria-label="Close Telegram setup" onClick={closeTelegramModal}><Icon name="x" /></button></div>
-        <Field label="Bot token" type="password" value={telegramForm.botToken} onChange={(botToken) => setTelegramForm({ ...telegramForm, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} />
+        <Field label="Bot token" type="password" value={telegramForm.botToken} onChange={(botToken) => setTelegramForm({ ...telegramForm, botToken })} placeholder={state.telegram.botToken ? "Configured. Paste a new token to replace it." : "123456:ABC..."} autoFocus />
         <Field label="Chat ID" value={telegramForm.chatId} onChange={(chatId) => setTelegramForm({ ...telegramForm, chatId })} placeholder="-1001234567890 or 123456789" />
         <Field label="Allowed users" value={telegramForm.allowedUsers} onChange={(allowedUsers) => setTelegramForm({ ...telegramForm, allowedUsers })} placeholder="username, teammate, 123456789" />
         {telegramSetupMessage && <p className="warn-text">{telegramSetupMessage}</p>}
@@ -5009,7 +5009,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     {xModal && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeXModal(); }}>
       <form className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="X search API setup" onSubmit={saveXConnector}>
         <div className="modal-head"><div><h2>X search API</h2><p>Add or replace the official bearer token used for X search.</p></div><button type="button" aria-label="Close X API setup" onClick={closeXModal}><Icon name="x" /></button></div>
-        <Field label="Bearer token" type="password" value={xConnector.apiKey} onChange={(apiKey) => setXConnector({ ...xConnector, apiKey })} placeholder={state.connectors?.x?.apiKeySaved ? "Saved. Paste a new token to replace it." : "Paste X bearer token"} />
+        <Field label="Bearer token" type="password" value={xConnector.apiKey} onChange={(apiKey) => setXConnector({ ...xConnector, apiKey })} placeholder={state.connectors?.x?.apiKeySaved ? "Saved. Paste a new token to replace it." : "Paste X bearer token"} autoFocus />
         {xMessage && <p className="warn-text">{xMessage}</p>}
         <div className="modal-actions"><Button type="button" onClick={closeXModal}>Cancel</Button><Button icon="save" kind="primary" disabled={!!settingsXSaveDisabledReason} title={settingsXSaveDisabledReason || "Save X API token"}>Save X API</Button></div>
       </form>
@@ -5022,7 +5022,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <span>{state.connectors?.reddit?.lastError || redditMessage || "Create a Reddit app, then paste the client ID and optional client secret here."}</span>
         </div>
         <Select label="Grant type" value={redditConnector.grantType} onChange={(grantType) => setRedditConnector({ ...redditConnector, grantType })} options={["client_credentials", "installed_client"]} />
-        <Field label="Client ID" value={redditConnector.clientId} onChange={(clientId) => setRedditConnector({ ...redditConnector, clientId })} placeholder={state.connectors?.reddit?.apiKeySaved ? "Saved. Paste a new client ID to replace it." : "Paste Reddit app client ID"} />
+        <Field label="Client ID" value={redditConnector.clientId} onChange={(clientId) => setRedditConnector({ ...redditConnector, clientId })} placeholder={state.connectors?.reddit?.apiKeySaved ? "Saved. Paste a new client ID to replace it." : "Paste Reddit app client ID"} autoFocus />
         <Field label="Client secret" type="password" value={redditConnector.clientSecret} onChange={(clientSecret) => setRedditConnector({ ...redditConnector, clientSecret })} placeholder={state.connectors?.reddit?.apiKeySaved ? "Saved if configured. Paste to replace it." : "Required for script/web app; blank for installed app"} />
         {redditConnector.grantType === "installed_client" && <Field label="Device ID" value={redditConnector.deviceId} onChange={(deviceId) => setRedditConnector({ ...redditConnector, deviceId })} placeholder="DO_NOT_TRACK_THIS_DEVICE" />}
         {redditMessage && <p className={redditMessage.includes("ready") || redditMessage.includes("saved") ? "ok-text" : "warn-text"}>{redditMessage}</p>}
@@ -5036,7 +5036,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <strong>{linearConnected ? "Linear ready" : state.connectors?.linear?.credentialStatus === "missing" ? "Linear API key needed" : "Linear disabled"}</strong>
           <span>{state.connectors?.linear?.lastError || linearMessage || "Create a Linear personal API key, paste it here, then test and save."}</span>
         </div>
-        <Field label="Linear personal API key" type="password" value={linearConnector.apiKey} onChange={(apiKey) => setLinearConnector({ ...linearConnector, apiKey })} placeholder={state.connectors?.linear?.apiKeySaved ? "Saved. Paste a new key to replace it." : state.connectors?.linear?.credentialStatus === "env" ? "Using LINEAR_API_KEY fallback. Paste to save locally." : "lin_api_..."} />
+        <Field label="Linear personal API key" type="password" value={linearConnector.apiKey} onChange={(apiKey) => setLinearConnector({ ...linearConnector, apiKey })} placeholder={state.connectors?.linear?.apiKeySaved ? "Saved. Paste a new key to replace it." : state.connectors?.linear?.credentialStatus === "env" ? "Using LINEAR_API_KEY fallback. Paste to save locally." : "lin_api_..."} autoFocus />
         <label className="check"><input type="checkbox" checked={linearConnector.enabled} onChange={(event) => setLinearConnector({ ...linearConnector, enabled: event.target.checked })} /> Enable Linear connector</label>
         <p className="hint">Keys are stored locally in the connector credential table and never returned to the UI. Existing `LINEAR_API_KEY` values still work as a fallback.</p>
         {linearMessage && <p className={linearMessage.includes("ready") || linearMessage.includes("enabled") || linearMessage.includes("disabled") ? "ok-text" : "warn-text"}>{linearMessage}</p>}
@@ -5073,7 +5073,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           </label>) : <p className="hint">Refresh calendars to load your available Google calendars.</p>}
         </div>}
         {googleCalendarMessage && <p className={googleCalendarMessage.includes("ready") || googleCalendarMessage.includes("opened") || googleCalendarMessage.includes("disconnected") ? "ok-text" : "warn-text"}>{googleCalendarMessage}</p>}
-        <div className="modal-actions"><Button type="button" onClick={closeGoogleCalendarModal}>Cancel</Button>{googleCalendarConnected && <Button type="button" icon="run" onClick={refreshGoogleCalendars}>Refresh calendars</Button>}{googleCalendarConnected && <Button type="button" icon="save" onClick={saveGoogleCalendarSelection} disabled={!!settingsGoogleCalendarSaveDisabledReason} title={settingsGoogleCalendarSaveDisabledReason || "Save selected calendars"}>Save calendars</Button>}<Button type="button" icon="run" onClick={testGoogleCalendar} disabled={!!settingsGoogleCalendarTestDisabledReason} title={settingsGoogleCalendarTestDisabledReason || "Test Google Calendar"}>Test</Button>{googleCalendarConnected && <Button type="button" icon="trash" onClick={disconnectGoogleCalendar}>Disconnect</Button>}<Button icon="save" kind="primary">{googleCalendarNeedsWriteReconnect ? "Reconnect for Calendar Writes" : googleCalendarConnected ? "Reconnect Google" : "Connect Google"}</Button></div>
+        <div className="modal-actions"><Button type="button" onClick={closeGoogleCalendarModal}>Cancel</Button>{googleCalendarConnected && <Button type="button" icon="run" onClick={refreshGoogleCalendars}>Refresh calendars</Button>}{googleCalendarConnected && <Button type="button" icon="save" onClick={saveGoogleCalendarSelection} disabled={!!settingsGoogleCalendarSaveDisabledReason} title={settingsGoogleCalendarSaveDisabledReason || "Save selected calendars"}>Save calendars</Button>}<Button type="button" icon="run" onClick={testGoogleCalendar} disabled={!!settingsGoogleCalendarTestDisabledReason} title={settingsGoogleCalendarTestDisabledReason || "Test Google Calendar"}>Test</Button>{googleCalendarConnected && <Button type="button" icon="trash" onClick={disconnectGoogleCalendar}>Disconnect</Button>}<Button icon="save" kind="primary" autoFocus>{googleCalendarNeedsWriteReconnect ? "Reconnect for Calendar Writes" : googleCalendarConnected ? "Reconnect Google" : "Connect Google"}</Button></div>
       </form>
     </div>}
   </Page>;
