@@ -272,6 +272,16 @@ test("Modal panels expose dialog semantics", () => {
   assert.match(mainSource, /className="modal-card connector-modal form" role="dialog" aria-modal="true" aria-label="Google Calendar setup"/);
 });
 
+test("Settings connector modals support Escape without bypassing discard guards", () => {
+  assert.match(mainSource, /if \(!\(connectorModal \|\| editingProvider \|\| telegramModal \|\| xModal \|\| redditModal \|\| linearModal \|\| googleCalendarModal\)\) return;/);
+  assert.match(mainSource, /if \(event\.key !== "Escape"\) return;\n\s+event\.preventDefault\(\);/);
+  assert.match(mainSource, /if \(connectorModal\) setConnectorModal\(false\);\n\s+else if \(editingProvider\) closeModelProviderSetup\(\);/);
+  assert.match(mainSource, /else if \(telegramModal\) closeTelegramModal\(\);\n\s+else if \(xModal\) closeXModal\(\);\n\s+else if \(redditModal\) closeRedditModal\(\);/);
+  assert.match(mainSource, /else if \(linearModal\) closeLinearModal\(\);\n\s+else if \(googleCalendarModal\) closeGoogleCalendarModal\(\);/);
+  assert.match(mainSource, /window\.addEventListener\("keydown", onKeyDown\);/);
+  assert.match(mainSource, /window\.removeEventListener\("keydown", onKeyDown\);/);
+});
+
 test("Planning removal actions ask for confirmation before hiding active items", () => {
   assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute, workflowDisabledReason = "" \}\)/);
   assert.match(mainSource, /Remove "\$\{title\}" from Today's Three\? It will stop being protected for today, but the underlying task or source item will not be deleted\./);

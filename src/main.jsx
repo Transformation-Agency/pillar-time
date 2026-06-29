@@ -4525,6 +4525,24 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     setTelegramModal(false);
     return true;
   };
+  React.useEffect(() => {
+    if (!(connectorModal || editingProvider || telegramModal || xModal || redditModal || linearModal || googleCalendarModal)) return;
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      if (connectorModal) setConnectorModal(false);
+      else if (editingProvider) closeModelProviderSetup();
+      else if (telegramModal) closeTelegramModal();
+      else if (xModal) closeXModal();
+      else if (redditModal) closeRedditModal();
+      else if (linearModal) closeLinearModal();
+      else if (googleCalendarModal) closeGoogleCalendarModal();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [connectorModal, editingProvider, telegramModal, xModal, redditModal, linearModal, googleCalendarModal, model, xConnector, redditConnector, linearConnector, googleCalendarSelectionDirty, googleCalendarSelection, telegramForm, state.model, state.connectors, state.telegram]);
   const detectModels = React.useCallback(async () => {
     const requestProvider = editingProvider || model.provider;
     if (requestProvider === "custom" && !model.baseUrl) {
