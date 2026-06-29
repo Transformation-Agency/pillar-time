@@ -8,14 +8,14 @@ RELEASE READY WITH WARNINGS for the default executive-day UX flow.
 
 The clean-profile web runtime now completes the core first-run path without active news sources, without a model connector, and without Linear credentials. The product now behaves like an executive day-planning app by default: Today generates an `executive_day` artifact, uses deterministic fallback when the model is unavailable, surfaces context intake for the user's identity statement, standing commitments, and running to-do list, and keeps optional intelligence separate.
 
-The remaining warnings are release-scope warnings, not confirmed app-stopping UX blockers: installed DMG launch, notarized packaging, real OAuth write-scope reconnect, and full keyboard/screen-reader verification still need a final packaged-app pass. Source-level keyboard recovery has improved since the original audit: Help, Settings connector modals, the source editor, and the brief live preview now all support Escape dismissal with regression coverage.
+The remaining warnings are release-scope warnings, not confirmed app-stopping UX blockers: notarized DMG launch, real OAuth write-scope reconnect, and full screen-reader verification still need a final packaged-app pass. Source-level keyboard recovery has improved since the original audit: Help, Settings connector modals, the source editor, and the brief live preview now support Escape dismissal, initial focus, and Tab focus containment with regression coverage.
 
 ## Audit Context
 
 - Repository: `Transformation-Agency/pillar-time`
 - Checkout: `/Users/paul/Documents/Codex/2026-06-18/there-is-a-currently-running-version/work/pillar-time-repo`
 - HEAD during original audit: `8e8fcef`
-- Latest source-audit update: `45e41ff`
+- Latest source-audit update: `2ec6a4b`
 - Runtime tested: `http://127.0.0.1:44021`
 - Test data directory: `/tmp/pillar-time-ux-goal`
 - Method: code inspection, clean-profile production server smoke, Chrome walkthrough, API non-happy-path probes, focused tests, full tests, production web build.
@@ -37,6 +37,13 @@ The remaining warnings are release-scope warnings, not confirmed app-stopping UX
 - 2026-06-29: `node --test tests/runtimeSeparation.test.js` passed after source/live-preview Escape coverage: 84 tests, 84 passed.
 - 2026-06-29: `npm test` passed after source/live-preview Escape coverage: 107 tests, 106 passed, 1 opt-in Linear live smoke skipped.
 - 2026-06-29: clean detached worktree `npm ci --include=dev && npm run build` passed for the source/live-preview Escape branch.
+- 2026-06-29: `node --test tests/runtimeSeparation.test.js` passed after modal initial-focus coverage: 85 tests, 85 passed.
+- 2026-06-29: `npm test` passed after modal initial-focus coverage: 108 tests, 107 passed, 1 opt-in Linear live smoke skipped.
+- 2026-06-29: clean detached worktree `npm ci --include=dev && npm run build` passed for the modal initial-focus branch.
+- 2026-06-29: `node --test tests/runtimeSeparation.test.js` passed after modal focus-trap coverage: 86 tests, 86 passed.
+- 2026-06-29: `npm test` passed after modal focus-trap coverage: 109 tests, 108 passed, 1 opt-in Linear live smoke skipped.
+- 2026-06-29: clean detached worktree `npm ci --include=dev && npm run build` passed for the modal focus-trap branch.
+- 2026-06-29: installed `/Applications/Pillar Time.app` was rebuilt from merged `main` at `2ec6a4b`, locally ad-hoc signed, launched, and verified live on `127.0.0.1:42818` with `/api/state` returning `200 OK`, 56 sources, and model status `ready`.
 - `npm run build` passed and produced the Vite `dist/` bundle.
 - `git diff --check` passed.
 
@@ -58,6 +65,7 @@ The remaining warnings are release-scope warnings, not confirmed app-stopping UX
 - Settings connector modals now support Escape dismissal while preserving unsaved credential and calendar-selection guards.
 - The source add/edit modal now supports Escape dismissal through the same unsaved-source guard used by Cancel, close, and backdrop clicks.
 - The brief setup live preview now supports Escape dismissal.
+- The source editor, live preview, connector picker, and Settings connector setup dialogs now place initial focus inside the active modal and trap Tab focus inside the modal while it is open.
 
 ## Findings
 
@@ -123,11 +131,13 @@ The walkthrough showed the nav is usable, but some labels can compress at deskto
 
 ### P2 - Modal keyboard recovery needs predictable Escape behavior
 
-Status: source-level mitigated and covered by tests.
+Status: source-level mitigated, installed-app launch verified, and covered by tests.
 
 The original audit called out missing rendered keyboard coverage for modal recovery. Since then, the Help menu, Settings connector modals, the source editor, and the brief live preview have source-level Escape handlers. Credential-heavy Settings modals and the source editor route Escape through the same guarded close handlers used by Cancel, close buttons, and backdrop clicks, so pasted keys, calendar selections, and source locators still ask before being discarded.
 
-Residual risk: this still needs a rendered packaged-app keyboard pass to confirm focus order, native confirmation behavior, and screen-reader announcements in the Tauri WebView.
+The source editor, live preview, connector picker, and Settings connector setup dialogs also place initial focus inside the active dialog and trap Tab focus while open, so keyboard users should not tab into the page behind credential or setup dialogs.
+
+Residual risk: this still needs a rendered packaged-app assistive-technology pass to confirm native confirmation behavior and screen-reader announcements in the Tauri WebView.
 
 ### P2 - Intelligence wording still exists in optional intelligence areas
 
@@ -135,11 +145,13 @@ Status: acceptable by design.
 
 The default Today flow is now executive-day language. The optional `Intelligence` and source setup areas still use brief/source language because that workflow remains available separately.
 
-### P2 - Packaged desktop release verification remains incomplete
+### P2 - Packaged desktop release verification remains partially incomplete
 
-Status: not run in this audit.
+Status: local installed-app launch verified; notarized DMG and updater verification still pending.
 
-The web runtime, backend checks, and production web build passed. This audit did not launch a freshly notarized DMG or verify updater/signing/notarization behavior. Treat that as release checklist work, not a product-logic blocker.
+The web runtime, backend checks, production web build, local desktop bundle, and installed `/Applications/Pillar Time.app` launch passed. The installed local app was ad-hoc signed, launched from `/Applications`, and verified through the live backend on `127.0.0.1:42818`.
+
+This audit did not launch a freshly notarized DMG or verify updater/signing/notarization behavior. Treat that as release checklist work, not a product-logic blocker.
 
 ## Recommended Acceptance Tests Before Release
 
@@ -148,9 +160,9 @@ The web runtime, backend checks, and production web build passed. This audit did
 3. Use a mixed calendar account with primary, shared, subscribed, all-day, declined, and overlapping events; verify only real hard commitments block scheduling.
 4. Add identity statement, standing commitments, and a running to-do file; regenerate and verify the new context changes the day plan.
 5. Run the packaged app at default, 1024px, 1280px, and 1440px widths; verify header/nav, proposed calendar tiles, and context intake do not overlap.
-6. Run a keyboard-only pass through onboarding, Today context intake, Generate Day Plan, Approve Calendar, Settings connectors, source add/edit, and Brief Setup live preview.
+6. Run a keyboard-only packaged-app pass through onboarding, Today context intake, Generate Day Plan, Approve Calendar, Settings connectors, source add/edit, and Brief Setup live preview.
 7. Run one intelligence workflow explicitly and verify it remains separate from Today's latest executive-day timeline.
-8. Rebuild the installed `/Applications/Pillar Time.app` after the latest keyboard-recovery PRs before treating the installed local app as current.
+8. Run a basic screen-reader pass over the first-run welcome, connector modals, Today context intake, and approval queue.
 
 ## Final Assessment
 
