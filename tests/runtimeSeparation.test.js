@@ -860,9 +860,9 @@ test("Telegram page advanced actions explain missing credentials", () => {
 test("Backend connection errors offer retry and clear after recovery", () => {
   assert.match(mainSource, /setState\(\{ \.\.\.nextState, runtime: \{ \.\.\.\(nextState\.runtime \|\| \{\}\), ffmpeg: ffmpegRuntime\.ffmpeg, stt: sttRuntime\.stt \} \}\);\n\s+setError\(""\);/);
   assert.match(mainSource, /catch \{\n\s+setState\(nextState\);\n\s+setError\(""\);/);
-  assert.match(mainSource, /if \(error\) return <div className="boot boot-error">/);
+  assert.match(mainSource, /if \(error\) return <div className="boot boot-error" role="alert" aria-live="assertive">/);
   assert.match(mainSource, /Pillar Time could not reach its local backend\./);
-  assert.match(mainSource, /<button type="button" onClick=\{refresh\}>Retry connection<\/button>/);
+  assert.match(mainSource, /<button type="button" onClick=\{refresh\} title="Retry local backend connection">Retry connection<\/button>/);
   assert.doesNotMatch(mainSource, /API error: \{error\}/);
 });
 
