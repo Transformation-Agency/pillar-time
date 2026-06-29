@@ -971,6 +971,15 @@ test("Generation actions explain and guard already-running workflows", () => {
   assert.doesNotMatch(mainSource, /<Button icon="run" kind="accent" onClick=\{runWorkflow\}>Generate brief<\/Button>/);
 });
 
+test("Long-running generation and onboarding loading states are announced", () => {
+  assert.match(mainSource, /<div className="generating-panel" role="status" aria-live="polite" aria-busy=\{status === "running"\}>/);
+  assert.match(mainSource, /role="progressbar" aria-label=\{isExecutiveDay \? "Day plan generation progress" : "Brief generation progress"\} aria-valuemin="0" aria-valuemax="100" aria-valuenow=\{progress\}/);
+  assert.match(mainSource, /function OnboardingLoading\(\{ title, body \}\) \{\n\s+return <div className="onboarding-loading-card" role="status" aria-live="polite" aria-busy="true">/);
+  assert.match(mainSource, /<span className="onboarding-spinner" aria-hidden="true" \/>/);
+  assert.doesNotMatch(mainSource, /<div className=\{`main-progress \$\{slowStep \? "working" : ""\}`\} aria-label="Brief generation progress">/);
+  assert.doesNotMatch(mainSource, /<div className="onboarding-loading-card">\n\s+<span className="onboarding-spinner" \/>/);
+});
+
 test("Telegram pairing disabled action and polling errors explain recovery", () => {
   assert.match(mainSource, /setMessage\(error\.message \|\| "Could not check Telegram pairing status\."\);/);
   assert.match(mainSource, /const pairingDisabledReason = busy\n\s+\? "Telegram pairing is already checking"\n\s+: !botToken\.trim\(\)\n\s+\? "Paste a BotFather API token before creating a pairing link"\n\s+: "";/);

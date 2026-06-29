@@ -2743,12 +2743,12 @@ function GeneratingBrief({ runState }) {
     return () => clearTimeout(timer);
   }, [currentIndex, status]);
   return <div className="generating-screen">
-    <div className="generating-panel">
+    <div className="generating-panel" role="status" aria-live="polite" aria-busy={status === "running"}>
       <Badge tone={status === "error" ? "warn" : completion ? completion.badge.tone : "muted"}>{status === "error" ? "Needs attention" : completion ? completion.badge.label : "Generating"}</Badge>
       <h1>{status === "error" ? "Generation stopped." : completion ? completion.title : current.name}</h1>
       <p>{status === "error" ? runState?.error || "Something went wrong while generating." : completion ? completion.body : `Step ${currentIndex + 1} of ${steps.length}: ${current.output || (workflowLabels[current.key] || current.name || "working").toLowerCase()}.`}</p>
       {status === "running" && current.detail && <p className="generating-detail">{current.detail}</p>}
-      <div className={`main-progress ${slowStep ? "working" : ""}`} aria-label="Brief generation progress"><span style={{ width: `${progress}%` }} /></div>
+      <div className={`main-progress ${slowStep ? "working" : ""}`} role="progressbar" aria-label={isExecutiveDay ? "Day plan generation progress" : "Brief generation progress"} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></div>
       <div className="generation-step-list">
         {steps.map((step, index) => <div key={step.key} className={step.status === "done" || status === "done" ? "done" : step.status === "active" && status !== "error" ? "active" : step.status === "error" ? "error" : ""}>
           <b>{String(index + 1).padStart(2, "0")}</b>
@@ -2947,8 +2947,8 @@ function TelegramPairingFlow({ state, refresh, initialToken = "", onPaired }) {
 }
 
 function OnboardingLoading({ title, body }) {
-  return <div className="onboarding-loading-card">
-    <span className="onboarding-spinner" />
+  return <div className="onboarding-loading-card" role="status" aria-live="polite" aria-busy="true">
+    <span className="onboarding-spinner" aria-hidden="true" />
     <div>
       <strong>{title}</strong>
       <p>{body}</p>
