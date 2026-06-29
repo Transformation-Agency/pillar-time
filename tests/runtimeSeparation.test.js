@@ -282,6 +282,13 @@ test("Settings connector modals support Escape without bypassing discard guards"
   assert.match(mainSource, /window\.removeEventListener\("keydown", onKeyDown\);/);
 });
 
+test("Source editor and live preview modals support Escape dismissal", () => {
+  assert.match(mainSource, /if \(!adding\) return;\n\s+const onKeyDown = \(event\) => \{\n\s+if \(event\.key !== "Escape"\) return;\n\s+event\.preventDefault\(\);\n\s+closeSourceForm\(\);/);
+  assert.match(mainSource, /}, \[adding, form, sourceFormBaseline\]\);/);
+  assert.match(mainSource, /if \(!previewOpen\) return;\n\s+const onKeyDown = \(event\) => \{\n\s+if \(event\.key !== "Escape"\) return;\n\s+event\.preventDefault\(\);\n\s+setPreviewOpen\(false\);/);
+  assert.match(mainSource, /}, \[previewOpen\]\);/);
+});
+
 test("Planning removal actions ask for confirmation before hiding active items", () => {
   assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute, workflowDisabledReason = "" \}\)/);
   assert.match(mainSource, /Remove "\$\{title\}" from Today's Three\? It will stop being protected for today, but the underlying task or source item will not be deleted\./);
