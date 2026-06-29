@@ -301,6 +301,23 @@ test("Modal entry points place initial focus inside the active modal", () => {
   assert.match(mainSource, /<Button icon="save" kind="primary" autoFocus>\{googleCalendarNeedsWriteReconnect \? "Reconnect for Calendar Writes"/);
 });
 
+test("Modal dialogs trap Tab focus while active", () => {
+  assert.match(mainSource, /const modalFocusableSelector = \[/);
+  assert.match(mainSource, /function useModalFocusTrap\(active\) \{/);
+  assert.match(mainSource, /if \(event\.key !== "Tab"\) return;/);
+  assert.match(mainSource, /document\.querySelectorAll\("\[data-modal-focus-trap='true'\]"\)/);
+  assert.match(mainSource, /if \(!modal\.contains\(document\.activeElement\)\) \{\n\s+event\.preventDefault\(\);\n\s+first\.focus\(\);/);
+  assert.match(mainSource, /else if \(event\.shiftKey && document\.activeElement === first\) \{\n\s+event\.preventDefault\(\);\n\s+last\.focus\(\);/);
+  assert.match(mainSource, /else if \(!event\.shiftKey && document\.activeElement === last\) \{\n\s+event\.preventDefault\(\);\n\s+first\.focus\(\);/);
+  assert.match(mainSource, /window\.addEventListener\("keydown", onKeyDown, true\);/);
+  assert.match(mainSource, /window\.removeEventListener\("keydown", onKeyDown, true\);/);
+  assert.match(mainSource, /useModalFocusTrap\(adding\);/);
+  assert.match(mainSource, /useModalFocusTrap\(previewOpen\);/);
+  assert.match(mainSource, /useModalFocusTrap\(connectorModal \|\| editingProvider \|\| telegramModal \|\| xModal \|\| redditModal \|\| linearModal \|\| googleCalendarModal\);/);
+  const focusTrapMarkers = mainSource.match(/data-modal-focus-trap="true" tabIndex="-1"/g) || [];
+  assert.equal(focusTrapMarkers.length, 9);
+});
+
 test("Planning removal actions ask for confirmation before hiding active items", () => {
   assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute, workflowDisabledReason = "" \}\)/);
   assert.match(mainSource, /Remove "\$\{title\}" from Today's Three\? It will stop being protected for today, but the underlying task or source item will not be deleted\./);
