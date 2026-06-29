@@ -5293,10 +5293,10 @@ function App() {
       runInFlightRef.current = false;
     }
   };
-  if (error) return <div className="boot boot-error">
+  if (error) return <div className="boot boot-error" role="alert" aria-live="assertive">
     <strong>Pillar Time could not reach its local backend.</strong>
     <p>{error}</p>
-    <button type="button" onClick={refresh}>Retry connection</button>
+    <button type="button" onClick={refresh} title="Retry local backend connection">Retry connection</button>
   </div>;
   if (!state) return <div className="boot" role="status" aria-live="polite">
     <strong>Starting Pillar Time...</strong>
