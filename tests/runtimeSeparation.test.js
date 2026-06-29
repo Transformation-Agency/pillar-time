@@ -289,6 +289,18 @@ test("Source editor and live preview modals support Escape dismissal", () => {
   assert.match(mainSource, /}, \[previewOpen\]\);/);
 });
 
+test("Modal entry points place initial focus inside the active modal", () => {
+  assert.match(mainSource, /<Field name="source-display-name" label="Display name"[\s\S]*?required autoFocus \/>/);
+  assert.match(mainSource, /aria-label="Close live preview" onClick=\{\(\) => setPreviewOpen\(false\)\} autoFocus/);
+  assert.match(mainSource, /<button type="button" onClick=\{\(\) => openProvider\("openai"\)\} autoFocus>/);
+  assert.match(mainSource, /label="API key" type="password"[\s\S]*?autoFocus \/>/);
+  assert.match(mainSource, /label="Bot token" type="password"[\s\S]*?autoFocus \/>/);
+  assert.match(mainSource, /label="Bearer token" type="password"[\s\S]*?autoFocus \/>/);
+  assert.match(mainSource, /label="Client ID" value=\{redditConnector\.clientId\}[\s\S]*?autoFocus \/>/);
+  assert.match(mainSource, /label="Linear personal API key" type="password"[\s\S]*?autoFocus \/>/);
+  assert.match(mainSource, /<Button icon="save" kind="primary" autoFocus>\{googleCalendarNeedsWriteReconnect \? "Reconnect for Calendar Writes"/);
+});
+
 test("Planning removal actions ask for confirmation before hiding active items", () => {
   assert.match(mainSource, /function Today\(\{ state, mutate, runWorkflow, setRoute, workflowDisabledReason = "" \}\)/);
   assert.match(mainSource, /Remove "\$\{title\}" from Today's Three\? It will stop being protected for today, but the underlying task or source item will not be deleted\./);
