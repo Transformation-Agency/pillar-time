@@ -9,7 +9,7 @@
     "desktop:dev": "npm run desktop:prepare && tauri dev",
     "desktop:build": "tauri build",
     "desktop:build:local": "tauri build --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}' && node scripts/sign-local-macos-app.mjs",
-    "desktop:prepare": "npm run build && node scripts/prepare-tauri-sidecar.mjs",
+    "desktop:prepare": "node scripts/assert-node-runtime.mjs && npm run build && node scripts/prepare-tauri-sidecar.mjs",
     "build": "vite build",
     "check": "npm run build",
     "test": "node --test tests/*.test.js",
