@@ -35,6 +35,17 @@ test("Pillar Time does not inherit shared Pillar app runtime variables", () => {
   }
 });
 
+test("Desktop reinstall preserves user settings outside the app bundle", () => {
+  assert.match(tauriConfig, /"identifier": "com\.pillartime\.desktop"/);
+  assert.match(tauriSource, /\.app_data_dir\(\)/);
+  assert.match(tauriSource, /\.env\("PILLAR_TIME_DATA_DIR", data_dir\)/);
+  assert.match(serverSource, /const dataDir = process\.env\.PILLAR_TIME_DATA_DIR \? path\.resolve\(process\.env\.PILLAR_TIME_DATA_DIR\) : path\.join\(root, "data"\);/);
+  assert.match(serverSource, /loadEnvFiles\(\[path\.join\(dataDir, "\.env"\), path\.join\(dataDir, "\.env\.local"\)\]\);/);
+  assert.match(serverSource, /const dbPath = process\.env\.PILLAR_TIME_DB_PATH \? path\.resolve\(process\.env\.PILLAR_TIME_DB_PATH\) : path\.join\(dataDir, "pillar-time\.sqlite"\);/);
+  assert.match(serverSource, /CREATE TABLE IF NOT EXISTS connector_credentials/);
+  assert.match(serverSource, /CREATE TABLE IF NOT EXISTS time_preferences/);
+});
+
 test("Header nav wraps before desktop labels clip", () => {
   assert.match(stylesSource, /@media \(max-width: 1360px\) and \(min-width: 1181px\) \{\n\s+\.app-header \{\n\s+grid-template-columns: 1fr auto;\n\s+height: auto;/);
   assert.match(stylesSource, /\.nav \{\n\s+grid-column: 1 \/ -1;\n\s+order: 3;\n\s+flex-wrap: wrap;\n\s+gap: 9px;\n\s+height: auto;\n\s+min-height: 48px;\n\s+padding-bottom: 8px;\n\s+overflow: visible;/);
@@ -128,6 +139,7 @@ test("Today suggestion and quick-capture actions expose save feedback", () => {
 
 test("Today commitment completion exposes local success and failure messages", () => {
   assert.match(mainSource, /const \[commitmentMessage, setCommitmentMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const activeCommitments = \(time\.commitments \|\| \[\]\)\.filter\(\(item\) => item\.status === "active"\);/);
   assert.match(mainSource, /const completeDailyCommitment = async \(item\) => \{\n\s+setCommitmentMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/commitments\/\$\{item\.id\}`, \{ \.\.\.item, status: "done" \}, "PATCH"\);/);
   assert.match(mainSource, /setCommitmentMessage\(`\$\{item\.title \|\| "Commitment"\} marked done\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setCommitmentMessage\(error\.message \|\| "Could not mark commitment done\."\);/);
@@ -136,6 +148,21 @@ test("Today commitment completion exposes local success and failure messages", (
   assert.match(mainSource, /aria-label=\{`Remove \$\{item\.title \|\| "commitment"\} from Today's Three`\}/);
   assert.match(mainSource, /onClick=\{\(\) => completeDailyCommitment\(item\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/commitments\/\$\{item\.id\}`, \{ \.\.\.item, status: "done" \}, "PATCH"\)\}/);
+});
+
+test("Today commitments dedupe accepted suggestions and duplicate removals", () => {
+  assert.match(serverSource, /function commitmentDuplicateKey\(input = \{\}\) \{/);
+  assert.match(serverSource, /sourceSuggestionId \?\? input\.source_suggestion_id/);
+  assert.match(serverSource, /notes\.match\(/);
+  assert.match(serverSource, /linear\\\.app/);
+  assert.match(serverSource, /function duplicateDailyCommitmentRows\(input = \{\}\) \{/);
+  assert.match(serverSource, /const duplicateRows = duplicateDailyCommitmentRows\(\{ title, notes, sourceSuggestionId \}\);/);
+  assert.match(serverSource, /const existing = duplicateRows\.find\(\(row\) => row\.status === "active"\) \|\| duplicateRows\[0\];/);
+  assert.match(serverSource, /ON CONFLICT\(id\) DO UPDATE SET local_date=\$date, timezone=\$timezone, title=\$title, notes=\$notes, source_suggestion_id=\$sourceSuggestionId, rank=\$rank, status='active', completed_at=NULL, updated_at=\$t/);
+  assert.match(serverSource, /res\.json\(\{ state: state\(\), commitmentId, mergedDuplicates: duplicateRows\.length \}\);/);
+  assert.match(serverSource, /duplicateDailyCommitmentRows\(\{ title, notes, sourceSuggestionId: b\.sourceSuggestionId \?\? existing\.source_suggestion_id \}\)/);
+  assert.match(serverSource, /res\.json\(\{ state: state\(\), updatedCommitments: duplicateIds\.length \}\);/);
+  assert.match(serverSource, /SELECT \* FROM daily_commitments WHERE local_date=\$date AND status='active' ORDER BY rank ASC, created_at ASC/);
 });
 
 test("Today context regenerate stops when context save fails", () => {
