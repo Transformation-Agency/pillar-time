@@ -70,6 +70,9 @@ test("Executive calendar proposals are approval-gated and surfaced in Today", ()
   assert.match(mainSource, /Retry Calendar Write/);
   assert.match(mainSource, /Approved, but not written to Google Calendar/);
   assert.match(mainSource, /Open Settings/);
+  assert.match(mainSource, /<ul className="context-warning" aria-label="Calendar planning warnings">/);
+  assert.match(mainSource, /artifact\.classificationWarnings\.map\(\(warning, index\) => <li key=\{`\$\{index\}-\$\{warning\}`\}>\{warning\}<\/li>\)/);
+  assert.doesNotMatch(mainSource, /artifact\.classificationWarnings\.join\(" "\)/);
   assert.match(mainSource, /Read ready · reconnect to write/);
   assert.match(mainSource, /Reconnect required for approved calendar writes/);
   assert.match(mainSource, /Reconnect for Calendar Writes/);
