@@ -307,7 +307,9 @@ test("Modal entry points place initial focus inside the active modal", () => {
   assert.match(mainSource, /label="Bearer token" type="password"[\s\S]*?autoFocus \/>/);
   assert.match(mainSource, /label="Client ID" value=\{redditConnector\.clientId\}[\s\S]*?autoFocus \/>/);
   assert.match(mainSource, /label="Linear personal API key" type="password"[\s\S]*?autoFocus \/>/);
-  assert.match(mainSource, /<Button icon="save" kind="primary" autoFocus>\{googleCalendarNeedsWriteReconnect \? "Reconnect for Calendar Writes"/);
+  assert.match(mainSource, /aria-label="Close Google Calendar setup" onClick=\{closeGoogleCalendarModal\} autoFocus/);
+  assert.match(mainSource, /<Button icon="save" kind="primary">\{googleCalendarNeedsWriteReconnect \? "Reconnect for Calendar Writes"/);
+  assert.doesNotMatch(mainSource, /<Button icon="save" kind="primary" autoFocus>\{googleCalendarNeedsWriteReconnect \? "Reconnect for Calendar Writes"/);
 });
 
 test("Modal dialogs trap Tab focus while active", () => {
@@ -735,7 +737,7 @@ test("Google Calendar modal warns before discarding unsaved calendar selections"
   assert.match(mainSource, /Discard unsaved Google Calendar selection changes\? Your daily planning inputs will keep using the previously saved calendars\./);
   assert.match(mainSource, /if \(!ok\) return;\n\s+\}\n\s+setGoogleCalendarSelection\(state\.connectors\?\.googleCalendar\?\.selectedCalendarIds \|\| \["primary"\]\);/);
   assert.match(mainSource, /onMouseDown=\{\(event\) => \{ if \(event\.target === event\.currentTarget\) closeGoogleCalendarModal\(\); \}\}/);
-  assert.match(mainSource, /aria-label="Close Google Calendar setup" onClick=\{closeGoogleCalendarModal\}/);
+  assert.match(mainSource, /aria-label="Close Google Calendar setup" onClick=\{closeGoogleCalendarModal\} autoFocus/);
   assert.match(mainSource, /<Button type="button" onClick=\{closeGoogleCalendarModal\}>Cancel<\/Button>/);
 });
 
