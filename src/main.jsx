@@ -4678,6 +4678,11 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     : "";
   const googleCalendarCanWrite = !!state.connectors?.googleCalendar?.canWrite;
   const googleCalendarNeedsWriteReconnect = googleCalendarConnected && !googleCalendarCanWrite;
+  const googleCalendarStatusMessage = googleCalendarNeedsWriteReconnect
+    ? "Read access is connected. Choose the calendars that should feed daily planning, then reconnect when you are ready to approve calendar writes."
+    : googleCalendarConnected
+      ? "Read/write access is connected. Choose the calendars that should feed daily planning, then save any selection changes."
+      : "Connect Google, then choose which calendars should feed your daily brief.";
   const telegramConnected = state.telegram?.enabled && state.telegram?.chatId && state.telegram?.botToken;
   const healthWarnings = [
     state.model?.status === "ready" ? "" : "Model connector is not ready; day plans will use deterministic fallback.",
@@ -5114,7 +5119,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
         </div>}
         <div className={`notice ${googleCalendarConnected ? "" : "notice-warn"}`}>
           <strong>{googleCalendarNeedsWriteReconnect ? "Google Calendar read access ready" : googleCalendarConnected ? "Google Calendar read/write ready" : "Google Calendar not connected"}</strong>
-          <span>{state.connectors?.googleCalendar?.lastError || googleCalendarMessage || "Connect Google, then choose which calendars should feed your daily brief."}</span>
+          <span>{state.connectors?.googleCalendar?.lastError || googleCalendarMessage || googleCalendarStatusMessage}</span>
         </div>
         {googleCalendarConnected && <div className="connector-fields">
           <div className="connector-label">Calendars</div>
