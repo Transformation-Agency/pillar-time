@@ -1986,9 +1986,9 @@ function Sources({ state, mutate }) {
         return <tr key={s.id}>
           <td><div className="source-name-cell"><BrandLogo name={s.type} /><div><strong>{s.name}</strong><small title={displayLocator}>{displayLocator}</small></div></div></td>
           <td>{s.type === "Newsletter" ? "Journal / Library" : s.type}</td>
-          <td><button type="button" className={`source-toggle ${active ? "active" : "paused"}`} onClick={() => updateSourceStatus(s, active)} aria-pressed={active} title={active ? "Pause this source for future runs" : "Resume this source for future runs"}><span></span>{active ? "Active" : "Paused"}</button></td>
+          <td><button type="button" className={`source-toggle ${active ? "active" : "paused"}`} onClick={() => updateSourceStatus(s, active)} aria-pressed={active} aria-label={`${active ? "Pause" : "Resume"} ${s.name || "source"}`} title={active ? "Pause this source for future runs" : "Resume this source for future runs"}><span></span>{active ? "Active" : "Paused"}</button></td>
           <td><Badge tone={["configured", "not required"].includes(credential) ? "ok" : credential === "optional" ? "muted" : "warn"}>{credential}</Badge></td>
-          <td><div className="source-actions"><button type="button" onClick={() => openEditSource(s)}><Icon name="pencil" />Edit</button><button className="danger" type="button" onClick={() => deleteSource(s)}><Icon name="trash" />Delete</button></div></td>
+          <td><div className="source-actions"><button type="button" aria-label={`Edit ${s.name || "source"}`} onClick={() => openEditSource(s)}><Icon name="pencil" />Edit</button><button className="danger" type="button" aria-label={`Delete ${s.name || "source"}`} onClick={() => deleteSource(s)}><Icon name="trash" />Delete</button></div></td>
         </tr>;
       })}</tbody></table> : <Empty icon="sources" title="No sources yet" body="Add the first real source. The workflow will not invent feed data." />}
         {state.sources.length > 0 && filteredSources.length === 0 && <Empty icon="search" title="No matching sources" body="Clear the search to see all configured sources." />}

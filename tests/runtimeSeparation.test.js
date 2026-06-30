@@ -415,6 +415,9 @@ test("Source table actions expose local success and failure messages", () => {
   assert.match(mainSource, /catch \(error\) \{\n\s+setSourceMessage\(error\.message \|\| "Could not delete source\."\);/);
   assert.match(mainSource, /\{sourceMessage && <p className=\{sourceMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{sourceMessage\}<\/p>\}/);
   assert.match(mainSource, /title=\{active \? "Pause this source for future runs" : "Resume this source for future runs"\}/);
+  assert.match(mainSource, /aria-label=\{`\$\{active \? "Pause" : "Resume"\} \$\{s\.name \|\| "source"\}`\}/);
+  assert.match(mainSource, /aria-label=\{`Edit \$\{s\.name \|\| "source"\}`\}/);
+  assert.match(mainSource, /aria-label=\{`Delete \$\{s\.name \|\| "source"\}`\}/);
   assert.match(mainSource, /onClick=\{\(\) => updateSourceStatus\(s, active\)\}/);
   assert.match(mainSource, /onClick=\{\(\) => deleteSource\(s\)\}/);
   assert.doesNotMatch(mainSource, /aria-label="Close source editor" onClick=\{resetSourceForm\}/);
