@@ -3973,7 +3973,8 @@ function calendarPlanningCategories() {
 }
 
 function dailyCommitments(dateKey = localDateKey(new Date(), timePreferences().timezone)) {
-  return all("SELECT * FROM daily_commitments WHERE local_date=$date AND status!='removed' ORDER BY rank ASC, created_at ASC", { $date: dateKey }).map((r) => ({
+  const seen = new Set();
+  return all("SELECT * FROM daily_commitments WHERE local_date=$date AND status='active' ORDER BY rank ASC, created_at ASC", { $date: dateKey }).map((r) => ({
     id: r.id,
     localDate: r.local_date,
     timezone: r.timezone,
@@ -3985,7 +3986,39 @@ function dailyCommitments(dateKey = localDateKey(new Date(), timePreferences().t
     completedAt: r.completed_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
-  }));
+    duplicateKey: commitmentDuplicateKey(r),
+  })).filter((commitment) => {
+    const key = commitment.duplicateKey || commitment.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizeCommitmentText(value = "") {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function commitmentDuplicateKey(input = {}) {
+  const notes = String(input.notes || "");
+  const url = notes.match(/https:\/\/linear\.app\/\S+/i)?.[0]?.replace(/[),.;\]]+$/, "").toLowerCase();
+  if (url) return `url:${url}`;
+  const sourceId = String(input.sourceSuggestionId ?? input.source_suggestion_id ?? "").trim().toLowerCase();
+  if (sourceId) return `source:${sourceId}`;
+  const title = normalizeCommitmentText(input.title || "");
+  return title ? `title:${title}` : "";
+}
+
+function duplicateDailyCommitmentRows(input = {}) {
+  const key = commitmentDuplicateKey(input);
+  if (!key) return [];
+  return all("SELECT * FROM daily_commitments ORDER BY local_date DESC, created_at DESC")
+    .filter((row) => commitmentDuplicateKey(row) === key);
 }
 
 function reminders() {
@@ -6726,14 +6759,24 @@ app.post("/api/time/commitments", (req, res) => {
   const b = req.body || {};
   const t = now();
   const dateKey = String(b.localDate || localDateKey(new Date(), prefs.timezone));
-  const commitmentId = b.id || id("commit");
+  const title = String(b.title || "Untitled commitment").trim();
+  const notes = String(b.notes || "");
+  const sourceSuggestionId = String(b.sourceSuggestionId || "");
+  const rank = Math.max(1, Math.min(3, Number(b.rank || dailyCommitments(dateKey).length + 1)));
+  const duplicateRows = duplicateDailyCommitmentRows({ title, notes, sourceSuggestionId });
+  const existing = duplicateRows.find((row) => row.status === "active") || duplicateRows[0];
+  const commitmentId = existing?.id || b.id || id("commit");
+  for (const duplicate of duplicateRows) {
+    if (duplicate.id === commitmentId) continue;
+    run("UPDATE daily_commitments SET status='removed', updated_at=$t WHERE id=$id", { $id: duplicate.id, $t: t });
+  }
   run(`INSERT INTO daily_commitments (id, local_date, timezone, title, notes, source_suggestion_id, rank, status, created_at, updated_at)
        VALUES ($id, $date, $timezone, $title, $notes, $sourceSuggestionId, $rank, 'active', $t, $t)
-       ON CONFLICT(id) DO UPDATE SET title=$title, notes=$notes, rank=$rank, updated_at=$t`, {
-    $id: commitmentId, $date: dateKey, $timezone: prefs.timezone, $title: String(b.title || "Untitled commitment").trim(),
-    $notes: String(b.notes || ""), $sourceSuggestionId: String(b.sourceSuggestionId || ""), $rank: Math.max(1, Math.min(3, Number(b.rank || dailyCommitments(dateKey).length + 1))), $t: t,
+       ON CONFLICT(id) DO UPDATE SET local_date=$date, timezone=$timezone, title=$title, notes=$notes, source_suggestion_id=$sourceSuggestionId, rank=$rank, status='active', completed_at=NULL, updated_at=$t`, {
+    $id: commitmentId, $date: dateKey, $timezone: prefs.timezone, $title: title,
+    $notes: notes, $sourceSuggestionId: sourceSuggestionId, $rank: rank, $t: t,
   });
-  res.json(state());
+  res.json({ state: state(), commitmentId, mergedDuplicates: duplicateRows.length });
 });
 
 app.patch("/api/time/commitments/:id", (req, res) => {
@@ -6741,11 +6784,20 @@ app.patch("/api/time/commitments/:id", (req, res) => {
   if (!existing) return res.status(404).json({ error: "Commitment not found" });
   const b = req.body || {};
   const status = String(b.status || existing.status);
-  run("UPDATE daily_commitments SET title=$title, notes=$notes, rank=$rank, status=$status, completed_at=$completed, updated_at=$t WHERE id=$id", {
-    $id: req.params.id, $title: String(b.title ?? existing.title), $notes: String(b.notes ?? existing.notes),
-    $rank: Number(b.rank ?? existing.rank), $status: status, $completed: status === "done" ? now() : existing.completed_at, $t: now(),
-  });
-  res.json(state());
+  const title = String(b.title ?? existing.title);
+  const notes = String(b.notes ?? existing.notes);
+  const duplicateRows = status === "removed" || status === "done"
+    ? duplicateDailyCommitmentRows({ title, notes, sourceSuggestionId: b.sourceSuggestionId ?? existing.source_suggestion_id })
+    : [existing];
+  const duplicateIds = duplicateRows.length ? duplicateRows.map((row) => row.id) : [req.params.id];
+  for (const duplicateId of duplicateIds) {
+    const duplicate = duplicateRows.find((row) => row.id === duplicateId) || existing;
+    run("UPDATE daily_commitments SET title=$title, notes=$notes, rank=$rank, status=$status, completed_at=$completed, updated_at=$t WHERE id=$id", {
+      $id: duplicateId, $title: title, $notes: notes,
+      $rank: Number(b.rank ?? duplicate.rank), $status: status, $completed: status === "done" ? now() : duplicate.completed_at, $t: now(),
+    });
+  }
+  res.json({ state: state(), updatedCommitments: duplicateIds.length });
 });
 
 app.post("/api/time/suggestions/:id/feedback", (req, res) => {

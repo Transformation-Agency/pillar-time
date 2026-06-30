@@ -1149,7 +1149,7 @@ function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = 
   const [commitmentMessage, setCommitmentMessage] = React.useState("");
   const latestArtifact = latestExecutiveArtifact(state);
   const agenda = latestCalendarAgenda(state).slice(0, 8);
-  const activeCommitments = (time.commitments || []).filter((item) => item.status !== "removed");
+  const activeCommitments = (time.commitments || []).filter((item) => item.status === "active");
   const suggestions = (time.suggestions || []).slice(0, 6);
   const missingDayPlanContext = [
     state.connectors?.googleCalendar?.status === "ready" ? "" : "Calendar",
