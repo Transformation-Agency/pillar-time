@@ -6,6 +6,7 @@ const serverSource = fs.readFileSync(new URL("../server/index.js", import.meta.u
 const tauriSource = fs.readFileSync(new URL("../src-tauri/src/lib.rs", import.meta.url), "utf8");
 const envExample = fs.readFileSync(new URL("../.env.example", import.meta.url), "utf8");
 const mainSource = fs.readFileSync(new URL("../src/main.jsx", import.meta.url), "utf8");
+const stylesSource = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const tauriConfig = fs.readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8");
 const sidecarPrepareSource = fs.readFileSync(new URL("../scripts/prepare-tauri-sidecar.mjs", import.meta.url), "utf8");
 
@@ -28,6 +29,11 @@ test("Pillar Time does not inherit shared Pillar app runtime variables", () => {
     assert.doesNotMatch(source, /(?<!PILLAR_TIME_)REDDIT_CLIENT_ID/);
     assert.doesNotMatch(source, /(?<!PILLAR_TIME_)REDDIT_CLIENT_SECRET/);
   }
+});
+
+test("Header nav wraps before desktop labels clip", () => {
+  assert.match(stylesSource, /@media \(max-width: 1360px\) and \(min-width: 1181px\) \{\n\s+\.app-header \{\n\s+grid-template-columns: 1fr auto;\n\s+height: auto;/);
+  assert.match(stylesSource, /\.nav \{\n\s+grid-column: 1 \/ -1;\n\s+order: 3;\n\s+gap: 9px;\n\s+height: 48px;/);
 });
 
 test("Packaged desktop backend bundles the Node runtime library", () => {
