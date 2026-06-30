@@ -360,6 +360,7 @@ test("Planning removal actions ask for confirmation before hiding active items",
 test("High-use placeholder and table controls expose accessible labels", () => {
   assert.match(mainSource, /aria-label="Quick capture task or obligation"/);
   assert.match(mainSource, /disabled=\{!capture\.trim\(\)\} title=\{!capture\.trim\(\) \? "Type a task or obligation first" : "Capture task or obligation"\}/);
+  assert.match(mainSource, /aria-label=\{`Edit \$\{reminder\.title\} reminder`\}/);
   assert.match(mainSource, /aria-label="Important date title"/);
   assert.match(mainSource, /aria-label="Important date start date"/);
   assert.match(mainSource, /aria-label="Important date end date"/);
