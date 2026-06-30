@@ -225,8 +225,12 @@ button { cursor: pointer; }
   .nav {
     grid-column: 1 / -1;
     order: 3;
+    flex-wrap: wrap;
     gap: 9px;
-    height: 48px;
+    height: auto;
+    min-height: 48px;
+    padding-bottom: 8px;
+    overflow: visible;
   }
   .nav-item { gap: 7px; font-size: 13px; }
 }
