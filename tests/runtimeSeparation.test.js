@@ -33,7 +33,7 @@ test("Pillar Time does not inherit shared Pillar app runtime variables", () => {
 
 test("Header nav wraps before desktop labels clip", () => {
   assert.match(stylesSource, /@media \(max-width: 1360px\) and \(min-width: 1181px\) \{\n\s+\.app-header \{\n\s+grid-template-columns: 1fr auto;\n\s+height: auto;/);
-  assert.match(stylesSource, /\.nav \{\n\s+grid-column: 1 \/ -1;\n\s+order: 3;\n\s+gap: 9px;\n\s+height: 48px;/);
+  assert.match(stylesSource, /\.nav \{\n\s+grid-column: 1 \/ -1;\n\s+order: 3;\n\s+flex-wrap: wrap;\n\s+gap: 9px;\n\s+height: auto;\n\s+min-height: 48px;\n\s+padding-bottom: 8px;\n\s+overflow: visible;/);
 });
 
 test("Packaged desktop backend bundles the Node runtime library", () => {
