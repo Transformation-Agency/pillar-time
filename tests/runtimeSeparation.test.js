@@ -473,7 +473,8 @@ test("Documents are reachable and expose local success and failure messages", ()
   assert.match(mainSource, /body="Create a document by pasting text into the form before retrieval can affect workflow output\."/);
   assert.doesNotMatch(mainSource, /Create or upload a real document before retrieval can affect workflow output\./);
   assert.match(mainSource, /onClick=\{\(\) => updateDocumentStatus\(d\)\}/);
-  assert.match(mainSource, /title=\{d\.status === "active" \? "Archive document from active retrieval context" : "Reactivate document for retrieval context"\}/);
+  assert.match(mainSource, /aria-label=\{`\$\{d\.status === "active" \? "Archive" : "Reactivate"\} \$\{d\.title \|\| "document"\} \$\{d\.status === "active" \? "from" : "for"\} active retrieval context`\}/);
+  assert.match(mainSource, /title=\{`\$\{d\.status === "active" \? "Archive" : "Reactivate"\} \$\{d\.title \|\| "this document"\} \$\{d\.status === "active" \? "from" : "for"\} active retrieval context`\}/);
   assert.doesNotMatch(mainSource, /mutate\("\/api\/documents", \{ \.\.\.form, tags: form\.tags\.split\(","\)\.map\(\(t\) => t\.trim\(\)\.filter\(Boolean\) \}\)\.then/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/documents\/\$\{d\.id\}`, \{ status: d\.status === "active" \? "archived" : "active" \}, "PATCH"\)\}/);
 });
@@ -574,6 +575,7 @@ test("Review template toggles expose local success and failure messages", () => 
   assert.match(mainSource, /setReviewMessage\(`\$\{review\.title\} \$\{review\.enabled \? "disabled" : "enabled"\}\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setReviewMessage\(error\.message \|\| "Could not update review\."\);/);
   assert.match(mainSource, /\{reviewMessage && <p className=\{reviewMessage\.includes\("enabled"\) \|\| reviewMessage\.includes\("disabled"\) \? "ok-text" : "warn-text"\}>\{reviewMessage\}<\/p>\}/);
+  assert.match(mainSource, /aria-label=\{`\$\{review\.enabled \? "Disable" : "Enable"\} \$\{review\.title \|\| "review template"\}`\}/);
   assert.match(mainSource, /onClick=\{\(\) => toggleReview\(review\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/reviews\/\$\{review\.id\}`, \{ enabled: !review\.enabled \}, "PATCH"\)\}/);
   assert.equal((mainSource.match(/Pillar Time may schedule this recurring review template\./g) || []).length, 2);
