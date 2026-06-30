@@ -211,8 +211,10 @@ button { cursor: pointer; }
 
 @media (max-width: 1360px) and (min-width: 1181px) {
   .app-header {
+    grid-template-columns: 1fr auto;
+    height: auto;
     gap: 14px;
-    padding-inline: 24px;
+    padding: 14px 24px 0;
   }
   .brand-lockup { gap: 11px; }
   .brand-lockup-icon { width: 50px; height: 50px; }
@@ -220,7 +222,12 @@ button { cursor: pointer; }
   .brand-wordmark-main { font-size: 34px; letter-spacing: 6px; }
   .brand-wordmark-pillar { width: 15px; height: 29px; margin-right: 4px; }
   .brand-wordmark-product { font-size: 29px; }
-  .nav { gap: 9px; }
+  .nav {
+    grid-column: 1 / -1;
+    order: 3;
+    gap: 9px;
+    height: 48px;
+  }
   .nav-item { gap: 7px; font-size: 13px; }
 }
 .help-menu-button {
