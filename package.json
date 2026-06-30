@@ -8,6 +8,7 @@
     "tauri": "tauri",
     "desktop:dev": "npm run desktop:prepare && tauri dev",
     "desktop:build": "tauri build",
+    "desktop:build:local": "tauri build --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}' && node scripts/sign-local-macos-app.mjs",
     "desktop:prepare": "npm run build && node scripts/prepare-tauri-sidecar.mjs",
     "build": "vite build",
     "check": "npm run build",
@@ -19,6 +20,7 @@
   "dependencies": {
     "@emnapi/core": "^1.11.1",
     "@emnapi/runtime": "^1.11.1",
+    "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
     "@vitejs/plugin-react": "^6.0.2",

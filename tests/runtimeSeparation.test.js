@@ -9,6 +9,9 @@ const mainSource = fs.readFileSync(new URL("../src/main.jsx", import.meta.url), 
 const stylesSource = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
 const tauriConfig = fs.readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8");
 const sidecarPrepareSource = fs.readFileSync(new URL("../scripts/prepare-tauri-sidecar.mjs", import.meta.url), "utf8");
+const localSignSource = fs.readFileSync(new URL("../scripts/sign-local-macos-app.mjs", import.meta.url), "utf8");
+const packageJson = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const npmrcSource = fs.readFileSync(new URL("../.npmrc", import.meta.url), "utf8");
 
 test("Pillar Time runtime uses a dedicated backend port", () => {
   assert.match(serverSource, /process\.env\.PORT \|\| 42818/);
@@ -48,6 +51,18 @@ test("Packaged desktop backend bundles the Node runtime library", () => {
   assert.match(sidecarPrepareSource, /execFileSync\("xattr", \["-cr", filePath\]/);
   assert.match(sidecarPrepareSource, /addDevRpath\(binaryPath, "@executable_path\/\.\.\/Resources\/resources\/lib"\)/);
   assert.match(sidecarPrepareSource, /copyNodeRuntimeLibraries\(nodeBinary\);\n\s+addNodeRuntimeRpaths\(filePath\);\n\s+adHocSign\(filePath\);/);
+});
+
+test("Local desktop packaging is deterministic without release signing secrets", () => {
+  assert.equal(packageJson.dependencies["@tauri-apps/api"], "^2.11.0");
+  assert.equal(packageJson.scripts["desktop:build:local"], "tauri build --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}' && node scripts/sign-local-macos-app.mjs");
+  assert.match(npmrcSource, /^include=dev$/m);
+  assert.match(npmrcSource, /^json=false$/m);
+  assert.match(localSignSource, /ditto", \["--noextattr", "--norsrc", appPath, cleanPath\]/);
+  assert.match(localSignSource, /"com\.apple\.FinderInfo", "com\.apple\.fileprovider\.fpfs#P", "com\.apple\.provenance"/);
+  assert.match(localSignSource, /path\.join\(os\.tmpdir\(\), "Pillar Time\.local-build\.app"\)/);
+  assert.match(localSignSource, /codesign", \["--force", "--deep", "--sign", "-", cleanPath\]/);
+  assert.match(localSignSource, /codesign", \["--verify", "--deep", "--strict", "--verbose=2", cleanPath\]/);
 });
 
 test("Today generation defaults to executive day planning instead of intelligence", () => {
