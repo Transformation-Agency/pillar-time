@@ -1326,7 +1326,7 @@ function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = 
       </section>
       <section className="panel">
         <PanelTitle icon="reminders" title="Next Reminders" sub="Regular and sporadic nudges, paused by default until you enable them." />
-        {(time.reminders || []).slice(0, 6).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.nextOccurrence.dateKey} at ${formatDeliveryTime(reminder.nextOccurrence.localTime)}` : "No next occurrence"} right={<div className="row tight-row"><Badge tone={reminder.enabled ? "ok" : "muted"}>{reminder.enabled ? "On" : "Off"}</Badge><Button icon="settings" onClick={() => setRoute("reminders")}>Edit</Button></div>} />)}
+        {(time.reminders || []).slice(0, 6).map((reminder) => <ListRow key={reminder.id} title={reminder.title} sub={reminder.nextOccurrence ? `${reminder.nextOccurrence.dateKey} at ${formatDeliveryTime(reminder.nextOccurrence.localTime)}` : "No next occurrence"} right={<div className="row tight-row"><Badge tone={reminder.enabled ? "ok" : "muted"}>{reminder.enabled ? "On" : "Off"}</Badge><Button icon="settings" aria-label={`Edit ${reminder.title} reminder`} onClick={() => setRoute("reminders")}>Edit</Button></div>} />)}
       </section>
     </div>
   </Page>;
