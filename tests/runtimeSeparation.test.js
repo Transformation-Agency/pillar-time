@@ -10,6 +10,7 @@ const stylesSource = fs.readFileSync(new URL("../src/styles.css", import.meta.ur
 const tauriConfig = fs.readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8");
 const sidecarPrepareSource = fs.readFileSync(new URL("../scripts/prepare-tauri-sidecar.mjs", import.meta.url), "utf8");
 const localSignSource = fs.readFileSync(new URL("../scripts/sign-local-macos-app.mjs", import.meta.url), "utf8");
+const nodeRuntimeAssertSource = fs.readFileSync(new URL("../scripts/assert-node-runtime.mjs", import.meta.url), "utf8");
 const packageJson = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const npmrcSource = fs.readFileSync(new URL("../.npmrc", import.meta.url), "utf8");
 
@@ -56,6 +57,9 @@ test("Packaged desktop backend bundles the Node runtime library", () => {
 test("Local desktop packaging is deterministic without release signing secrets", () => {
   assert.equal(packageJson.dependencies["@tauri-apps/api"], "^2.11.0");
   assert.equal(packageJson.scripts["desktop:build:local"], "tauri build --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}' && node scripts/sign-local-macos-app.mjs");
+  assert.match(packageJson.scripts["desktop:prepare"], /node scripts\/assert-node-runtime\.mjs/);
+  assert.match(nodeRuntimeAssertSource, /minimumMajor = 24/);
+  assert.match(nodeRuntimeAssertSource, /node:sqlite/);
   assert.match(npmrcSource, /^include=dev$/m);
   assert.match(npmrcSource, /^json=false$/m);
   assert.match(localSignSource, /ditto", \["--noextattr", "--norsrc", appPath, cleanPath\]/);
