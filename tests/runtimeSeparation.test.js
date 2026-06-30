@@ -113,6 +113,8 @@ test("Today commitment completion exposes local success and failure messages", (
   assert.match(mainSource, /setCommitmentMessage\(`\$\{item\.title \|\| "Commitment"\} marked done\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setCommitmentMessage\(error\.message \|\| "Could not mark commitment done\."\);/);
   assert.match(mainSource, /\{commitmentMessage && <p className=\{commitmentMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{commitmentMessage\}<\/p>\}/);
+  assert.match(mainSource, /aria-label=\{`Mark \$\{item\.title \|\| "commitment"\} done`\}/);
+  assert.match(mainSource, /aria-label=\{`Remove \$\{item\.title \|\| "commitment"\} from Today's Three`\}/);
   assert.match(mainSource, /onClick=\{\(\) => completeDailyCommitment\(item\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/commitments\/\$\{item\.id\}`, \{ \.\.\.item, status: "done" \}, "PATCH"\)\}/);
 });
@@ -518,6 +520,8 @@ test("Planner task completion exposes local success and failure messages", () =>
   assert.match(mainSource, /const completeTask = async \(item\) => \{\n\s+setPlannerMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/tasks\/\$\{item\.id\}`, \{ status: "done" \}, "PATCH"\);/);
   assert.match(mainSource, /setPlannerMessage\(`\$\{item\.title \|\| "Task"\} marked done\.`\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setPlannerMessage\(error\.message \|\| "Could not mark task done\."\);/);
+  assert.match(mainSource, /aria-label=\{`Mark \$\{item\.title \|\| "task"\} done`\}/);
+  assert.match(mainSource, /aria-label=\{`Archive \$\{item\.title \|\| "task"\}`\}/);
   assert.match(mainSource, /onClick=\{\(\) => completeTask\(item\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => mutate\(`\/api\/time\/tasks\/\$\{item\.id\}`, \{ status: "done" \}, "PATCH"\)\}/);
 });
@@ -554,6 +558,9 @@ test("Reminder row actions expose local success and failure messages", () => {
   assert.match(mainSource, /catch \(error\) \{\n\s+setReminderMessage\(error\.message \|\| "Could not update reminder\."\);/);
   assert.match(mainSource, /const toggleReminder = \(reminder\) => \{\n\s+const nextEnabled = !reminder\.enabled;\n\s+if \(nextEnabled && !window\.confirm\(`Enable "\$\{reminder\.title \|\| "this reminder"\}"\? Pillar Time may schedule future desktop or Telegram nudges when Master reminders are on\.`\)\) return;/);
   assert.match(mainSource, /updateReminder\(reminder, \{ enabled: nextEnabled \}, `\$\{reminder\.title\} \$\{reminder\.enabled \? "disabled" : "enabled"\}\.`\);/);
+  assert.match(mainSource, /aria-label=\{`\$\{reminder\.enabled \? "Disable" : "Enable"\} \$\{reminder\.title \|\| "reminder"\}`\}/);
+  assert.match(mainSource, /aria-label=\{`Pause \$\{reminder\.title \|\| "reminder"\} until tomorrow`\}/);
+  assert.match(mainSource, /aria-label=\{`Archive \$\{reminder\.title \|\| "reminder"\}`\}/);
   assert.match(mainSource, /onClick=\{\(\) => toggleReminder\(reminder\)\}/);
   assert.match(mainSource, /onClick=\{\(\) => updateReminder\(reminder, \{ pausedUntil: new Date\(Date\.now\(\) \+ 86400000\)\.toISOString\(\) \}, `\$\{reminder\.title\} paused until tomorrow\.`\)\}/);
   assert.doesNotMatch(mainSource, /onClick=\{\(\) => updateReminder\(reminder, \{ enabled: !reminder\.enabled \}, `\$\{reminder\.title\} \$\{reminder\.enabled \? "disabled" : "enabled"\}\.`\)\}/);
