@@ -902,6 +902,10 @@ td {
 .context-warning {
   margin-top: 12px;
   font-size: .9rem;
+  padding-left: 18px;
+}
+.context-warning li + li {
+  margin-top: 4px;
 }
 .file-context-input {
   border: 1px dashed var(--line-strong);

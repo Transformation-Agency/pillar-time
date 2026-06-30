@@ -1132,7 +1132,9 @@ function ProposedCalendarTiles({ artifact, approvals = [], mutate, setRoute }) {
         <small>{block.category} · {block.minutes} min</small>
       </div>)}
     </div>
-    {(artifact?.classificationWarnings || []).length > 0 && <div className="context-warning">{artifact.classificationWarnings.join(" ")}</div>}
+    {(artifact?.classificationWarnings || []).length > 0 && <ul className="context-warning" aria-label="Calendar planning warnings">
+      {artifact.classificationWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
+    </ul>}
     {message && <p className={message.includes("approved") ? "ok-text" : "warn-text"}>{message}</p>}
   </section>;
 }
