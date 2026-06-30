@@ -769,6 +769,13 @@ test("Google Calendar setup test action explains missing connection", () => {
   assert.match(mainSource, /disabled=\{!!settingsGoogleCalendarTestDisabledReason\} title=\{settingsGoogleCalendarTestDisabledReason \|\| "Test Google Calendar"\}>Test<\/Button>/);
 });
 
+test("Google Calendar setup status copy matches connection state", () => {
+  assert.match(mainSource, /const googleCalendarStatusMessage = googleCalendarNeedsWriteReconnect\n\s+\? "Read access is connected\. Choose the calendars that should feed daily planning, then reconnect when you are ready to approve calendar writes\."/);
+  assert.match(mainSource, /: googleCalendarConnected\n\s+\? "Read\/write access is connected\. Choose the calendars that should feed daily planning, then save any selection changes\."\n\s+: "Connect Google, then choose which calendars should feed your daily brief\.";/);
+  assert.match(mainSource, /\{state\.connectors\?\.googleCalendar\?\.lastError \|\| googleCalendarMessage \|\| googleCalendarStatusMessage\}/);
+  assert.doesNotMatch(mainSource, /\|\| "Connect Google, then choose which calendars should feed your daily brief\."\}<\/span>/);
+});
+
 test("Linear setup warns before discarding unsaved connector edits", () => {
   assert.match(mainSource, /const closeLinearModal = \(\) => \{/);
   assert.match(mainSource, /const hasUnsavedLinearChanges = !!linearConnector\.apiKey \|\| linearConnector\.enabled !== savedEnabled;/);
