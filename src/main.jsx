@@ -4876,8 +4876,8 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <span>{desktopUpdate.progress || desktopUpdate.message || "Check for signed updates."}</span>
           <div className="row tight-row">
             <Button type="button" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={!!settingsUpdateCheckDisabledReason} title={settingsUpdateCheckDisabledReason || "Check for signed desktop updates"}>{desktopUpdate.status === "checking" ? "Checking..." : "Check"}</Button>
-            {desktopUpdate.status === "available" && <Button type="button" icon="download" kind="primary" onClick={desktopUpdate.installUpdate}>Install</Button>}
-            {desktopUpdate.status === "installed" && <Button type="button" icon="restart" kind="primary" onClick={desktopUpdate.restartApp}>Restart</Button>}
+            {desktopUpdate.status === "available" && <Button type="button" icon="download" kind="primary" onClick={desktopUpdate.installUpdate} title="Install the signed desktop update">Install</Button>}
+            {desktopUpdate.status === "installed" && <Button type="button" icon="restart" kind="primary" onClick={desktopUpdate.restartApp} title="Restart Pillar Time to finish updating">Restart</Button>}
           </div>
         </div>
         <div className={`notice ${desktopUpdate.status === "error" ? "notice-warn" : ""}`}>
