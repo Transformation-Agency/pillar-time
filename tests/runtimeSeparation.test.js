@@ -257,6 +257,12 @@ test("Settings exposes a private local data export with confirmation", () => {
   assert.match(mainSource, /disabled=\{exportBusy\} title=\{exportBusy \? "Local data export is already running" : "Export local Pillar Time data as JSON"\}/);
 });
 
+test("Settings repeated connector actions have service-specific accessible names", () => {
+  assert.match(mainSource, /aria-label=\{`\$\{active \? "Change" : "Set up"\} \$\{row\.name\} model provider`\}/);
+  assert.match(mainSource, /aria-label="Edit Telegram delivery connector"/);
+  assert.match(mainSource, /aria-label=\{`\$\{row\.action === "x" \|\| row\.action === "googleCalendar" \|\| row\.action === "reddit" \|\| row\.action === "linear" \? "Edit" : "View"\} \$\{row\.service\} connector`\}/);
+});
+
 test("Modal close buttons have accessible labels", () => {
   assert.match(mainSource, /aria-label="Close source editor"/);
   assert.match(mainSource, /aria-label="Close connector picker"/);

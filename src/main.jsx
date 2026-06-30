@@ -4908,7 +4908,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
               <div className="connector-name"><BrandLogo name={row.logo} /><div><strong>{row.name}</strong><small>{row.sub}</small></div></div>
               <Badge tone={active && modelConnected ? "ok" : active ? "warn" : "muted"}>{active ? (modelConnected ? "Selected" : "Needs setup") : "Available"}</Badge>
               {active && state.model.model && <small className="provider-model">{state.model.model}</small>}
-              <Button type="button" icon="pencil" onClick={() => openProvider(row.provider)}>{active ? "Change" : "Set up"}</Button>
+              <Button type="button" icon="pencil" aria-label={`${active ? "Change" : "Set up"} ${row.name} model provider`} onClick={() => openProvider(row.provider)}>{active ? "Change" : "Set up"}</Button>
             </div>;
           })}
         </div>
@@ -4924,7 +4924,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
           <span>Messaging</span>
           <Badge tone={telegramConnected ? "ok" : "warn"}>{telegramConnected ? "Connected" : "Needs setup"}</Badge>
           <span>{state.telegram?.lastCheckedAt ? relativeTime(state.telegram.lastCheckedAt) : "-"}</span>
-          <Button icon="telegram" onClick={() => setTelegramModal(true)}>Edit</Button>
+          <Button icon="telegram" aria-label="Edit Telegram delivery connector" onClick={() => setTelegramModal(true)}>Edit</Button>
         </div>
       </section>
 
@@ -4939,7 +4939,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
             <span>{row.type}</span>
             <Badge tone={row.needsAttention ? "warn" : row.connected ? "ok" : "muted"}>{row.status}</Badge>
             <span>{row.needsAttention ? "Needs reconnect for writes" : row.connected ? "Ready" : "-"}</span>
-            <Button type="button" icon="pencil" onClick={() => row.action === "x" ? setXModal(true) : row.action === "googleCalendar" ? setGoogleCalendarModal(true) : row.action === "reddit" ? setRedditModal(true) : row.action === "linear" ? setLinearModal(true) : null}>{row.action === "x" || row.action === "googleCalendar" || row.action === "reddit" || row.action === "linear" ? "Edit" : "View"}</Button>
+            <Button type="button" icon="pencil" aria-label={`${row.action === "x" || row.action === "googleCalendar" || row.action === "reddit" || row.action === "linear" ? "Edit" : "View"} ${row.service} connector`} onClick={() => row.action === "x" ? setXModal(true) : row.action === "googleCalendar" ? setGoogleCalendarModal(true) : row.action === "reddit" ? setRedditModal(true) : row.action === "linear" ? setLinearModal(true) : null}>{row.action === "x" || row.action === "googleCalendar" || row.action === "reddit" || row.action === "linear" ? "Edit" : "View"}</Button>
           </div>)}
         </div>
       </section>
