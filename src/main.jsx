@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { desktopRuntime } from "./desktopRuntime.js";
+import FeedbackWidget from "./FeedbackWidget.jsx";
 import {
   BookOpen,
   Bot,
@@ -391,6 +392,7 @@ function Icon({ name }) {
     external: ExternalLink,
     qr: QrCode,
     restart: RotateCcw,
+    feedback: MessageCircle,
   };
   const Cmp = icons[name] || Home;
   return <Cmp className="ico" aria-hidden="true" />;
@@ -642,6 +644,7 @@ function useDesktopUpdates() {
 
 function Shell({ route, setRoute, state, desktopUpdate, children }) {
   const [helpOpen, setHelpOpen] = React.useState(false);
+  const [feedbackOpenSignal, setFeedbackOpenSignal] = React.useState(0);
   const [externalLinkNotice, setExternalLinkNotice] = React.useState("");
   const [externalLinkCopyMessage, setExternalLinkCopyMessage] = React.useState("");
   const helpRef = React.useRef(null);
@@ -720,7 +723,10 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
             <Icon name={desktopUpdate?.status === "available" ? "download" : desktopUpdate?.status === "installed" ? "restart" : desktopUpdate?.status === "error" ? "x" : "check"} />
             <span>{desktopUpdate?.isDesktop ? (desktopUpdate.progress || desktopUpdate.message || updateStatus) : "Updates are available in the desktop app."}</span>
           </div>
-          <Button type="button" role="menuitem" icon="documents" onClick={() => openExternalUrl("https://github.com/Transformation-Agency/pillar-time/blob/main/docs/USER_MANUAL.md")}>Open User Manual</Button>
+          <div className="help-menu-actions help-feedback-actions">
+            <Button type="button" role="menuitem" icon="feedback" onClick={() => { setHelpOpen(false); setFeedbackOpenSignal((current) => current + 1); }}>Send Feedback</Button>
+            <Button type="button" role="menuitem" icon="documents" onClick={() => openExternalUrl("https://github.com/Transformation-Agency/pillar-time/blob/main/docs/USER_MANUAL.md")}>Open User Manual</Button>
+          </div>
           {desktopUpdate?.isDesktop && <div className="help-menu-actions">
             <Button type="button" role="menuitem" icon="run" onClick={() => desktopUpdate.checkForUpdates()} disabled={!!updateCheckDisabledReason} title={updateCheckDisabledReason || "Check for signed desktop updates"}>{desktopUpdate?.status === "checking" ? "Checking..." : "Check for Updates"}</Button>
             {desktopUpdate.status === "available" && <Button type="button" role="menuitem" icon="download" kind="primary" onClick={desktopUpdate.installUpdate}>Install Update</Button>}
@@ -747,6 +753,7 @@ function Shell({ route, setRoute, state, desktopUpdate, children }) {
       </div>}
       <section className="scroll">{children}</section>
     </main>
+    <FeedbackWidget route={route} appVersion={desktopUpdate?.version || ""} openSignal={feedbackOpenSignal} />
   </div>;
 }
 

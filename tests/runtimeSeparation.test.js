@@ -7,6 +7,8 @@ const tauriSource = fs.readFileSync(new URL("../src-tauri/src/lib.rs", import.me
 const envExample = fs.readFileSync(new URL("../.env.example", import.meta.url), "utf8");
 const mainSource = fs.readFileSync(new URL("../src/main.jsx", import.meta.url), "utf8");
 const stylesSource = fs.readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+const feedbackWidgetSource = fs.readFileSync(new URL("../src/FeedbackWidget.jsx", import.meta.url), "utf8");
+const feedbackClientSource = fs.readFileSync(new URL("../src/feedbackClient.js", import.meta.url), "utf8");
 const tauriConfig = fs.readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8");
 const sidecarPrepareSource = fs.readFileSync(new URL("../scripts/prepare-tauri-sidecar.mjs", import.meta.url), "utf8");
 const localSignSource = fs.readFileSync(new URL("../scripts/sign-local-macos-app.mjs", import.meta.url), "utf8");
@@ -807,6 +809,31 @@ test("Settings onboarding reset exposes success and failure feedback", () => {
   assert.match(mainSource, /setSettingsMessage\("First-run onboarding reopened\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setSettingsMessage\(error\.message \|\| "Could not reopen onboarding\."\);/);
   assert.match(mainSource, /\{settingsMessage && <p className=\{settingsMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{settingsMessage\}<\/p>\}/);
+});
+
+test("Help menu opens Pillar Time feedback widget without a floating button", () => {
+  assert.match(mainSource, /import FeedbackWidget from "\.\/FeedbackWidget\.jsx";/);
+  assert.match(mainSource, /feedback: MessageCircle/);
+  assert.match(mainSource, /const \[feedbackOpenSignal, setFeedbackOpenSignal\] = React\.useState\(0\);/);
+  assert.match(mainSource, /<Button type="button" role="menuitem" icon="feedback" onClick=\{\(\) => \{ setHelpOpen\(false\); setFeedbackOpenSignal\(\(current\) => current \+ 1\); \}\}>Send Feedback<\/Button>/);
+  assert.match(mainSource, /<FeedbackWidget route=\{route\} appVersion=\{desktopUpdate\?\.version \|\| ""\} openSignal=\{feedbackOpenSignal\} \/>/);
+  assert.match(feedbackWidgetSource, /product: "pillar-time"/);
+  assert.match(feedbackWidgetSource, /Report a bug, request a feature, or share what would make Pillar Time better\./);
+  assert.match(feedbackWidgetSource, /const maxScreenshotBytes = 5 \* 1024 \* 1024;/);
+  assert.match(feedbackWidgetSource, /Screenshot must be 5 MB or smaller\./);
+  assert.match(feedbackWidgetSource, /accept="image\/png,image\/jpeg,image\/webp"/);
+  assert.doesNotMatch(feedbackWidgetSource, /feedback-fab/);
+  assert.doesNotMatch(stylesSource, /\.feedback-fab/);
+  assert.match(stylesSource, /\.feedback-modal/);
+  assert.match(stylesSource, /\.help-feedback-actions/);
+});
+
+test("Feedback client posts to the shared feedback server with env overrides", () => {
+  assert.match(feedbackClientSource, /const defaultFeedbackApiBase = "https:\/\/project-cw1bz\.vercel\.app";/);
+  assert.match(feedbackClientSource, /import\.meta\.env\.VITE_PILLAR_FEEDBACK_API_BASE/);
+  assert.match(feedbackClientSource, /import\.meta\.env\.VITE_PRISM_FEEDBACK_API_BASE/);
+  assert.match(feedbackClientSource, /fetch\(`\$\{feedbackApiBase\(\)\}\/api\/feedback`, \{/);
+  assert.match(feedbackClientSource, /body: JSON\.stringify\(payload\)/);
 });
 
 test("Google Calendar modal warns before discarding unsaved calendar selections", () => {

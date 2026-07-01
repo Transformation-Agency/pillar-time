@@ -1,6 +1,6 @@
 {
   "name": "pillar-time",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "type": "module",
   "scripts": {
     "dev": "NODE_OPTIONS=--no-warnings node server/index.js",
