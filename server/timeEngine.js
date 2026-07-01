@@ -143,7 +143,7 @@ function feedbackPenaltyFor(feedback = []) {
   const penalties = new Map();
   for (const item of feedback || []) {
     if (!item?.key) continue;
-    const amount = item.feedback === "never" ? 60 : item.feedback === "incorrect" ? 36 : item.feedback === "notToday" ? 18 : 0;
+    const amount = item.feedback === "never" ? 140 : item.feedback === "incorrect" ? 112 : item.feedback === "notToday" ? 84 : 0;
     penalties.set(item.key, Math.max(penalties.get(item.key) || 0, amount));
   }
   return penalties;
@@ -272,12 +272,19 @@ export function buildProposedCalendarBlocks({ dateKey = localDateKey(new Date())
   if (dayEnd > cursor) windows.push({ start: cursor, end: dayEnd });
   const categoryByName = new Map((categories || []).map((category) => [String(category.name || "").toLowerCase(), category]));
   const blocks = [];
-  const candidates = (rankedCandidates || []).filter((candidate) => candidate.source !== "calendar").slice(0, 6);
+  const candidates = (rankedCandidates || [])
+    .filter((candidate) => candidate.source !== "calendar")
+    .sort((a, b) => {
+      const adminA = (a.leverageCategory || "admin") === "admin" ? 1 : 0;
+      const adminB = (b.leverageCategory || "admin") === "admin" ? 1 : 0;
+      return adminA - adminB || Number(b.score || 0) - Number(a.score || 0);
+    })
+    .slice(0, 6);
   for (const candidate of candidates) {
     const minutes = Math.max(15, Math.min(120, Number(candidate.estimateMinutes || (candidate.leverageCategory === "deepWork" ? preferences.focusBlockMinutes || 90 : 45))));
     const window = windows.find((slot) => (slot.end.getTime() - slot.start.getTime()) / 60000 >= minutes);
     if (!window) continue;
-    const categoryName = candidate.source === "task" ? "Linear Execution" : candidate.leverageCategory === "deepWork" ? "Deep Work" : "Admin";
+    const categoryName = candidate.source === "linear" ? "Linear Execution" : candidate.leverageCategory === "deepWork" ? "Deep Work" : "Admin";
     const category = categoryByName.get(categoryName.toLowerCase()) || {};
     const start = window.start;
     const end = new Date(start.getTime() + minutes * 60000);
@@ -292,7 +299,7 @@ export function buildProposedCalendarBlocks({ dateKey = localDateKey(new Date())
       reason: candidate.whyThis || candidate.reason || "Protect time for high-leverage work.",
       approvalRequired: true,
     });
-    window.start = new Date(end.getTime() + 5 * 60000);
+    window.start = new Date(end.getTime() + buffer * 60000);
   }
   const prepCandidates = (rankedCandidates || []).filter((candidate) => candidate.source === "calendar").slice(0, 4);
   for (const candidate of prepCandidates) {

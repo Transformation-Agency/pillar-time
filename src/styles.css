@@ -888,6 +888,32 @@ td {
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 10px;
 }
+.calendar-proposal-list {
+  display: grid;
+  gap: 10px;
+}
+.calendar-proposal-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(190px, 1fr) 92px auto auto;
+  align-items: end;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(255,255,255,.66);
+}
+.calendar-proposal-row small {
+  color: var(--muted);
+  padding-bottom: 10px;
+}
+.suggestion-toggle {
+  width: fit-content;
+  margin-top: 6px;
+}
+.date-edit-row {
+  display: grid;
+  gap: 12px;
+}
 .calendar-tile {
   min-height: 104px;
   border: 1px solid var(--line);
@@ -1390,6 +1416,24 @@ span.section-target-select {
   background: rgba(255,255,255,.44);
   padding: 15px;
   text-align: left;
+}
+.brief-list-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.brief-list-select {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+}
+.brief-row-actions .btn {
+  min-width: 36px;
+  padding-inline: 10px;
 }
 .brief-list-item.active {
   border-color: var(--accent);
@@ -2915,6 +2959,8 @@ span.section-target-select {
   .sources-table-card { overflow-x: auto; }
   .source-table { min-width: 620px; }
   .connector-grid, .connector-row, .model-grid, .x-inline, .council-member-grid, .provider-card-grid, .profile-grid { grid-template-columns: 1fr; }
+  .calendar-proposal-row, .brief-list-row, .brief-list-select { grid-template-columns: 1fr; }
+  .brief-row-actions { justify-content: flex-start; }
   .connector-health, .connector-head { align-items: stretch; flex-direction: column; }
   .onboarding-shell { grid-template-columns: 1fr; }
   .onboarding-rail {

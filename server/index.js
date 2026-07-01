@@ -192,7 +192,8 @@ function migrate() {
       steps_json TEXT NOT NULL DEFAULT '[]',
       artifact_json TEXT NOT NULL DEFAULT '{}',
       run_type TEXT NOT NULL DEFAULT 'intelligence',
-      error TEXT
+      error TEXT,
+      archived_at TEXT
     );
     CREATE TABLE IF NOT EXISTS approval_items (
       id TEXT PRIMARY KEY,
@@ -344,6 +345,7 @@ function migrate() {
       dependencies TEXT NOT NULL DEFAULT '',
       waiting_on TEXT NOT NULL DEFAULT '',
       source TEXT NOT NULL DEFAULT 'manual',
+      source_external_id TEXT NOT NULL DEFAULT '',
       related_event_id TEXT NOT NULL DEFAULT '',
       recurrence_json TEXT NOT NULL DEFAULT '{}',
       reminder_ids_json TEXT NOT NULL DEFAULT '[]',
@@ -558,6 +560,9 @@ function migrate() {
   }
   const workflowColumns = db.prepare("PRAGMA table_info(workflow_runs)").all().map((c) => c.name);
   if (workflowColumns.length && !workflowColumns.includes("run_type")) db.exec("ALTER TABLE workflow_runs ADD COLUMN run_type TEXT NOT NULL DEFAULT 'intelligence';");
+  if (workflowColumns.length && !workflowColumns.includes("archived_at")) db.exec("ALTER TABLE workflow_runs ADD COLUMN archived_at TEXT;");
+  const taskColumns = db.prepare("PRAGMA table_info(time_tasks)").all().map((c) => c.name);
+  if (taskColumns.length && !taskColumns.includes("source_external_id")) db.exec("ALTER TABLE time_tasks ADD COLUMN source_external_id TEXT NOT NULL DEFAULT '';");
   const briefColumns = db.prepare("PRAGMA table_info(brief_config)").all().map((c) => c.name);
   if (!briefColumns.includes("delivery_frequency")) db.exec("ALTER TABLE brief_config ADD COLUMN delivery_frequency TEXT NOT NULL DEFAULT 'Daily';");
   if (!briefColumns.includes("delivery_time")) db.exec("ALTER TABLE brief_config ADD COLUMN delivery_time TEXT NOT NULL DEFAULT '08:00';");
@@ -2451,9 +2456,22 @@ function calendarAgendaFromEvents(events = [], source = {}, config = {}) {
     creatorEmail: event.creator?.email || "",
     status: event.status || "",
     description: config.includeDescriptions ? stripHtml(event.description || "").slice(0, 1000) : "",
-    htmlLink: event.htmlLink || "",
-    calendarUrl: event.htmlLink || "",
+    htmlLink: event.htmlLink || event.url || event.hangoutLink || "",
+    calendarUrl: normalizedCalendarUrl(event),
   }));
+}
+
+function normalizedCalendarUrl(event = {}) {
+  const candidates = [
+    event.calendarUrl,
+    event.htmlLink,
+    event.url,
+    event.hangoutLink,
+    event.event?.calendarUrl,
+    event.event?.htmlLink,
+    event.raw?.htmlLink,
+  ];
+  return candidates.find((url) => /^https?:\/\//i.test(String(url || ""))) || "";
 }
 
 async function fetchGoogleCalendarEventsForCalendar({ source, calendarId, accessToken, config }) {
@@ -2504,6 +2522,38 @@ async function createGoogleCalendarBlock(block = {}) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error?.message || `Google Calendar write failed: ${response.status} ${response.statusText}`);
   return { calendarId, event: payload };
+}
+
+function validBlockRange(block = {}) {
+  const start = new Date(block.start);
+  const end = new Date(block.end);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    throw new Error(`Calendar block "${block.title || "Untitled block"}" needs a valid start and end.`);
+  }
+  return { start, end };
+}
+
+function rangesOverlap(a, b) {
+  return a.start < b.end && b.start < a.end;
+}
+
+function validateCalendarProposalBlocks(blocks = [], { compareHardBlocks = true } = {}) {
+  const ranges = (blocks || []).map((block) => ({ ...validBlockRange(block), title: block.title || "Untitled block" }));
+  for (let i = 0; i < ranges.length; i += 1) {
+    for (let j = i + 1; j < ranges.length; j += 1) {
+      if (rangesOverlap(ranges[i], ranges[j])) throw new Error(`Calendar proposal overlaps itself: "${ranges[i].title}" and "${ranges[j].title}".`);
+    }
+  }
+  if (!compareHardBlocks) return true;
+  const artifact = latestCompletedExecutiveArtifact();
+  const hardBlocks = (artifact?.calendarClassifications || [])
+    .filter((item) => item.blocksTime && item.start && item.end)
+    .map((item) => ({ ...validBlockRange(item), title: item.title || "Calendar event" }));
+  for (const proposed of ranges) {
+    const conflict = hardBlocks.find((block) => rangesOverlap(proposed, block));
+    if (conflict) throw new Error(`Calendar block "${proposed.title}" overlaps existing event "${conflict.title}". Edit or remove it before approval.`);
+  }
+  return true;
 }
 
 async function fetchGoogleCalendarSource(source) {
@@ -3949,6 +3999,7 @@ function timeTasks() {
     dependencies: r.dependencies,
     waitingOn: r.waiting_on,
     source: r.source,
+    sourceExternalId: r.source_external_id || "",
     relatedEventId: r.related_event_id,
     recurrence: parse(r.recurrence_json, {}),
     reminderIds: parse(r.reminder_ids_json, []),
@@ -4105,6 +4156,7 @@ function meetingRecords() {
 function latestCompletedExecutiveArtifact() {
   const row = get(`SELECT * FROM workflow_runs
                    WHERE status='completed'
+                     AND archived_at IS NULL
                      AND (run_type='executive_day' OR json_extract(artifact_json, '$.runType')='executive_day')
                    ORDER BY completed_at DESC, started_at DESC
                    LIMIT 1`);
@@ -4112,15 +4164,18 @@ function latestCompletedExecutiveArtifact() {
 }
 
 function timeSuggestions() {
+  const feedback = all("SELECT feedback_key AS key, feedback FROM suggestion_feedback");
+  const dismissed = new Set(feedback.filter((item) => ["notToday", "incorrect", "never"].includes(item.feedback)).map((item) => item.key));
   const latestArtifact = latestCompletedExecutiveArtifact();
   if (latestArtifact?.rankedDayCandidates?.length) {
     const prefs = timePreferences();
     const todayKey = localDateKey(new Date(), prefs.timezone);
     const artifactKey = latestArtifact.generatedAt ? localDateKey(new Date(latestArtifact.generatedAt), prefs.timezone) : todayKey;
-    if (artifactKey === todayKey) return latestArtifact.rankedDayCandidates.slice(0, 8);
+    if (artifactKey === todayKey) return latestArtifact.rankedDayCandidates
+      .filter((candidate) => !dismissed.has(candidate.feedbackKey || candidate.id || candidate.title))
+      .slice(0, 8);
   }
   const tasks = timeTasks();
-  const feedback = all("SELECT feedback_key AS key, feedback FROM suggestion_feedback");
   const ranked = rankExecutiveCandidates({ tasks, commitments: [], calendarClassifications: [], feedback }).slice(0, 8);
   if (!ranked.length) {
     ranked.push({
@@ -4403,7 +4458,7 @@ function workflowRuns() {
   expireStaleWorkflowRuns();
   return all("SELECT * FROM workflow_runs ORDER BY started_at DESC").map((r) => ({
     id: r.id, label: r.label, trigger: r.trigger, status: r.status, startedAt: r.started_at,
-    completedAt: r.completed_at, runType: r.run_type || parse(r.artifact_json, {})?.runType || "intelligence", steps: parse(r.steps_json, []), artifact: hydrateArtifact(parse(r.artifact_json, {})), error: r.error,
+    completedAt: r.completed_at, runType: r.run_type || parse(r.artifact_json, {})?.runType || "intelligence", steps: parse(r.steps_json, []), artifact: hydrateArtifact(parse(r.artifact_json, {})), error: r.error, archivedAt: r.archived_at || "",
   }));
 }
 
@@ -5844,9 +5899,42 @@ function linearIssueToExecutiveTask(issue = {}) {
     waitingOn: /blocked|waiting/i.test(`${stateName} ${issue.title || ""}`) ? stateName || "Linear blocker" : "",
     source: "linear",
     sourceSystem: "linear",
+    sourceExternalId: issue.id || identifier,
     externalRef: { provider: "linear", id: issue.id, identifier, url: issue.url || "" },
     updatedAt: issue.updatedAt || "",
   };
+}
+
+function upsertLinearIssueTasks(issues = []) {
+  const t = now();
+  const tasks = (issues || []).map(linearIssueToExecutiveTask).filter((task) => task.sourceExternalId);
+  for (const task of tasks) {
+    const existing = get("SELECT id FROM time_tasks WHERE source='linear' AND source_external_id=$externalId", { $externalId: task.sourceExternalId });
+    const taskId = existing?.id || `linear-${task.sourceExternalId}`;
+    run(`INSERT INTO time_tasks (id, title, notes, domain, project, goal, owner, status, due_at, estimate_minutes, priority, leverage_category, energy, dependencies, waiting_on, source, source_external_id, related_event_id, recurrence_json, reminder_ids_json, completed_at, created_at, updated_at)
+         VALUES ($id, $title, $notes, $domain, $project, $goal, $owner, $status, $dueAt, $estimate, $priority, $category, $energy, $dependencies, $waitingOn, 'linear', $externalId, '', '{}', '[]', NULL, $createdAt, $t)
+         ON CONFLICT(id) DO UPDATE SET title=$title, notes=$notes, domain=$domain, project=$project, goal=$goal, owner=$owner, status=$status, due_at=$dueAt, estimate_minutes=$estimate, priority=$priority, leverage_category=$category, waiting_on=$waitingOn, source='linear', source_external_id=$externalId, updated_at=$t`, {
+      $id: taskId,
+      $title: task.title,
+      $notes: task.notes,
+      $domain: task.domain,
+      $project: task.project,
+      $goal: task.goal,
+      $owner: task.owner,
+      $status: task.status,
+      $dueAt: task.dueAt || null,
+      $estimate: Number(task.estimateMinutes || 45),
+      $priority: task.priority,
+      $category: task.leverageCategory,
+      $energy: task.energy || "medium",
+      $dependencies: task.dependencies || "",
+      $waitingOn: task.waitingOn || "",
+      $externalId: task.sourceExternalId,
+      $createdAt: existing?.id ? t : (task.updatedAt || t),
+      $t: t,
+    });
+  }
+  return tasks;
 }
 
 async function fetchLinearContextForExecutive({ onProgress } = {}) {
@@ -5869,13 +5957,14 @@ async function fetchLinearContextForExecutive({ onProgress } = {}) {
     const fetchedAt = now();
     run("UPDATE connector_credentials SET last_checked_at=$t, last_error='', updated_at=$t WHERE provider=$provider", { $provider: LINEAR_PROVIDER, $t: fetchedAt });
     const issues = result.issues || [];
+    const issueTasks = upsertLinearIssueTasks(issues);
     return {
       status: "ready",
       enabled: true,
       teamKey: DEFAULT_LINEAR_TEAM_KEY,
       viewer: result.viewer || null,
       issues,
-      issueTasks: issues.map(linearIssueToExecutiveTask),
+      issueTasks,
       groups: groupIssuesByProject(issues),
       fetchedAt,
     };
@@ -6181,8 +6270,9 @@ function buildExecutiveDayArtifact({ generatedAt = now(), calendarAgenda = [], c
   const dateKey = localDateKey(new Date(generatedAt), prefs.timezone);
   const commitments = dailyCommitments(dateKey);
   const localTasks = timeTasks();
+  const nonLinearLocalTasks = localTasks.filter((task) => task.source !== "linear" && task.sourceSystem !== "linear");
   const linearTasks = Array.isArray(linearContext.issueTasks) ? linearContext.issueTasks : [];
-  const tasks = [...localTasks, ...linearTasks];
+  const tasks = [...nonLinearLocalTasks, ...linearTasks];
   const feedback = all("SELECT feedback_key AS key, feedback FROM suggestion_feedback");
   const calendarClassifications = classifyCalendarEvents(calendarAgenda, { primaryCalendarIds: defaultPrimaryCalendarIds });
   const rankedDayCandidates = rankExecutiveCandidates({ tasks, commitments, calendarClassifications, feedback }).slice(0, 18);
@@ -6731,14 +6821,15 @@ app.post("/api/time/tasks", (req, res) => {
   const b = req.body || {};
   const t = now();
   const taskId = b.id || id("task");
-  run(`INSERT INTO time_tasks (id, title, notes, domain, project, goal, owner, status, due_at, estimate_minutes, priority, leverage_category, energy, dependencies, waiting_on, source, related_event_id, recurrence_json, reminder_ids_json, completed_at, created_at, updated_at)
-       VALUES ($id, $title, $notes, $domain, $project, $goal, $owner, $status, $dueAt, $estimate, $priority, $category, $energy, $dependencies, $waitingOn, $source, $eventId, $recurrence, $reminders, NULL, $t, $t)
-       ON CONFLICT(id) DO UPDATE SET title=$title, notes=$notes, domain=$domain, project=$project, goal=$goal, owner=$owner, status=$status, due_at=$dueAt, estimate_minutes=$estimate, priority=$priority, leverage_category=$category, energy=$energy, dependencies=$dependencies, waiting_on=$waitingOn, source=$source, related_event_id=$eventId, recurrence_json=$recurrence, reminder_ids_json=$reminders, updated_at=$t`, {
+  run(`INSERT INTO time_tasks (id, title, notes, domain, project, goal, owner, status, due_at, estimate_minutes, priority, leverage_category, energy, dependencies, waiting_on, source, source_external_id, related_event_id, recurrence_json, reminder_ids_json, completed_at, created_at, updated_at)
+       VALUES ($id, $title, $notes, $domain, $project, $goal, $owner, $status, $dueAt, $estimate, $priority, $category, $energy, $dependencies, $waitingOn, $source, $sourceExternalId, $eventId, $recurrence, $reminders, NULL, $t, $t)
+       ON CONFLICT(id) DO UPDATE SET title=$title, notes=$notes, domain=$domain, project=$project, goal=$goal, owner=$owner, status=$status, due_at=$dueAt, estimate_minutes=$estimate, priority=$priority, leverage_category=$category, energy=$energy, dependencies=$dependencies, waiting_on=$waitingOn, source=$source, source_external_id=$sourceExternalId, related_event_id=$eventId, recurrence_json=$recurrence, reminder_ids_json=$reminders, updated_at=$t`, {
     $id: taskId, $title: String(b.title || "Untitled task").trim(), $notes: String(b.notes || ""), $domain: String(b.domain || "work"),
     $project: String(b.project || ""), $goal: String(b.goal || ""), $owner: String(b.owner || ""), $status: String(b.status || "inbox"),
     $dueAt: b.dueAt || null, $estimate: Number(b.estimateMinutes || 30), $priority: String(b.priority || "normal"),
     $category: String(b.leverageCategory || "admin"), $energy: String(b.energy || "medium"), $dependencies: String(b.dependencies || ""),
-    $waitingOn: String(b.waitingOn || ""), $source: String(b.source || "manual"), $eventId: String(b.relatedEventId || ""),
+    $waitingOn: String(b.waitingOn || ""), $source: String(b.source || "manual"), $sourceExternalId: String(b.sourceExternalId || b.source_external_id || ""),
+    $eventId: String(b.relatedEventId || ""),
     $recurrence: json(b.recurrence || {}), $reminders: json(b.reminderIds || []), $t: t,
   });
   res.json(state());
@@ -6874,6 +6965,39 @@ app.post("/api/time/important-dates", (req, res) => {
     $enabled: b.enabled === false ? 0 : 1,
     $t: t,
   });
+  res.json(state());
+});
+
+app.patch("/api/time/important-dates/:id", (req, res) => {
+  const existing = get("SELECT * FROM important_dates WHERE id=$id", { $id: req.params.id });
+  if (!existing) return res.status(404).json({ error: "Important date not found", state: state() });
+  const b = req.body || {};
+  const startDate = String(b.startDate ?? b.date ?? existing.start_date ?? existing.date ?? "").trim();
+  const endDate = String(b.endDate ?? existing.end_date ?? startDate).trim();
+  const title = String(b.title ?? existing.title ?? "").trim();
+  if (!title || !startDate) return res.status(400).json({ error: "Important date title and start date are required", state: state() });
+  if (endDate && endDate < startDate) return res.status(400).json({ error: "End date cannot be before start date", state: state() });
+  run(`UPDATE important_dates SET title=$title, date=$date, start_date=$startDate, end_date=$endDate, category=$category, notes=$notes, prep_sequence_json=$prep, enabled=$enabled, updated_at=$t WHERE id=$id`, {
+    $id: req.params.id,
+    $title: title,
+    $date: startDate,
+    $startDate: startDate,
+    $endDate: endDate || startDate,
+    $category: String(b.category ?? existing.category ?? "personal"),
+    $notes: String(b.notes ?? existing.notes ?? ""),
+    $prep: json(b.prepSequence ?? parse(existing.prep_sequence_json, [])),
+    $enabled: b.enabled === undefined ? existing.enabled : b.enabled ? 1 : 0,
+    $t: now(),
+  });
+  audit("important_date.updated", "important_date", req.params.id, title, {}, "operator");
+  res.json(state());
+});
+
+app.delete("/api/time/important-dates/:id", (req, res) => {
+  const existing = get("SELECT * FROM important_dates WHERE id=$id", { $id: req.params.id });
+  if (!existing) return res.status(404).json({ error: "Important date not found", state: state() });
+  run("DELETE FROM important_dates WHERE id=$id", { $id: req.params.id });
+  audit("important_date.deleted", "important_date", req.params.id, existing.title, {}, "operator");
   res.json(state());
 });
 
@@ -7545,6 +7669,28 @@ app.get("/api/workflow-runs/:id", (req, res) => {
   res.json({ state: state(), run });
 });
 
+app.patch("/api/workflow-runs/:id", (req, res) => {
+  const existing = get("SELECT * FROM workflow_runs WHERE id=$id", { $id: req.params.id });
+  if (!existing) return res.status(404).json({ error: "Workflow run not found", state: state() });
+  const archive = req.body?.archived ?? req.body?.archive;
+  const archivedAt = archive === undefined
+    ? existing.archived_at
+    : archive
+      ? now()
+      : null;
+  run("UPDATE workflow_runs SET archived_at=$archivedAt WHERE id=$id", { $id: req.params.id, $archivedAt: archivedAt });
+  audit(archivedAt ? "workflow_run.archived" : "workflow_run.restored", "workflow_run", req.params.id, archivedAt ? "Archived workflow run" : "Restored workflow run", {}, "operator");
+  res.json({ state: state() });
+});
+
+app.delete("/api/workflow-runs/:id", (req, res) => {
+  const existing = get("SELECT * FROM workflow_runs WHERE id=$id", { $id: req.params.id });
+  if (!existing) return res.status(404).json({ error: "Workflow run not found", state: state() });
+  run("DELETE FROM workflow_runs WHERE id=$id", { $id: req.params.id });
+  audit("workflow_run.deleted", "workflow_run", req.params.id, "Deleted workflow run", {}, "operator");
+  res.json({ state: state() });
+});
+
 app.post("/api/workflow-runs/:id/audio", async (req, res) => {
   try {
     const workflowRun = workflowRuns().find((item) => item.id === req.params.id);
@@ -7568,12 +7714,25 @@ app.post("/api/workflow-runs/:id/audio", async (req, res) => {
 app.patch("/api/approvals/:id", (req, res) => {
   const current = get("SELECT * FROM approval_items WHERE id=$id", { $id: req.params.id });
   if (!current) return res.status(404).json({ error: "Approval not found" });
+  const currentPayload = parse(current.payload_json, {});
+  const nextPayload = req.body?.payload && typeof req.body.payload === "object"
+    ? { ...currentPayload, ...req.body.payload }
+    : currentPayload;
+  if (current.kind === "calendar.proposed_schedule" && req.body?.payload?.blocks) {
+    if (current.status !== "pending") return res.status(400).json({ error: "Only pending calendar proposals can be edited.", state: state() });
+    validateCalendarProposalBlocks(req.body.payload.blocks);
+  }
   const status = req.body?.status;
-  if (!["approved", "rejected"].includes(status)) return res.status(400).json({ error: "Invalid status" });
-  run("UPDATE approval_items SET status=$status, resolved_by=$by, resolved_at=$t, resolution_note=$note WHERE id=$id", {
-    $id: req.params.id, $status: status, $by: req.body?.by || "operator", $t: now(), $note: req.body?.note || "",
+  if (status !== undefined && !["approved", "rejected"].includes(status)) return res.status(400).json({ error: "Invalid status", state: state() });
+  run("UPDATE approval_items SET status=$status, payload_json=$payload, resolved_by=$by, resolved_at=$resolvedAt, resolution_note=$note WHERE id=$id", {
+    $id: req.params.id,
+    $status: status || current.status,
+    $payload: json(nextPayload),
+    $by: status ? req.body?.by || "operator" : current.resolved_by,
+    $resolvedAt: status ? now() : current.resolved_at,
+    $note: status ? req.body?.note || "" : current.resolution_note,
   });
-  audit(`approval.${status}`, "approval", req.params.id, req.body?.note || status);
+  audit(status ? `approval.${status}` : "approval.payload_updated", "approval", req.params.id, req.body?.note || status || "Calendar proposal edited");
   res.json(state());
 });
 
@@ -7588,6 +7747,7 @@ app.post("/api/approvals/:id/execute", async (req, res) => {
     if (action === "calendar.create_blocks" || current.kind === "calendar.proposed_schedule") {
       const blocks = Array.isArray(payload.blocks) ? payload.blocks : [];
       if (!blocks.length) throw new Error("Calendar approval has no blocks to create.");
+      validateCalendarProposalBlocks(blocks);
       const created = [];
       for (const block of blocks) created.push(await createGoogleCalendarBlock(block));
       result = { createdCount: created.length, created };
@@ -8323,6 +8483,7 @@ app.post("/api/telegram/commands", async (req, res) => {
         const approval = pendingCalendar[0];
         run("UPDATE approval_items SET status='approved', resolved_by='telegram', resolved_at=$t, resolution_note='Approved by /approve calendar' WHERE id=$id", { $id: approval.id, $t: now() });
         const blocks = Array.isArray(approval.payload?.blocks) ? approval.payload.blocks : [];
+        validateCalendarProposalBlocks(blocks);
         const created = [];
         for (const block of blocks) created.push(await createGoogleCalendarBlock(block));
         run("UPDATE approval_items SET status='executed', resolved_by='telegram', resolved_at=$t, resolution_note=$note WHERE id=$id", {

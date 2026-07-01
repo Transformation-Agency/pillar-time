@@ -933,13 +933,14 @@ function Markdown({ text = "" }) {
 }
 
 function Overview({ state, setRoute, runWorkflow, mutate }) {
-  const lastRun = state.workflowRuns[0];
+  const activeWorkflowRuns = (state.workflowRuns || []).filter((run) => !run.archivedAt);
+  const lastRun = activeWorkflowRuns[0];
   const owner = state.briefConfig?.ownerName || defaultOwnerName;
   const ownerGreeting = !isDefaultOwnerName(owner) ? `Welcome, ${owner}.` : "Welcome.";
   const timezone = state.briefConfig.deliveryTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Denver";
   const timezones = timezoneOptions(timezone);
   const saveDelivery = (patch) => mutate("/api/brief-config", { ...state.briefConfig, deliveryTimezone: timezone, ...patch }, "PATCH");
-  const latestBrief = state.workflowRuns.find((r) => r.status === "completed");
+  const latestBrief = activeWorkflowRuns.find((r) => r.status === "completed");
   const latestBriefIsToday = latestBrief && new Date(latestBrief.startedAt).toDateString() === new Date().toDateString();
   return <div className="home-page">
     <section className="hero">
@@ -1031,8 +1032,9 @@ function displayCadence(value = "") {
     .join(" ");
 }
 
-function TimeSuggestionCard({ suggestion, mutate }) {
+function TimeSuggestionCard({ suggestion, mutate, onDismiss }) {
   const [message, setMessage] = React.useState("");
+  const [expanded, setExpanded] = React.useState(false);
   const accept = async () => {
     setMessage("");
     try {
@@ -1050,6 +1052,7 @@ function TimeSuggestionCard({ suggestion, mutate }) {
     setMessage("");
     try {
       await mutate(`/api/time/suggestions/${encodeURIComponent(suggestion.feedbackKey || suggestion.id || suggestion.title)}/feedback`, { feedback: value });
+      onDismiss?.(suggestion.feedbackKey || suggestion.id || suggestion.title);
       setMessage(value === "notToday" ? "Moved out of today." : "Feedback saved.");
     } catch (error) {
       setMessage(error.message || "Could not save suggestion feedback.");
@@ -1060,7 +1063,8 @@ function TimeSuggestionCard({ suggestion, mutate }) {
       <div><strong>{suggestion.title}</strong><small>{suggestion.whyThis || suggestion.reason || "High-leverage candidate for today."}</small></div>
       <Badge tone="ok">{Math.round(suggestion.score || 0)}</Badge>
     </div>
-    {(suggestion.constraintRelieved || suggestion.tradeoff || suggestion.exactNextStep) && <div className="suggestion-explain">
+    {(suggestion.constraintRelieved || suggestion.tradeoff || suggestion.exactNextStep) && <button type="button" className="text-link suggestion-toggle" onClick={() => setExpanded((current) => !current)}>{expanded ? "Hide details" : "Show details"}</button>}
+    {expanded && (suggestion.constraintRelieved || suggestion.tradeoff || suggestion.exactNextStep) && <div className="suggestion-explain">
       {suggestion.constraintRelieved && <span><b>Relieves</b>{suggestion.constraintRelieved}</span>}
       {suggestion.tradeoff && <span><b>Displaces</b>{suggestion.tradeoff}</span>}
       {suggestion.exactNextStep && <span><b>Next</b>{suggestion.exactNextStep}</span>}
@@ -1075,12 +1079,45 @@ function TimeSuggestionCard({ suggestion, mutate }) {
   </div>;
 }
 
+function toDateTimeLocal(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
+}
+
+function fromDateTimeLocal(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function minutesBetween(start, end) {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return 30;
+  return Math.max(15, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
+}
+
+function withBlockDuration(block, minutes) {
+  const start = new Date(block.start);
+  if (Number.isNaN(start.getTime())) return block;
+  const nextMinutes = Math.max(15, Math.min(240, Number(minutes || block.minutes || 30)));
+  return { ...block, minutes: nextMinutes, end: new Date(start.getTime() + nextMinutes * 60000).toISOString() };
+}
+
 function ProposedCalendarTiles({ artifact, approvals = [], mutate, setRoute }) {
   const blocks = artifact?.proposedCalendarBlocks || [];
   const proposalApprovals = approvals.filter((approval) => approval.kind === "calendar.proposed_schedule");
   const artifactApproval = proposalApprovals.find((approval) => approval.payload?.runId === artifact?.runId || approval.runId === artifact?.runId);
   const fallbackApproval = proposalApprovals.find((approval) => approval.status === "pending") || proposalApprovals[0];
   const approval = artifactApproval || fallbackApproval;
+  const sourceBlocks = approval?.payload?.blocks?.length ? approval.payload.blocks : blocks;
+  const [draftBlocks, setDraftBlocks] = React.useState(sourceBlocks);
+  React.useEffect(() => {
+    setDraftBlocks(sourceBlocks);
+  }, [approval?.id, JSON.stringify(sourceBlocks)]);
   const [message, setMessage] = React.useState("");
   const status = approval?.status || "missing";
   const needsReconnect = /reconnect google calendar/i.test(`${approval?.resolutionNote || ""} ${message || ""}`);
@@ -1094,6 +1131,7 @@ function ProposedCalendarTiles({ artifact, approvals = [], mutate, setRoute }) {
           ? "Calendar Rejected"
           : "No Approval Available";
   const canExecute = status === "pending" || status === "approved";
+  const canEdit = status === "pending";
   const approvalDisabledReason = canExecute
     ? ""
     : status === "executed"
@@ -1108,6 +1146,7 @@ function ProposedCalendarTiles({ artifact, approvals = [], mutate, setRoute }) {
     }
     setMessage("");
     try {
+      if (approval.status === "pending") await mutate(`/api/approvals/${approval.id}`, { payload: { blocks: draftBlocks } }, "PATCH");
       if (approval.status === "pending") await mutate(`/api/approvals/${approval.id}`, { status: "approved" }, "PATCH");
       await mutate(`/api/approvals/${approval.id}/execute`, {}, "POST");
       setMessage("Calendar blocks were added.");
@@ -1115,27 +1154,76 @@ function ProposedCalendarTiles({ artifact, approvals = [], mutate, setRoute }) {
       setMessage(error.message || "Calendar approval failed.");
     }
   };
-  if (!blocks.length) return null;
+  const saveDraft = async () => {
+    if (!approval) {
+      setMessage("No pending calendar approval found.");
+      return;
+    }
+    setMessage("");
+    try {
+      await mutate(`/api/approvals/${approval.id}`, { payload: { blocks: draftBlocks } }, "PATCH");
+      setMessage("Calendar proposal saved.");
+    } catch (error) {
+      setMessage(error.message || "Could not save calendar proposal.");
+    }
+  };
+  const reject = async () => {
+    if (!approval) return;
+    if (!window.confirm("Reject this proposed calendar? No blocks will be added to Google Calendar.")) return;
+    setMessage("");
+    try {
+      await mutate(`/api/approvals/${approval.id}`, { status: "rejected", note: "Rejected from Proposed Calendar review." }, "PATCH");
+      setMessage("Calendar proposal rejected.");
+    } catch (error) {
+      setMessage(error.message || "Could not reject calendar proposal.");
+    }
+  };
+  const updateBlock = (index, patch) => {
+    setDraftBlocks((current) => current.map((block, i) => i === index ? { ...block, ...patch } : block));
+  };
+  const updateBlockStart = (index, value) => {
+    setDraftBlocks((current) => current.map((block, i) => {
+      if (i !== index) return block;
+      const start = fromDateTimeLocal(value);
+      if (!start) return block;
+      return withBlockDuration({ ...block, start }, block.minutes || minutesBetween(block.start, block.end));
+    }));
+  };
+  const updateBlockMinutes = (index, minutes) => {
+    setDraftBlocks((current) => current.map((block, i) => i === index ? withBlockDuration(block, minutes) : block));
+  };
+  const removeBlock = (index) => {
+    const block = draftBlocks[index];
+    if (!window.confirm(`Remove "${block?.title || "this block"}" from the proposed calendar?`)) return;
+    setDraftBlocks((current) => current.filter((_, i) => i !== index));
+  };
+  if (!blocks.length && !draftBlocks.length) return null;
   return <section className="panel proposed-calendar-panel">
     <div className="proposed-calendar-head">
       <PanelTitle icon="calendar" title="Proposed Calendar" sub="Approval-gated blocks built around hard calendar commitments." />
-      <Button icon={status === "approved" ? "restart" : "check"} kind="primary" onClick={approve} disabled={!canExecute} title={approvalDisabledReason || actionLabel}>{actionLabel}</Button>
+      <div className="row tight-row">
+        {canEdit && <Button icon="save" onClick={saveDraft}>Save Proposal</Button>}
+        {canEdit && <Button icon="x" onClick={reject}>Reject</Button>}
+        <Button icon={status === "approved" ? "restart" : "check"} kind="primary" onClick={approve} disabled={!canExecute || !draftBlocks.length} title={approvalDisabledReason || actionLabel}>{actionLabel}</Button>
+      </div>
     </div>
     {approval && status !== "pending" && <div className={`approval-state-note ${status === "executed" ? "ok-text" : status === "approved" ? "warn-text" : "muted-text"}`}>
       {status === "approved" ? `Approved, but not written to Google Calendar${approval.resolutionNote ? `: ${approval.resolutionNote}` : "."}` : `Calendar proposal ${status}.`}
       {needsReconnect && setRoute && <Button type="button" icon="settings" onClick={() => setRoute("settings")}>Open Settings</Button>}
     </div>}
-    <div className="calendar-tile-row">
-      {blocks.map((block) => <div className="calendar-tile" key={block.id || `${block.start}-${block.title}`}>
-        <strong>{new Date(block.start).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong>
-        <span>{block.title}</span>
-        <small>{block.category} · {block.minutes} min</small>
+    <div className="calendar-proposal-list">
+      {draftBlocks.map((block, index) => <div className="calendar-proposal-row" key={block.id || `${block.start}-${block.title}-${index}`}>
+        <Field label="Block" value={block.title || ""} onChange={(title) => updateBlock(index, { title })} disabled={!canEdit} />
+        <Field label="Start" type="datetime-local" value={toDateTimeLocal(block.start)} onChange={(start) => updateBlockStart(index, start)} disabled={!canEdit} />
+        <Field label="Minutes" value={String(block.minutes || minutesBetween(block.start, block.end))} onChange={(minutes) => updateBlockMinutes(index, minutes)} disabled={!canEdit} />
+        <small>{block.category} · {new Date(block.end).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small>
+        {canEdit && <Button icon="trash" aria-label={`Remove ${block.title || "calendar block"}`} title={`Remove ${block.title || "calendar block"}`} onClick={() => removeBlock(index)} />}
       </div>)}
     </div>
     {(artifact?.classificationWarnings || []).length > 0 && <ul className="context-warning" aria-label="Calendar planning warnings">
       {artifact.classificationWarnings.map((warning, index) => <li key={`${index}-${warning}`}>{warning}</li>)}
     </ul>}
-    {message && <p className={message.includes("approved") ? "ok-text" : "warn-text"}>{message}</p>}
+    {message && <p className={message.includes("added") || message.includes("saved") || message.includes("rejected") ? "ok-text" : "warn-text"}>{message}</p>}
   </section>;
 }
 
@@ -1144,13 +1232,17 @@ function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = 
   const [capture, setCapture] = React.useState("");
   const [contextType, setContextType] = React.useState("todo");
   const [contextText, setContextText] = React.useState("");
+  const [standingRecurrence, setStandingRecurrence] = React.useState({ frequency: "weekly", startDate: new Date().toISOString().slice(0, 10), endDate: "", preferredWindow: "morning", estimateMinutes: 45 });
   const [contextMessage, setContextMessage] = React.useState("");
   const [captureMessage, setCaptureMessage] = React.useState("");
   const [commitmentMessage, setCommitmentMessage] = React.useState("");
   const latestArtifact = latestExecutiveArtifact(state);
   const agenda = latestCalendarAgenda(state).slice(0, 8);
   const activeCommitments = (time.commitments || []).filter((item) => item.status === "active");
-  const suggestions = (time.suggestions || []).slice(0, 6);
+  const [hiddenSuggestionKeys, setHiddenSuggestionKeys] = React.useState(new Set());
+  const suggestions = (time.suggestions || [])
+    .filter((suggestion) => !hiddenSuggestionKeys.has(suggestion.feedbackKey || suggestion.id || suggestion.title))
+    .slice(0, 6);
   const missingDayPlanContext = [
     state.connectors?.googleCalendar?.status === "ready" ? "" : "Calendar",
     state.connectors?.linear?.status === "ready" ? "" : "Linear",
@@ -1239,22 +1331,26 @@ function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = 
           confidence: 0.95,
         }, "POST");
       } else if (contextType === "standing") {
-        await mutate("/api/trusted-context/facts", {
-          resourceType: "profile.standing_commitment",
-          fieldKey: `standingCommitment.${Date.now()}`,
-          value,
-          partition: "professional",
-          visibility: "assistant",
-          trustLevel: "confirmed_historical_decision",
-          verificationStatus: "user_confirmed",
-          sourceLabel: "Today context intake",
-          confidence: 0.9,
+        await mutate("/api/time/tasks", {
+          title: value.split(/\n/)[0].slice(0, 180),
+          notes: value,
+          source: "context-intake",
+          leverageCategory: "leadership",
+          priority: "normal",
+          estimateMinutes: standingRecurrence.estimateMinutes,
+          recurrence: {
+            type: "standingCommitment",
+            frequency: standingRecurrence.frequency,
+            startDate: standingRecurrence.startDate,
+            endDate: standingRecurrence.endDate,
+            preferredWindow: standingRecurrence.preferredWindow,
+          },
         }, "POST");
       } else {
         await mutate("/api/time/tasks", { title: value.split(/\n/)[0].slice(0, 180), notes: value, source: "context-intake", leverageCategory: "deepWork", priority: "normal" }, "POST");
       }
       setContextText("");
-      setContextMessage("Saved context.");
+      setContextMessage(contextType === "identity" ? "Saved to Trusted Context." : contextType === "standing" ? "Saved as a recurring Planner commitment." : "Saved to Planner.");
       return true;
     } catch (error) {
       setContextMessage(error.message || "Could not save context.");
@@ -1291,7 +1387,7 @@ function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = 
     <div className="time-layout">
       <section className="panel">
         <PanelTitle icon="today" title="Highest Leverage Today" sub="These are offerings, not orders. Change them until they fit the day." />
-        <div className="time-card-list">{suggestions.length ? suggestions.map((suggestion) => <TimeSuggestionCard key={suggestion.id || suggestion.feedbackKey || suggestion.title} suggestion={suggestion} mutate={mutate} />) : <Empty icon="planner" title="No ranked suggestions yet" body="Capture a task, add standing commitments, or connect Calendar/Linear." />}</div>
+        <div className="time-card-list">{suggestions.length ? suggestions.map((suggestion) => <TimeSuggestionCard key={suggestion.id || suggestion.feedbackKey || suggestion.title} suggestion={suggestion} mutate={mutate} onDismiss={(key) => setHiddenSuggestionKeys((current) => new Set([...current, key]))} />) : <Empty icon="planner" title="No ranked suggestions yet" body="Capture a task, add standing commitments, or connect Calendar/Linear." />}</div>
       </section>
       <section className="panel">
         <PanelTitle icon="check" title="Today’s Three" sub="The commitments Pillar Time will protect for this date." />
@@ -1311,17 +1407,25 @@ function Today({ state, mutate, runWorkflow, setRoute, workflowDisabledReason = 
             { value: "standing", label: "Standing commitment" },
             { value: "todo", label: "Running to-do" },
           ]} />
+          {contextType === "standing" && <div className="form-grid">
+            <Select label="Frequency" value={standingRecurrence.frequency} onChange={(frequency) => setStandingRecurrence({ ...standingRecurrence, frequency })} options={["daily", "weekly", "monthly", "quarterly"]} />
+            <Field label="Start date" type="date" value={standingRecurrence.startDate} onChange={(startDate) => setStandingRecurrence({ ...standingRecurrence, startDate })} />
+            <Field label="End date" type="date" value={standingRecurrence.endDate} onChange={(endDate) => setStandingRecurrence({ ...standingRecurrence, endDate })} />
+            <Select label="Preferred window" value={standingRecurrence.preferredWindow} onChange={(preferredWindow) => setStandingRecurrence({ ...standingRecurrence, preferredWindow })} options={["morning", "afternoon", "evening", "flexible"]} />
+            <Field label="Estimate minutes" value={String(standingRecurrence.estimateMinutes)} onChange={(estimateMinutes) => setStandingRecurrence({ ...standingRecurrence, estimateMinutes })} />
+          </div>}
           <TextArea label="Paste or type context" value={contextText} onChange={setContextText} rows={5} placeholder="Paste a statement, commitment list, or task notes here." />
           <label className="file-context-input"><Upload className="ico" /><span>Import text file</span><input type="file" accept=".txt,.md,.csv,.json,.text" onChange={importContextFile} /></label>
           <div className="row tight-row"><Button icon="save" kind="primary">Save Context</Button><Button type="button" icon="run" onClick={regenerateWithContext} disabled={!!workflowDisabledReason} title={workflowDisabledReason || "Add context and regenerate the day plan"}>Add Context & Regenerate</Button></div>
         </form>
-        {contextMessage && <p className={contextMessage.includes("Saved") ? "ok-text" : "warn-text"}>{contextMessage}</p>}
+        {contextMessage && <p className={contextMessage.includes("Saved") ? "ok-text" : "warn-text"}>{contextMessage} {contextMessage.includes("Trusted Context") && <Button type="button" icon="trustedContext" onClick={() => setRoute("trustedContext")}>View</Button>} {contextMessage.includes("Planner") && <Button type="button" icon="planner" onClick={() => setRoute("planner")}>View</Button>}</p>}
       </section>
       <section className="panel">
         <PanelTitle icon="calendar" title="Timeline" sub="Calendar context from the latest successful day plan." />
         {agenda.length ? agenda.map((event, index) => {
           const classification = (latestArtifact?.calendarClassifications || []).find((item) => item.id === event.id || item.event?.id === event.id);
-          return <ListRow key={`${event.title || event.summary}-${index}`} title={event.title || event.summary || "Calendar event"} sub={[event.time || [event.start, event.end].filter(Boolean).join(" to "), classification?.visibility || "unclassified", classification?.calendarRole].filter(Boolean).join(" · ") || event.when || "Today"} right={<div className="row tight-row">{classification && <Badge tone={classification.visibility === "hardBlock" ? "ok" : classification.visibility === "ignore" ? "muted" : "warn"}>{classification.visibility}</Badge>}{event.calendarUrl && <Button icon="calendar" onClick={() => openExternalUrl(event.calendarUrl)}>Open</Button>}</div>} />;
+          const calendarUrl = event.calendarUrl || event.htmlLink || event.url || event.hangoutLink || event.event?.htmlLink || "";
+          return <ListRow key={`${event.title || event.summary}-${index}`} title={event.title || event.summary || "Calendar event"} sub={[event.time || [event.start, event.end].filter(Boolean).join(" to "), classification?.visibility || "unclassified", classification?.calendarRole].filter(Boolean).join(" · ") || event.when || "Today"} right={<div className="row tight-row">{classification && <Badge tone={classification.visibility === "hardBlock" ? "ok" : classification.visibility === "ignore" ? "muted" : "warn"}>{classification.visibility}</Badge>}<Button icon="calendar" onClick={() => calendarUrl && openExternalUrl(calendarUrl)} disabled={!calendarUrl} title={calendarUrl ? "Open calendar event" : "No calendar link was available for this event"}>Open</Button></div>} />;
         }) : <Empty icon="calendar" title="No agenda loaded" body="Connect Google Calendar and generate a day plan to bring today’s events into this view." />}
       </section>
       <section className="panel">
@@ -1340,6 +1444,8 @@ function Planner({ state, mutate }) {
   const [taskBaseline, setTaskBaseline] = React.useState(emptyTaskForm);
   const [importantDate, setImportantDate] = React.useState(emptyImportantDateForm);
   const [importantDateBaseline, setImportantDateBaseline] = React.useState(emptyImportantDateForm);
+  const [editingDateId, setEditingDateId] = React.useState("");
+  const [editingDate, setEditingDate] = React.useState(emptyImportantDateForm);
   const [plannerMessage, setPlannerMessage] = React.useState("");
   React.useEffect(() => {
     window.__pillarTimeUnsavedPlannerDraft = JSON.stringify(task) !== JSON.stringify(taskBaseline) || JSON.stringify(importantDate) !== JSON.stringify(importantDateBaseline);
@@ -1395,6 +1501,42 @@ function Planner({ state, mutate }) {
       setPlannerMessage(error.message || "Could not add important date.");
     }
   };
+  const startEditDate = (item) => {
+    setEditingDateId(item.id);
+    setEditingDate({ title: item.title || "", startDate: item.startDate || item.date || "", endDate: item.endDate || item.startDate || item.date || "", category: item.category || "personal", notes: item.notes || "" });
+  };
+  const saveDateEdit = async (item) => {
+    if (!editingDate.title.trim() || !editingDate.startDate) return;
+    setPlannerMessage("");
+    try {
+      await mutate(`/api/time/important-dates/${item.id}`, editingDate, "PATCH");
+      setEditingDateId("");
+      setEditingDate(emptyImportantDateForm);
+      setPlannerMessage("Important date updated.");
+    } catch (error) {
+      setPlannerMessage(error.message || "Could not update important date.");
+    }
+  };
+  const archiveDate = async (item) => {
+    if (!window.confirm(`${item.enabled ? "Archive" : "Restore"} "${item.title || "this important date"}"?`)) return;
+    setPlannerMessage("");
+    try {
+      await mutate(`/api/time/important-dates/${item.id}`, { ...item, enabled: !item.enabled }, "PATCH");
+      setPlannerMessage(item.enabled ? "Important date archived." : "Important date restored.");
+    } catch (error) {
+      setPlannerMessage(error.message || "Could not update important date.");
+    }
+  };
+  const deleteDate = async (item) => {
+    if (!window.confirm(`Permanently delete "${item.title || "this important date"}"? This cannot be undone.`)) return;
+    setPlannerMessage("");
+    try {
+      await mutate(`/api/time/important-dates/${item.id}`, {}, "DELETE");
+      setPlannerMessage("Important date deleted.");
+    } catch (error) {
+      setPlannerMessage(error.message || "Could not delete important date.");
+    }
+  };
   return <Page title="Planner" desc="Capture obligations, map leverage, and keep personal dates beside work context." wide>
     {plannerMessage && <p className={plannerMessage.includes("Could not") ? "warn-text" : "ok-text"}>{plannerMessage}</p>}
     <div className="split">
@@ -1421,7 +1563,17 @@ function Planner({ state, mutate }) {
         <input aria-label="Important date end date" type="date" value={importantDate.endDate} onChange={(event) => setImportantDate({ ...importantDate, endDate: event.target.value })} />
         <Button icon="plus" kind="primary" disabled={!importantDate.title.trim() || !importantDate.startDate} title={!importantDate.title.trim() || !importantDate.startDate ? "Add a title and start date first" : "Add important date"}>Add</Button>
       </form>
-      {(time.importantDates || []).map((item) => <ListRow key={item.id} title={item.title} sub={[item.startDate === item.endDate ? item.startDate : `${item.startDate} to ${item.endDate}`, item.category].filter(Boolean).join(" · ")} right={<Badge>{item.enabled ? "active" : "off"}</Badge>} />)}
+      {(time.importantDates || []).map((item) => editingDateId === item.id
+        ? <div className="list-row date-edit-row" key={item.id}>
+          <div className="form-grid">
+            <Field label="Title" value={editingDate.title} onChange={(title) => setEditingDate({ ...editingDate, title })} />
+            <Field label="Start" type="date" value={editingDate.startDate} onChange={(startDate) => setEditingDate({ ...editingDate, startDate, endDate: editingDate.endDate || startDate })} />
+            <Field label="End" type="date" value={editingDate.endDate} onChange={(endDate) => setEditingDate({ ...editingDate, endDate })} />
+            <Field label="Category" value={editingDate.category || ""} onChange={(category) => setEditingDate({ ...editingDate, category })} />
+          </div>
+          <div className="row tight-row"><Button icon="save" kind="primary" onClick={() => saveDateEdit(item)} disabled={!editingDate.title.trim() || !editingDate.startDate}>Save</Button><Button icon="x" onClick={() => setEditingDateId("")}>Cancel</Button></div>
+        </div>
+        : <ListRow key={item.id} title={item.title} sub={[item.startDate === item.endDate ? item.startDate : `${item.startDate} to ${item.endDate}`, item.category].filter(Boolean).join(" · ")} right={<div className="row tight-row"><Badge>{item.enabled ? "active" : "archived"}</Badge><Button icon="pencil" aria-label={`Edit ${item.title || "important date"}`} title={`Edit ${item.title || "important date"}`} onClick={() => startEditDate(item)} /><Button icon={item.enabled ? "x" : "restart"} aria-label={`${item.enabled ? "Archive" : "Restore"} ${item.title || "important date"}`} title={`${item.enabled ? "Archive" : "Restore"} ${item.title || "important date"}`} onClick={() => archiveDate(item)} /><Button icon="trash" aria-label={`Delete ${item.title || "important date"}`} title={`Delete ${item.title || "important date"}`} onClick={() => deleteDate(item)} /></div>} />)}
     </section>
   </Page>;
 }
@@ -2602,6 +2754,8 @@ function BriefGenerationProgress({ run }) {
 function Briefs({ state, runWorkflow, refresh, workflowDisabledReason = "" }) {
   const [selectedId, setSelectedId] = React.useState(state.workflowRuns[0]?.id || "");
   const [query, setQuery] = React.useState("");
+  const [showArchived, setShowArchived] = React.useState(false);
+  const [briefMessage, setBriefMessage] = React.useState("");
   const [audioBusy, setAudioBusy] = React.useState(false);
   const [audioMessage, setAudioMessage] = React.useState("");
   const [audioUrl, setAudioUrl] = React.useState("");
@@ -2610,8 +2764,9 @@ function Briefs({ state, runWorkflow, refresh, workflowDisabledReason = "" }) {
   React.useEffect(() => {
     if (!selectedId && state.workflowRuns[0]) setSelectedId(state.workflowRuns[0].id);
   }, [state.workflowRuns, selectedId]);
-  const filtered = state.workflowRuns.filter((run) => briefDisplayTitle(run).toLowerCase().includes(query.toLowerCase()));
-  const selected = state.workflowRuns.find((run) => run.id === selectedId) || filtered[0] || state.workflowRuns[0];
+  const visibleRuns = state.workflowRuns.filter((run) => showArchived || !run.archivedAt);
+  const filtered = visibleRuns.filter((run) => briefDisplayTitle(run).toLowerCase().includes(query.toLowerCase()));
+  const selected = state.workflowRuns.find((run) => run.id === selectedId && (showArchived || !run.archivedAt)) || filtered[0] || visibleRuns[0];
   React.useEffect(() => {
     audioRef.current?.pause();
     audioRef.current = null;
@@ -2665,6 +2820,38 @@ function Briefs({ state, runWorkflow, refresh, workflowDisabledReason = "" }) {
     if (audioRef.current) audioRef.current.currentTime = 0;
     playAudioUrl(audioUrl).catch((error) => setAudioMessage(error.message || "Could not restart audio."));
   };
+  const archiveBrief = async (run) => {
+    if (!window.confirm(`Archive "${briefDisplayTitle(run)}"? It will be hidden from Recent Briefs unless you show archived runs.`)) return;
+    setBriefMessage("");
+    try {
+      await api(`/api/workflow-runs/${run.id}`, { method: "PATCH", body: JSON.stringify({ archived: true }) });
+      setBriefMessage("Brief archived.");
+      await refresh?.();
+    } catch (error) {
+      setBriefMessage(error.message || "Could not archive brief.");
+    }
+  };
+  const restoreBrief = async (run) => {
+    setBriefMessage("");
+    try {
+      await api(`/api/workflow-runs/${run.id}`, { method: "PATCH", body: JSON.stringify({ archived: false }) });
+      setBriefMessage("Brief restored.");
+      await refresh?.();
+    } catch (error) {
+      setBriefMessage(error.message || "Could not restore brief.");
+    }
+  };
+  const deleteBrief = async (run) => {
+    if (!window.confirm(`Permanently delete "${briefDisplayTitle(run)}"? This cannot be undone.`)) return;
+    setBriefMessage("");
+    try {
+      await api(`/api/workflow-runs/${run.id}`, { method: "DELETE", body: JSON.stringify({}) });
+      setBriefMessage("Brief deleted.");
+      await refresh?.();
+    } catch (error) {
+      setBriefMessage(error.message || "Could not delete brief.");
+    }
+  };
   const avgSignals = state.workflowRuns.length
     ? Math.round(state.workflowRuns.reduce((sum, run) => sum + (run.artifact?.selectedIssues?.length || 0), 0) / state.workflowRuns.length)
     : 0;
@@ -2678,15 +2865,23 @@ function Briefs({ state, runWorkflow, refresh, workflowDisabledReason = "" }) {
       <aside className="panel recent-briefs">
         <h2>Recent Briefs</h2>
         <label className="search-box"><Search className="ico" /><input aria-label="Search briefs" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search briefs" /></label>
+        <label className="check"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} /> Show archived</label>
+        {briefMessage && <p className={briefMessage.includes("Could not") ? "warn-text" : "ok-text"}>{briefMessage}</p>}
         <div className="brief-list">{filtered.map((run) => {
           const selectedRun = selected?.id === run.id;
           const date = new Date(run.startedAt);
           const deliveryBadge = briefDeliveryBadge(run);
-          return <button key={run.id} className={`brief-list-item ${selectedRun ? "active" : ""}`} onClick={() => setSelectedId(run.id)}>
-            <span className="date-icon"><Calendar className="ico" /></span>
-            <span><small>{date.toLocaleDateString()} · {date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small><strong>{briefDisplayTitle(run)}</strong><em>{(run.artifact?.selectedIssues || []).slice(0, 3).map((issue) => issue.sourceType || "Signal").join(" · ") || (run.status === "running" ? "In progress" : "Brief")}</em></span>
-            <Badge tone={deliveryBadge.tone}>{deliveryBadge.label}</Badge>
-          </button>;
+          return <div key={run.id} className={`brief-list-item brief-list-row ${selectedRun ? "active" : ""}`}>
+            <button type="button" className="brief-list-select" onClick={() => setSelectedId(run.id)}>
+              <span className="date-icon"><Calendar className="ico" /></span>
+              <span><small>{date.toLocaleDateString()} · {date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</small><strong>{briefDisplayTitle(run)}</strong><em>{(run.artifact?.selectedIssues || []).slice(0, 3).map((issue) => issue.sourceType || "Signal").join(" · ") || (run.status === "running" ? "In progress" : "Brief")}</em></span>
+              <Badge tone={run.archivedAt ? "muted" : deliveryBadge.tone}>{run.archivedAt ? "Archived" : deliveryBadge.label}</Badge>
+            </button>
+            <div className="row tight-row brief-row-actions">
+              {run.archivedAt ? <Button icon="restart" aria-label={`Restore ${briefDisplayTitle(run)}`} title="Restore brief" onClick={() => restoreBrief(run)} /> : <Button icon="x" aria-label={`Archive ${briefDisplayTitle(run)}`} title="Archive brief" onClick={() => archiveBrief(run)} />}
+              <Button icon="trash" aria-label={`Delete ${briefDisplayTitle(run)}`} title="Delete brief permanently" onClick={() => deleteBrief(run)} />
+            </div>
+          </div>;
         })}</div>
       </aside>
       <section className="panel brief-reader">
@@ -4260,7 +4455,7 @@ function Audit({ state }) {
   </Page>;
 }
 
-function Settings({ state, mutate, refresh, desktopUpdate }) {
+function Settings({ state, mutate, refresh, desktopUpdate, onReopenOnboarding }) {
   const [connectorModal, setConnectorModal] = React.useState(false);
   const [editingProvider, setEditingProvider] = React.useState("");
   const [telegramModal, setTelegramModal] = React.useState(false);
@@ -4835,11 +5030,10 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
     }
   };
   const reopenOnboarding = async () => {
-    const ok = window.confirm("Reopen first-run onboarding? Pillar Time will return to the welcome flow, but your saved settings, connectors, and local data stay in place.");
-    if (!ok) return;
     setSettingsMessage("");
     try {
-      await mutate("/api/onboarding/reset", {});
+      const result = await api("/api/onboarding/reset", { method: "POST", body: JSON.stringify({}) });
+      onReopenOnboarding?.(result.state || result);
       setSettingsMessage("First-run onboarding reopened.");
     } catch (error) {
       setSettingsMessage(error.message || "Could not reopen onboarding.");
@@ -4866,7 +5060,7 @@ function Settings({ state, mutate, refresh, desktopUpdate }) {
   return <Page
     title="Settings"
     desc="Configure the models, services, and APIs used to analyze, research, and deliver your brief."
-    action={<div className="page-actions"><Button icon="templates" onClick={reopenOnboarding}>Reopen onboarding</Button><Button icon="plus" kind="primary" onClick={() => setConnectorModal(true)}>Add connector</Button></div>}
+    action={<div className="page-actions"><Button type="button" icon="templates" onClick={reopenOnboarding}>Reopen onboarding</Button><Button type="button" icon="plus" kind="primary" onClick={() => setConnectorModal(true)}>Add connector</Button></div>}
     wide
   >
     {settingsMessage && <p className={settingsMessage.includes("Could not") ? "warn-text" : "ok-text"}>{settingsMessage}</p>}
@@ -5156,10 +5350,14 @@ function routeFromHash() {
 
 function App() {
   const [route, setRoute] = React.useState(routeFromHash());
+  const [forceOnboarding, setForceOnboarding] = React.useState(false);
   const [runState, setRunState] = React.useState({ status: "idle", stepIndex: 0, error: "" });
   const runInFlightRef = React.useRef(false);
-  const { state, error, mutate, refresh } = useConsoleState();
+  const { state, setState, error, mutate, refresh } = useConsoleState();
   const desktopUpdate = useDesktopUpdates();
+  React.useEffect(() => {
+    if (forceOnboarding && state?.onboarding?.completed === false) setForceOnboarding(false);
+  }, [forceOnboarding, state?.onboarding?.completed]);
   const requestRoute = React.useCallback((nextRoute) => {
     const next = nextRoute || "overview";
     if (route === "today" && next !== "today" && window.__pillarTimeUnsavedTodayInput) {
@@ -5309,7 +5507,7 @@ function App() {
     <strong>Starting Pillar Time...</strong>
     <p>Loading the local backend and your local workspace data. This can take a moment after install or update.</p>
   </div>;
-  if (!state.onboarding?.completed) return <Onboarding state={state} mutate={mutate} refresh={refresh} />;
+  if (forceOnboarding || !state.onboarding?.completed) return <Onboarding state={state} mutate={mutate} refresh={refresh} />;
   const workflowDisabledReason = runState.status === "running" ? "A generation run is already in progress" : "";
   const screens = {
     today: <Today state={state} mutate={mutate} runWorkflow={() => runWorkflow({ runType: "executive_day" })} setRoute={requestRoute} workflowDisabledReason={workflowDisabledReason} />,
@@ -5328,7 +5526,7 @@ function App() {
     trustedContext: <TrustedContext state={state} mutate={mutate} />,
     approvals: <Approvals state={state} mutate={mutate} />,
     telegram: <Telegram state={state} mutate={mutate} refresh={refresh} />,
-    settings: <Settings state={state} mutate={mutate} refresh={refresh} desktopUpdate={desktopUpdate} />,
+    settings: <Settings state={state} mutate={mutate} refresh={refresh} desktopUpdate={desktopUpdate} onReopenOnboarding={(nextState) => { if (nextState) setState(nextState); setForceOnboarding(true); }} />,
   };
   return <Shell route={route} setRoute={requestRoute} state={state} desktopUpdate={desktopUpdate}>{screens[route] || screens.overview}</Shell>;
 }

@@ -114,15 +114,18 @@ test("Executive calendar proposals are approval-gated and surfaced in Today", ()
   assert.match(mainSource, /Reconnect for Calendar Writes/);
   assert.match(mainSource, /Add Context & Regenerate/);
   assert.match(mainSource, /identity\.self_statement/);
-  assert.match(mainSource, /profile\.standing_commitment/);
+  assert.match(mainSource, /type: "standingCommitment"/);
+  assert.match(mainSource, /Saved as a recurring Planner commitment\./);
 });
 
 test("Today suggestion and quick-capture actions expose save feedback", () => {
-  assert.match(mainSource, /function TimeSuggestionCard\(\{ suggestion, mutate \}\) \{\n\s+const \[message, setMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /function TimeSuggestionCard\(\{ suggestion, mutate, onDismiss \}\) \{\n\s+const \[message, setMessage\] = React\.useState\(""\);/);
+  assert.match(mainSource, /const \[expanded, setExpanded\] = React\.useState\(false\);/);
   assert.match(mainSource, /const accept = async \(\) => \{\n\s+setMessage\(""\);\n\s+try \{\n\s+await mutate\("\/api\/time\/commitments"/);
   assert.match(mainSource, /setMessage\("Accepted into Today’s Three\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setMessage\(error\.message \|\| "Could not accept this suggestion\."\);/);
   assert.match(mainSource, /const feedback = async \(value\) => \{\n\s+setMessage\(""\);\n\s+try \{\n\s+await mutate\(`\/api\/time\/suggestions\/\$\{encodeURIComponent/);
+  assert.match(mainSource, /onDismiss\?\.\(suggestion\.feedbackKey \|\| suggestion\.id \|\| suggestion\.title\);/);
   assert.match(mainSource, /setMessage\(value === "notToday" \? "Moved out of today\." : "Feedback saved\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setMessage\(error\.message \|\| "Could not save suggestion feedback\."\);/);
   assert.match(mainSource, /\{message && <p className=\{message\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{message\}<\/p>\}/);
@@ -168,7 +171,7 @@ test("Today commitments dedupe accepted suggestions and duplicate removals", () 
 test("Today context regenerate stops when context save fails", () => {
   assert.match(mainSource, /const saveContext = async \(event\) => \{\n\s+event\?\.\preventDefault\?\.\(\);/);
   assert.match(mainSource, /if \(!value\) \{\n\s+setContextMessage\("Add context before saving\."\);\n\s+return false;\n\s+\}/);
-  assert.match(mainSource, /setContextMessage\("Saved context\."\);\n\s+return true;/);
+  assert.match(mainSource, /setContextMessage\(contextType === "identity" \? "Saved to Trusted Context\." : contextType === "standing" \? "Saved as a recurring Planner commitment\." : "Saved to Planner\."\);\n\s+return true;/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setContextMessage\(error\.message \|\| "Could not save context\."\);\n\s+return false;\n\s+\}/);
   assert.match(mainSource, /const regenerateWithContext = async \(\) => \{\n\s+if \(contextText\.trim\(\)\) \{\n\s+const saved = await saveContext\(\);\n\s+if \(!saved\) return;\n\s+\}\n\s+await runWorkflow\(\);/);
   assert.doesNotMatch(mainSource, /if \(contextText\.trim\(\)\) await saveContext\(\{ preventDefault\(\) \{\} \}\);\n\s+await runWorkflow\(\);/);
@@ -283,8 +286,8 @@ test("First-run controls avoid misleading defaults and internal labels", () => {
   assert.match(mainSource, /No blocking local health warnings detected from current state/);
   assert.doesNotMatch(mainSource, /All systems operational/);
   assert.match(mainSource, /const reopenOnboarding/);
-  assert.match(mainSource, /Reopen first-run onboarding\?/);
-  assert.match(mainSource, /saved settings, connectors, and local data stay in place/);
+  assert.match(mainSource, /const result = await api\("\/api\/onboarding\/reset", \{ method: "POST", body: JSON\.stringify\(\{\}\) \}\);/);
+  assert.match(mainSource, /onReopenOnboarding\?\.\(result\.state \|\| result\);/);
   assert.match(mainSource, /Reopen onboarding/);
   assert.doesNotMatch(mainSource, /Run onboarding/);
 });
@@ -794,7 +797,14 @@ test("Local dependency installers ask for consent before starting", () => {
 
 test("Settings onboarding reset exposes success and failure feedback", () => {
   assert.match(mainSource, /const \[settingsMessage, setSettingsMessage\] = React\.useState\(""\);/);
-  assert.match(mainSource, /const reopenOnboarding = async \(\) => \{\n\s+const ok = window\.confirm\("Reopen first-run onboarding\? Pillar Time will return to the welcome flow, but your saved settings, connectors, and local data stay in place\."\);\n\s+if \(!ok\) return;\n\s+setSettingsMessage\(""\);\n\s+try \{\n\s+await mutate\("\/api\/onboarding\/reset", \{\}\);\n\s+setSettingsMessage\("First-run onboarding reopened\."\);/);
+  assert.match(mainSource, /const reopenOnboarding = async \(\) => \{/);
+  assert.match(mainSource, /const result = await api\("\/api\/onboarding\/reset", \{ method: "POST", body: JSON\.stringify\(\{\}\) \}\);/);
+  assert.match(mainSource, /onReopenOnboarding\?\.\(result\.state \|\| result\);/);
+  assert.match(mainSource, /const \[forceOnboarding, setForceOnboarding\] = React\.useState\(false\);/);
+  assert.match(mainSource, /const \{ state, setState, error, mutate, refresh \} = useConsoleState\(\);/);
+  assert.match(mainSource, /onReopenOnboarding=\{\(nextState\) => \{ if \(nextState\) setState\(nextState\); setForceOnboarding\(true\); \}\}/);
+  assert.match(mainSource, /if \(forceOnboarding \|\| !state\.onboarding\?\.completed\) return <Onboarding state=\{state\} mutate=\{mutate\} refresh=\{refresh\} \/>;/);
+  assert.match(mainSource, /setSettingsMessage\("First-run onboarding reopened\."\);/);
   assert.match(mainSource, /catch \(error\) \{\n\s+setSettingsMessage\(error\.message \|\| "Could not reopen onboarding\."\);/);
   assert.match(mainSource, /\{settingsMessage && <p className=\{settingsMessage\.includes\("Could not"\) \? "warn-text" : "ok-text"\}>\{settingsMessage\}<\/p>\}/);
 });
@@ -1034,7 +1044,7 @@ test("Perspective deliberation regeneration explains busy state", () => {
 
 test("Calendar approval disabled action explains proposal state", () => {
   assert.match(mainSource, /const approvalDisabledReason = canExecute\n\s+\? ""\n\s+: status === "executed"\n\s+\? "Calendar blocks have already been added"\n\s+: status === "rejected"\n\s+\? "This calendar proposal was rejected"\n\s+: "Generate a day plan with a calendar proposal first";/);
-  assert.match(mainSource, /disabled=\{!canExecute\} title=\{approvalDisabledReason \|\| actionLabel\}/);
+  assert.match(mainSource, /disabled=\{!canExecute \|\| !draftBlocks\.length\} title=\{approvalDisabledReason \|\| actionLabel\}/);
   assert.doesNotMatch(mainSource, /disabled=\{!canExecute\}>\{actionLabel\}<\/Button>/);
 });
 
